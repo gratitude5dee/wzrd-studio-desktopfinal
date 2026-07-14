@@ -2,6 +2,7 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "bun@1.3.14",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -9,6 +10,7 @@
     "web:dev": "next dev --webpack",
     "web:build": "next build --webpack",
     "web:start": "next start",
+    "web:smoke": "bun scripts/web-smoke-build.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint . && bun run check:web-boundaries",

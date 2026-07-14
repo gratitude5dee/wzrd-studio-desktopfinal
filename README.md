@@ -97,10 +97,12 @@ Additional provider keys may be required depending on which generation workflows
 
 ## Development
 
+This repository uses Bun exclusively for dependency installation and package scripts. Do not run `npm install` or commit npm lockfiles; CI and Vercel install with the committed `bun.lock`.
+
 Install dependencies:
 
 ```bash
-bun install
+bun install --frozen-lockfile
 ```
 
 Start the web renderer:
@@ -118,6 +120,12 @@ bun run desktop:dev
 ---
 
 ## Verification
+
+Build the production Next.js app, start it on a free local port, and verify that `/` serves hydrated HTML without a Next.js error shell:
+
+```bash
+bun run web:smoke
+```
 
 Run targeted unit tests:
 
