@@ -668,6 +668,7 @@ describe('ComputeFlowStore', () => {
       expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
         projectId: 'project-1',
         nodeIds: ['00000000-0000-4000-8000-000000000102'],
+        excludedNodeIds: [],
       });
       expect(result.current.nodeDefinitions.find((node) => node.id === '00000000-0000-4000-8000-000000000101')).toMatchObject({
         status: 'succeeded',
@@ -683,7 +684,7 @@ describe('ComputeFlowStore', () => {
       });
     });
 
-    it('does not invoke compute-execute for local FFmpeg Studio nodes outside the desktop app', async () => {
+    it('skips unsupported local FFmpeg Studio nodes on web without failing the graph', async () => {
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
 
@@ -712,11 +713,11 @@ describe('ComputeFlowStore', () => {
       expect(fetchMock).not.toHaveBeenCalled();
       expect(result.current.execution).toMatchObject({
         isRunning: false,
-        error: 'Open the Electron desktop app to run local FFmpeg Studio actions.',
+        error: null,
       });
       expect(result.current.nodeDefinitions.find((node) => node.id === localNode.id)).toMatchObject({
-        status: 'failed',
-        error: 'Open the Electron desktop app to run local FFmpeg Studio actions.',
+        status: 'skipped',
+        progress: 100,
       });
     });
   });

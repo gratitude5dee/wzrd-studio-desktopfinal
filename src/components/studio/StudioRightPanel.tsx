@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Play,
   Sparkles,
+  AlertTriangle,
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -20,6 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getStudioExecutionPlatform, resolveStudioNodeExecutionRoute } from '@/platform/studioExecutionPlatform';
 import { AssetsGalleryPanel, type Asset } from './panels/AssetsGalleryPanel';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import type { NodeDefinition } from '@/types/computeFlow';
@@ -182,6 +184,8 @@ function NodeInspector({
   const { models: catalogModels } = useCatalogModels({ autoFetch: true });
 
   const params = (node.params ?? {}) as Record<string, unknown>;
+  const executionRoute = resolveStudioNodeExecutionRoute(node, getStudioExecutionPlatform().runtime);
+  const webCompatibility = executionRoute.type === 'web-blocked' ? executionRoute.compatibility : null;
   const registryAction = getMediaActionById(node.actionId ?? (typeof params.actionId === 'string' ? params.actionId : undefined));
   const registryControls = registryAction?.controls ?? [];
   const mediaType = getStudioNodeMediaType(node.kind);
@@ -387,6 +391,16 @@ function NodeInspector({
           </Button>
         </div>
       </div>
+      {webCompatibility ? (
+        <div className="mx-5 mt-4 rounded-xl border border-[#c7cf8d]/20 bg-[#17180f] p-4 text-sm text-zinc-200">
+          <div className="flex items-center gap-2 font-semibold text-[#c7cf8d]">
+            <AlertTriangle className="h-4 w-4" />
+            {webCompatibility.label}
+          </div>
+          <p className="mt-2 font-medium text-white">{webCompatibility.title}</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">{webCompatibility.description} Other runnable branches continue.</p>
+        </div>
+      ) : null}
 
       <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
         {statusMessage ? (

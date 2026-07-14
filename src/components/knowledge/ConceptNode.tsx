@@ -1,9 +1,9 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Brain, Zap, Star, Orbit } from 'lucide-react';
 
-interface ConceptNodeData {
+interface ConceptNodeData extends Record<string, unknown> {
   label: string;
   description: string;
   category: 'core' | 'technique' | 'creative' | 'new';
@@ -11,7 +11,9 @@ interface ConceptNodeData {
   strength: number;
 }
 
-export const ConceptNode = memo<NodeProps<ConceptNodeData>>(({ data, selected }) => {
+type ConceptNodeType = Node<ConceptNodeData, 'concept'>;
+
+export const ConceptNode = memo<NodeProps<ConceptNodeType>>(({ data, selected }) => {
   const getCategoryIcon = () => {
     switch (data.category) {
       case 'core': return <Brain className="w-4 h-4" />;

@@ -8,6 +8,7 @@ export interface ComputeEdgeData {
   dataType?: DataType;
   status?: EdgeStatus;
   label?: string;
+  animationsEnabled?: boolean;
   onInsertAction?: (edgeId: string, screenPosition: { x: number; y: number }) => void;
 }
 
@@ -58,7 +59,7 @@ export const ComputeEdge = memo(
           style={{ transition: 'stroke 0.15s ease, stroke-width 0.15s ease' }}
         />
 
-        {status === 'running' ? (
+        {status === 'running' && edgeData?.animationsEnabled !== false ? (
           <path
             d={edgePath}
             fill="none"

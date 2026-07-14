@@ -35,7 +35,12 @@ import {
   type MediaActionDefinition,
 } from '@/lib/studio/mediaActionRegistry';
 import { markLocalSave, withClientWriteId } from '@/lib/studio/clientWriteId';
-import { getDesktopBridge } from '@/lib/desktop';
+import { getStudioSseProgressFlushMs } from '@/lib/studio/adaptivePreviewPerformance';
+import {
+  getStudioExecutionPlatform,
+  getStudioNodeActionId,
+  resolveStudioNodeExecutionRoute,
+} from '@/platform/studioExecutionPlatform';
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -226,28 +231,6 @@ function findPortByReference(ports: Port[] | undefined, ...references: Array<str
   return null;
 }
 
-function getNodeActionId(node: Partial<NodeDefinition>): string | undefined {
-  const params = node.params as Record<string, unknown> | undefined;
-  const metadata = node.metadata as Record<string, unknown> | undefined;
-  return (
-    (typeof node.actionId === 'string' && node.actionId) ||
-    (typeof params?.actionId === 'string' && params.actionId) ||
-    (typeof metadata?.actionId === 'string' && metadata.actionId) ||
-    undefined
-  );
-}
-
-function isLocalFfmpegNode(node: NodeDefinition): boolean {
-  const actionId = getNodeActionId(node);
-  const action = actionId ? getMediaActionById(actionId) : undefined;
-  return Boolean(
-    actionId &&
-    actionId !== 'fal.ffmpeg' &&
-    (action?.executor === 'ffmpeg' || node.executor === 'ffmpeg') &&
-    action?.providerPreference.includes('local')
-  );
-}
-
 function fileUrlFromPath(filePath: string): string {
   return `file://${filePath
     .split('/')
@@ -352,7 +335,7 @@ async function previewFromStudioActionResult(
 
 function normalizeNodeDefinition(node: Partial<NodeDefinition> & { id: string }): NodeDefinition {
   const kind = normalizeNodeKind(String(node.kind ?? 'Transform')) ?? 'Transform';
-  const action = getMediaActionById(getNodeActionId(node));
+  const action = getMediaActionById(getStudioNodeActionId(node));
   const actionPorts = action ? buildPortsFromAction(action) : null;
   const params = {
     ...(action ? getActionDefaults(action) : {}),
@@ -374,7 +357,7 @@ function normalizeNodeDefinition(node: Partial<NodeDefinition> & { id: string })
   return {
     id: node.id,
     kind,
-    actionId: action?.actionId ?? getNodeActionId(node),
+    actionId: action?.actionId ?? getStudioNodeActionId(node),
     mediaType: action?.mediaType ?? node.mediaType,
     workflowType: action?.workflowType ?? node.workflowType,
     executor: action?.executor ?? node.executor,
@@ -595,7 +578,6 @@ let executionAbortController: AbortController | null = null;
 
 const pendingSseNodeUpdates = new Map<string, Partial<NodeDefinition>>();
 let pendingSseNodeFlushScheduled = false;
-const SSE_PROGRESS_FLUSH_MS = 225;
 
 function shouldApplyNodeUpdates(
   node: NodeDefinition | undefined,
@@ -631,7 +613,7 @@ function queueSseNodeUpdate(
   }
 
   pendingSseNodeFlushScheduled = true;
-  setTimeout(() => flushQueuedSseNodeUpdates(get), SSE_PROGRESS_FLUSH_MS);
+  setTimeout(() => flushQueuedSseNodeUpdates(get), getStudioSseProgressFlushMs());
 }
 
 export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
@@ -1454,11 +1436,45 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
     });
 
     const targetNodes = nodeDefinitions.filter((node) => requestedNodeIds.size === 0 || requestedNodeIds.has(node.id));
-    const localFfmpegNodes = targetNodes.filter(isLocalFfmpegNode);
-    const remoteTargetNodes = targetNodes.filter((node) => !isLocalFfmpegNode(node));
+    const studioPlatform = getStudioExecutionPlatform();
+    const routedTargetNodes = targetNodes.map((node) => ({
+      node,
+      route: resolveStudioNodeExecutionRoute(node, studioPlatform.runtime),
+    }));
+    const localFfmpegNodes = routedTargetNodes
+      .filter(({ route }) => route.type === 'desktop-local')
+      .map(({ node }) => node);
+    const webBlockedNodes = routedTargetNodes
+      .filter(({ route }) => route.type === 'web-blocked')
+      .map(({ node }) => node);
+    const remoteTargetNodes = routedTargetNodes
+      .filter(({ route }) => route.type === 'remote')
+      .map(({ node }) => node);
+
+    if (webBlockedNodes.length > 0) {
+      const skippedUpdates = new Map<string, Partial<NodeDefinition>>();
+      for (const node of webBlockedNodes) {
+        skippedUpdates.set(node.id, { status: 'skipped', progress: 100, error: undefined });
+      }
+      get().updateNodesSilent(skippedUpdates);
+      set(state => ({
+        execution: {
+          ...state.execution,
+          completed: state.execution.completed + webBlockedNodes.length,
+          completedNodeIds: new Set([
+            ...state.execution.completedNodeIds,
+            ...webBlockedNodes.map((node) => node.id),
+          ]),
+        },
+      }));
+      toast.info(
+        `${webBlockedNodes.length} desktop-only node${webBlockedNodes.length === 1 ? '' : 's'} kept in the graph and skipped on web.`
+      );
+    }
+
     if (localFfmpegNodes.length > 0) {
-      const desktop = getDesktopBridge();
-      if (!desktop?.runStudioMediaAction || !desktop.selectExportFolder) {
+      const desktop = studioPlatform.localMedia;
+      if (!desktop) {
         const message = 'Open the Electron desktop app to run local FFmpeg Studio actions.';
         const failedUpdates = new Map<string, Partial<NodeDefinition>>();
         for (const node of localFfmpegNodes) {
@@ -1491,7 +1507,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       let completedLocalNodes = 0;
       let failedLocalNodes = 0;
       for (const node of localFfmpegNodes) {
-        const actionId = getNodeActionId(node);
+        const actionId = getStudioNodeActionId(node);
         if (!actionId) continue;
 
         get().updateNodeSilent(node.id, { status: 'running', progress: 10, error: undefined });
@@ -1568,11 +1584,19 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       }
     }
 
+    if (remoteTargetNodes.length === 0) {
+      set(state => ({
+        execution: {
+          ...state.execution,
+          isRunning: false,
+        },
+      }));
+      return;
+    }
+
     // Create abort controller
     executionAbortController = new AbortController();
-    const remoteNodeIdsForRequest = localFfmpegNodes.length > 0
-      ? remoteTargetNodes.map((node) => node.id)
-      : nodeIds;
+    const remoteNodeIdsForRequest = remoteTargetNodes.map((node) => node.id);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1588,7 +1612,11 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ projectId, nodeIds: remoteNodeIdsForRequest }),
+          body: JSON.stringify({
+            projectId,
+            nodeIds: remoteNodeIdsForRequest,
+            excludedNodeIds: webBlockedNodes.map((node) => node.id),
+          }),
           signal: executionAbortController.signal,
         }
       );

@@ -1,15 +1,17 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Zap, ArrowRight } from 'lucide-react';
 
-interface ConnectionNodeData {
+interface ConnectionNodeData extends Record<string, unknown> {
   label: string;
   strength: number;
   type: 'relates' | 'causes' | 'enables' | 'requires';
 }
 
-export const ConnectionNode = memo<NodeProps<ConnectionNodeData>>(({ data, selected }) => {
+type ConnectionNodeType = Node<ConnectionNodeData, 'connection'>;
+
+export const ConnectionNode = memo<NodeProps<ConnectionNodeType>>(({ data, selected }) => {
   const getTypeColor = () => {
     switch (data.type) {
       case 'relates': return 'plasma';

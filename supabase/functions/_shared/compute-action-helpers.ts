@@ -33,8 +33,13 @@ export interface FalPayloadBuildInput {
   camera?: Record<string, unknown> | undefined;
 }
 
-export function buildExecutionSelection(targetNodeIds: string[], edges: ComputeLikeEdge[]): Set<string> {
-  const selected = new Set(targetNodeIds);
+export function buildExecutionSelection(
+  targetNodeIds: string[],
+  edges: ComputeLikeEdge[],
+  excludedNodeIds: Iterable<string> = [],
+): Set<string> {
+  const excluded = new Set(excludedNodeIds);
+  const selected = new Set(targetNodeIds.filter((nodeId) => !excluded.has(nodeId)));
   const reverse = new Map<string, string[]>();
 
   for (const edge of edges) {
@@ -48,7 +53,7 @@ export function buildExecutionSelection(targetNodeIds: string[], edges: ComputeL
     const nodeId = stack.pop()!;
     const upstream = reverse.get(nodeId) ?? [];
     for (const dependencyId of upstream) {
-      if (selected.has(dependencyId)) {
+      if (excluded.has(dependencyId) || selected.has(dependencyId)) {
         continue;
       }
       selected.add(dependencyId);

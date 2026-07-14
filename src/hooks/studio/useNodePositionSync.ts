@@ -5,9 +5,8 @@
  * without creating bidirectional update loops.
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Node } from '@xyflow/react';
-import { debounce } from '@/lib/utils';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 
 // Define NodeDragHandler type locally since it's not exported from @xyflow/react
@@ -21,7 +20,10 @@ interface Position {
 interface UseNodePositionSyncOptions {
   useComputeFlow: boolean;
   onUpdateBlockPosition?: (id: string, position: Position) => void;
+  scheduleSave?: () => void;
+  /** @deprecated Position saves use the shared Studio save debounce. */
   saveDebounceMs?: number;
+  /** @deprecated The shared Studio save coordinator owns the project id. */
   projectId?: string;
 }
 
@@ -39,10 +41,9 @@ interface NodePositionSyncResult {
 export function useNodePositionSync({
   useComputeFlow,
   onUpdateBlockPosition,
-  saveDebounceMs = 500,
-  projectId,
+  scheduleSave,
 }: UseNodePositionSyncOptions): NodePositionSyncResult {
-  const { updateNodeSilent, saveGraph, setDragging } = useComputeFlowStore();
+  const { updateNodeSilent, setDragging } = useComputeFlowStore();
 
   // Track pending save state
   const savePendingRef = useRef(false);
@@ -67,22 +68,6 @@ export function useNodePositionSync({
     [useComputeFlow]
   );
 
-  /**
-   * Debounced save function to batch rapid position changes
-   */
-  const debouncedSave = useMemo(
-    () =>
-      debounce(() => {
-        if (useComputeFlow && projectId && draggedNodesRef.current.size > 0) {
-          saveGraph(projectId).finally(() => {
-            savePendingRef.current = false;
-            draggedNodesRef.current.clear();
-          });
-        }
-      }, saveDebounceMs),
-    [useComputeFlow, projectId, saveGraph, saveDebounceMs]
-  );
-
   const onNodeDragStop: NodeDragHandler = useCallback(
     (_event, node, nodes) => {
       const draggedNodes = nodes?.length ? nodes : [node];
@@ -105,10 +90,12 @@ export function useNodePositionSync({
       });
 
       if (hasComputeNodes) {
-        debouncedSave();
+        scheduleSave?.();
+        savePendingRef.current = false;
+        draggedNodesRef.current.clear();
       }
     },
-    [debouncedSave, isComputeNodeInstance, onUpdateBlockPosition, setDragging, updateNodeSilent]
+    [isComputeNodeInstance, onUpdateBlockPosition, scheduleSave, setDragging, updateNodeSilent]
   );
 
   const onNodeDragStart: NodeDragHandler = useCallback(

@@ -19,6 +19,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
+import { AlertTriangle, Gauge } from 'lucide-react';
 
 import { ReactFlowTextNode } from './nodes/ReactFlowTextNode';
 import { ReactFlowImageNode } from './nodes/ReactFlowImageNode';
@@ -63,6 +64,7 @@ import { useComputeFlowRealtime } from '@/hooks/useComputeFlowRealtime';
 import { usePresence } from '@/hooks/usePresence';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import { useStudioGraphActions } from '@/hooks/studio/useStudioGraphActions';
+import { useAdaptivePreviewPerformance } from '@/hooks/studio/useAdaptivePreviewPerformance';
 import { useStudioNodeGeneration } from '@/hooks/studio/useStudioNodeGeneration';
 import { useStudioPopulationTestHarness } from '@/hooks/studio/useStudioPopulationTestHarness';
 import { HANDLE_COLORS, type DataType, type EdgeDefinition, type NodeDefinition } from '@/types/computeFlow';
@@ -73,16 +75,56 @@ import { buildFloraSeedGraph, FLORA_EXAMPLE_COPY, isFloraSeedNode } from '@/lib/
 import { getMediaActionById } from '@/lib/studio/mediaActionRegistry';
 import {
   buildReactFlowNodeDataSignature,
+  ReactFlowNodeDataBuilderCache,
   reconcileReactFlowEdges,
   reconcileReactFlowNodes,
   stableStringify,
 } from '@/lib/studio/reactFlowReconciliation';
+import {
+  getStudioExecutionPlatform,
+  resolveStudioNodeExecutionRoute,
+  type StudioWebCompatibilityState,
+} from '@/platform/studioExecutionPlatform';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StudioCanvasProps {
   projectId?: string;
   selectedNodeId: string | null;
   onSelectNode: (id: string | null) => void;
+}
+
+interface StudioNodeHandlers {
+  onExecute: () => void;
+  onGenerate: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onModelSelectionChange: (selection: {
+    auto: boolean;
+    selectedModelIds: string[];
+    useMultipleModels: boolean;
+  }) => void;
+  onUpdateNode: (updates: Partial<NodeDefinition>) => void;
+  onUpdateParams: (updates: Record<string, unknown>) => void;
+  onOpenConnectionMenu: (sourcePortId: string, rect?: DOMRect | null) => void;
+  onSelectNode: (id: string | null) => void;
+}
+
+interface StudioCanvasPerformanceInstrumentation {
+  getMetrics: () => {
+    p95FrameDeltaMs: number;
+    maxDroppedFrameStreak: number;
+    builderInvocations: number;
+    fullSignatureRecomputes: number;
+    reconciliationRuns: number;
+    builderInvocationsByNode: Record<string, number>;
+  };
+  resetMetrics: () => void;
+}
+
+declare global {
+  interface Window {
+    __WZRD_STUDIO_PERFORMANCE__?: StudioCanvasPerformanceInstrumentation;
+  }
 }
 
 function withErrorBoundary(Component: React.ComponentType<any>) {
@@ -259,10 +301,34 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState<Edge>([]);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const {
+    config: previewPerformance,
+    getMetrics: getPreviewPerformanceMetrics,
+    resetMetrics: resetPreviewPerformanceMetrics,
+  } = useAdaptivePreviewPerformance(isInteracting);
   const { onNodeDragStart, onNodeDragStop, filterNodeChanges } = useNodePositionSync({
     useComputeFlow: true,
-    projectId,
+    scheduleSave,
   });
+  const nodeDataBuilderCacheRef = useRef(
+    new ReactFlowNodeDataBuilderCache<Record<string, unknown>>()
+  );
+  const nodeHandlersRef = useRef(new Map<string, StudioNodeHandlers>());
+  const studioExecutionRuntime = useMemo(
+    () => getStudioExecutionPlatform().runtime,
+    []
+  );
+  const webCompatibilityByNodeId = useMemo(() => {
+    const compatibilityByNodeId = new Map<string, StudioWebCompatibilityState>();
+    nodeDefinitions.forEach((node) => {
+      const route = resolveStudioNodeExecutionRoute(node, studioExecutionRuntime);
+      if (route.type === 'web-blocked') {
+        compatibilityByNodeId.set(node.id, route.compatibility);
+      }
+    });
+    return compatibilityByNodeId;
+  }, [nodeDefinitions, studioExecutionRuntime]);
 
   const [showNodeSelector, setShowNodeSelector] = useState(false);
   const [nodeSelectorFlowPosition, setNodeSelectorFlowPosition] = useState({ x: 0, y: 0 });
@@ -334,10 +400,13 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       };
 
       if (cursorThrottleRef.current === null) {
-        cursorThrottleRef.current = window.setTimeout(flushCursorUpdate, 60);
+        cursorThrottleRef.current = window.setTimeout(
+          flushCursorUpdate,
+          previewPerformance.cursorBroadcastMs
+        );
       }
     },
-    [flushCursorUpdate, projectId]
+    [flushCursorUpdate, previewPerformance.cursorBroadcastMs, projectId]
   );
 
   const handleCanvasPointerLeave = useCallback(() => {
@@ -356,6 +425,30 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     },
     [filterNodeChanges, onNodesChangeBase]
   );
+
+  const handleNodeDragStart = useCallback(
+    (...args: Parameters<typeof onNodeDragStart>) => {
+      setIsInteracting(true);
+      onNodeDragStart(...args);
+    },
+    [onNodeDragStart]
+  );
+
+  const handleNodeDragStop = useCallback(
+    (...args: Parameters<typeof onNodeDragStop>) => {
+      onNodeDragStop(...args);
+      setIsInteracting(false);
+    },
+    [onNodeDragStop]
+  );
+
+  const handleInteractionStart = useCallback(() => {
+    setIsInteracting(true);
+  }, []);
+
+  const handleInteractionEnd = useCallback(() => {
+    setIsInteracting(false);
+  }, []);
 
   const onEdgesChange = useCallback(
     (changes: any[]) => {
@@ -435,144 +528,192 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   const updateNodeModelSelectionRef = useLatestRef(updateNodeModelSelection);
   const openConnectionMenuFromPortRef = useLatestRef(openConnectionMenuFromPort);
 
+  const getStableNodeHandlers = useCallback((nodeId: string): StudioNodeHandlers => {
+    const existing = nodeHandlersRef.current.get(nodeId);
+    if (existing) {
+      return existing;
+    }
+
+    const getCurrentNode = () =>
+      useComputeFlowStore.getState().nodeDefinitions.find((node) => node.id === nodeId);
+    const execute = () => generateNodeRef.current(nodeId);
+    const handlers: StudioNodeHandlers = {
+      onExecute: execute,
+      onGenerate: execute,
+      onDuplicate: () => {
+        const currentNode = getCurrentNode();
+        if (currentNode) {
+          handleDuplicateNodeRef.current(currentNode);
+        }
+      },
+      onDelete: () => {
+        removeNodeRef.current(nodeId);
+        scheduleSaveRef.current();
+        if (selectedNodeIdRef.current === nodeId) {
+          onSelectNodeRef.current(null);
+        }
+      },
+      onModelSelectionChange: (selection) =>
+        updateNodeModelSelectionRef.current(nodeId, selection),
+      onUpdateNode: (nodeUpdates) => {
+        useComputeFlowStore.getState().updateNode(nodeId, nodeUpdates);
+        scheduleSaveRef.current();
+      },
+      onUpdateParams: (paramUpdates) => {
+        const store = useComputeFlowStore.getState();
+        const currentNode = getCurrentNode();
+        if (!currentNode) {
+          return;
+        }
+
+        // PR-6: open a coalesced edit session so streaming keystrokes
+        // produce a single undo entry. The session auto-closes after
+        // 400ms of idle (or via onBlur from text inputs).
+        store.beginEditSession(nodeId);
+        store.updateNode(nodeId, {
+          params: {
+            ...currentNode.params,
+            ...paramUpdates,
+          },
+        });
+        scheduleSaveRef.current();
+      },
+      onOpenConnectionMenu: (sourcePortId, rect) =>
+        openConnectionMenuFromPortRef.current(nodeId, sourcePortId, rect),
+      onSelectNode: (id) => onSelectNodeRef.current(id),
+    };
+    nodeHandlersRef.current.set(nodeId, handlers);
+    return handlers;
+  }, []);
+
   useEffect(() => {
+    const activeNodeIds = new Set(nodeDefinitions.map((node) => node.id));
+    const nodeDataBuilderCache = nodeDataBuilderCacheRef.current;
     const computeNodes: Node[] = nodeDefinitions.map((nodeDef) => {
       const incomingEdges = incomingEdgesByTargetNode.get(nodeDef.id) || [];
-
-      // PR-3: single source of truth for handle → param resolution.
-      const { byHandle, chips } = resolveIncomingForUI({
-        targetNode: nodeDef,
-        edges: incomingEdges,
-        getNode: (id) => nodeDefinitionsById.get(id),
-      });
-
-      // Backward-compatible derived shapes consumed by existing node components.
-      const incomingReferenceSources = chips
-        .filter((c) => c.type === 'image' || c.type === 'video')
-        .map((c) => ({
-          sourceNodeId: c.sourceNodeId,
-          name: c.name,
-          type: c.type as 'image' | 'video',
-          url: c.url ?? '',
-        }));
-
-      const incomingImageSources = incomingReferenceSources.filter(
-        (s): s is { sourceNodeId: string; name: string; type: 'image' | 'video'; url: string } =>
-          s.type === 'image'
-      );
-
-      const incomingPrompt =
-        typeof byHandle.prompt === 'string'
-          ? (byHandle.prompt as string)
-          : chips.find((c) => c.type === 'text')?.preview;
-
-      // Pass-through input chip for relay-style nodes (Output/Gateway/Transform/Combine).
-      let inputValue: string | undefined;
-      let inputType: 'image' | 'video' | 'audio' | 'text' | '3d' | 'unknown' = 'unknown';
-      if (
-        nodeDef.kind === 'Output' ||
-        nodeDef.kind === 'Gateway' ||
-        nodeDef.kind === 'Transform' ||
-        nodeDef.kind === 'Combine'
-      ) {
-        const firstChip = chips[0];
-        if (firstChip) {
-          inputType = firstChip.type;
-          inputValue = firstChip.url ?? firstChip.preview;
-        }
-      }
-
       const isolateRuntimeFromNodeData = nodeDef.kind === 'ImageEdit' || nodeDef.kind === 'Video';
-      const dataSignature = buildReactFlowNodeDataSignature({
-        node: nodeDef,
-        chips,
-        byHandle,
-        incomingPrompt,
-        inputValue,
-        inputType,
-        includeRuntime: !isolateRuntimeFromNodeData,
+      const incomingSourceNodes = incomingEdges.flatMap((edge) => {
+        const sourceNode = nodeDefinitionsById.get(edge.source.nodeId);
+        return sourceNode ? [sourceNode] : [];
       });
-      const nodeData = {
-        __signature: dataSignature,
-        nodeDefinition: nodeDef,
-        label: nodeDef.label,
-        kind: nodeDef.kind,
-        actionId: nodeDef.actionId ?? (typeof nodeDef.params?.actionId === 'string' ? nodeDef.params.actionId : undefined),
-        mediaType: nodeDef.mediaType,
-        workflowType: nodeDef.workflowType,
-        controls: nodeDef.controls,
-        batch: nodeDef.batch,
-        variants: nodeDef.variants,
-        inputs: nodeDef.inputs,
-        outputs: nodeDef.outputs,
-        params: nodeDef.params,
-        status: nodeDef.status || 'idle',
-        progress: nodeDef.progress || 0,
-        preview: nodeDef.preview,
-        error: nodeDef.error,
-        modelSelection: {
-          auto: Boolean(nodeDef.params?.modelAuto),
-          selectedModelIds: Array.isArray(nodeDef.params?.selectedModels)
-            ? (nodeDef.params?.selectedModels as string[])
-            : [String(nodeDef.params?.model || nodeDef.metadata?.model || '')].filter(Boolean),
-          useMultipleModels: Boolean(nodeDef.params?.useMultipleModels),
-        },
-        initialData: nodeDef.params,
-        blockPosition: nodeDef.position,
-        incomingImageSources,
-        incomingReferenceSources,
-        incomingPrompt,
-        inputValue,
-        inputType,
-        popoverBoundary: canvasContainerRef.current,
-        popoverContainer: canvasContainerRef.current,
-        onExecute: () => generateNodeRef.current(nodeDef.id),
-        onGenerate: () => generateNodeRef.current(nodeDef.id),
-        onDuplicate: () => handleDuplicateNodeRef.current(nodeDef),
-        onDelete: () => {
-          removeNodeRef.current(nodeDef.id);
-          scheduleSaveRef.current();
-          if (selectedNodeIdRef.current === nodeDef.id) {
-            onSelectNodeRef.current(null);
+      const nodeData = nodeDataBuilderCache.getOrBuild({
+        node: nodeDef,
+        incomingEdges,
+        incomingSourceNodes,
+        includeRuntime: !isolateRuntimeFromNodeData,
+      }, () => {
+        // PR-3: single source of truth for handle → param resolution.
+        const { byHandle, chips } = resolveIncomingForUI({
+          targetNode: nodeDef,
+          edges: incomingEdges,
+          getNode: (id) => nodeDefinitionsById.get(id),
+        });
+
+        // Backward-compatible derived shapes consumed by existing node components.
+        const incomingReferenceSources = chips
+          .filter((c) => c.type === 'image' || c.type === 'video')
+          .map((c) => ({
+            sourceNodeId: c.sourceNodeId,
+            name: c.name,
+            type: c.type as 'image' | 'video',
+            url: c.url ?? '',
+          }));
+        const incomingImageSources = incomingReferenceSources.filter(
+          (s): s is { sourceNodeId: string; name: string; type: 'image' | 'video'; url: string } =>
+            s.type === 'image'
+        );
+        const incomingPrompt =
+          typeof byHandle.prompt === 'string'
+            ? (byHandle.prompt as string)
+            : chips.find((c) => c.type === 'text')?.preview;
+
+        // Pass-through input chip for relay-style nodes (Output/Gateway/Transform/Combine).
+        let inputValue: string | undefined;
+        let inputType: 'image' | 'video' | 'audio' | 'text' | '3d' | 'unknown' = 'unknown';
+        if (
+          nodeDef.kind === 'Output' ||
+          nodeDef.kind === 'Gateway' ||
+          nodeDef.kind === 'Transform' ||
+          nodeDef.kind === 'Combine'
+        ) {
+          const firstChip = chips[0];
+          if (firstChip) {
+            inputType = firstChip.type;
+            inputValue = firstChip.url ?? firstChip.preview;
           }
-        },
-        onModelSelectionChange: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) =>
-          updateNodeModelSelectionRef.current(nodeDef.id, selection),
-        onUpdateNode: (nodeUpdates: Partial<NodeDefinition>) => {
-          useComputeFlowStore.getState().updateNode(nodeDef.id, nodeUpdates);
-          scheduleSaveRef.current();
-        },
-        onUpdateParams: (paramUpdates: Record<string, unknown>) => {
-          // PR-6: open a coalesced edit session so streaming keystrokes
-          // produce a single undo entry. The session auto-closes after
-          // 400ms of idle (or via onBlur from text inputs).
-          const store = useComputeFlowStore.getState();
-          store.beginEditSession(nodeDef.id);
-          store.updateNode(nodeDef.id, {
-            params: {
-              ...nodeDef.params,
-              ...paramUpdates,
-            },
-          });
-          scheduleSaveRef.current();
-        },
-        onOpenConnectionMenu: (sourcePortId: string, rect?: DOMRect | null) =>
-          openConnectionMenuFromPortRef.current(nodeDef.id, sourcePortId, rect),
-        onSelectNode: onSelectNodeRef.current,
-      };
+        }
+
+        const dataSignature = buildReactFlowNodeDataSignature({
+          node: nodeDef,
+          chips,
+          byHandle,
+          incomingPrompt,
+          inputValue,
+          inputType,
+          includeRuntime: !isolateRuntimeFromNodeData,
+        });
+        return {
+          __signature: dataSignature,
+          nodeDefinition: nodeDef,
+          label: nodeDef.label,
+          kind: nodeDef.kind,
+          actionId: nodeDef.actionId ?? (typeof nodeDef.params?.actionId === 'string' ? nodeDef.params.actionId : undefined),
+          mediaType: nodeDef.mediaType,
+          workflowType: nodeDef.workflowType,
+          controls: nodeDef.controls,
+          batch: nodeDef.batch,
+          variants: nodeDef.variants,
+          inputs: nodeDef.inputs,
+          outputs: nodeDef.outputs,
+          params: nodeDef.params,
+          status: nodeDef.status || 'idle',
+          progress: nodeDef.progress || 0,
+          preview: nodeDef.preview,
+          error: nodeDef.error,
+          modelSelection: {
+            auto: Boolean(nodeDef.params?.modelAuto),
+            selectedModelIds: Array.isArray(nodeDef.params?.selectedModels)
+              ? (nodeDef.params?.selectedModels as string[])
+              : [String(nodeDef.params?.model || nodeDef.metadata?.model || '')].filter(Boolean),
+            useMultipleModels: Boolean(nodeDef.params?.useMultipleModels),
+          },
+          initialData: nodeDef.params,
+          blockPosition: nodeDef.position,
+          incomingImageSources,
+          incomingReferenceSources,
+          incomingPrompt,
+          inputValue,
+          inputType,
+          compatibility: webCompatibilityByNodeId.get(nodeDef.id),
+          popoverBoundary: canvasContainerRef.current,
+          popoverContainer: canvasContainerRef.current,
+          ...getStableNodeHandlers(nodeDef.id),
+        };
+      });
 
       return {
         id: nodeDef.id,
         type: getNodeTypeFromKind(nodeDef.kind),
         position: nodeDef.position,
-        selected: selectedNodeId === nodeDef.id,
+        selected: selectedNodeIdRef.current === nodeDef.id,
         data: nodeData,
-        className: nodeDef.metadata?.generatedWorkflowImportId ? 'wzrd-generated-node' : undefined,
+        className: [
+          nodeDef.metadata?.generatedWorkflowImportId ? 'wzrd-generated-node' : '',
+          webCompatibilityByNodeId.has(nodeDef.id) ? 'wzrd-web-blocked-node' : '',
+        ].filter(Boolean).join(' ') || undefined,
         draggable: true,
         selectable: true,
         connectable: true,
       };
     });
+
+    nodeDataBuilderCache.prune(activeNodeIds);
+    for (const nodeId of nodeHandlersRef.current.keys()) {
+      if (!activeNodeIds.has(nodeId)) {
+        nodeHandlersRef.current.delete(nodeId);
+      }
+    }
+    nodeDataBuilderCache.noteReconciliationRun();
 
     // Reconcile against the previous React Flow nodes so unchanged nodes keep
     // their object identity. This prevents XYFlow from remounting/measuring
@@ -581,12 +722,28 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     setNodes((previousNodes) => reconcileReactFlowNodes(previousNodes, computeNodes));
   }, [
     getNodeTypeFromKind,
+    getStableNodeHandlers,
     incomingEdgesByTargetNode,
     nodeDefinitions,
     nodeDefinitionsById,
-    selectedNodeId,
     setNodes,
+    webCompatibilityByNodeId,
   ]);
+
+  useEffect(() => {
+    setNodes((previousNodes) => {
+      let changed = false;
+      const nextNodes = previousNodes.map((node) => {
+        const selected = node.id === selectedNodeId;
+        if (node.selected === selected) {
+          return node;
+        }
+        changed = true;
+        return { ...node, selected };
+      });
+      return changed ? nextNodes : previousNodes;
+    });
+  }, [selectedNodeId, setNodes]);
 
   const openActionMenuForEdge = useCallback(
     (edgeId: string, screenPosition: { x: number; y: number }) => {
@@ -614,6 +771,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         status: edgeDef.status,
         label,
         color,
+        animationsEnabled: previewPerformance.visualsEnabled,
       });
 
       return [
@@ -630,6 +788,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
             dataType: edgeDef.dataType,
             status: edgeDef.status,
             label,
+            animationsEnabled: previewPerformance.visualsEnabled,
             onInsertAction: openActionMenuForEdge,
           },
           style: {
@@ -641,7 +800,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     });
 
     setEdges((previousEdges) => reconcileReactFlowEdges(previousEdges, computeEdges));
-  }, [edgeDefinitions, nodeIds, openActionMenuForEdge, setEdges]);
+  }, [edgeDefinitions, nodeIds, openActionMenuForEdge, previewPerformance.visualsEnabled, setEdges]);
 
   useEffect(() => {
     if (projectId) {
@@ -911,6 +1070,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
 
   const onConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent, connectionStateLike: any) => {
+      setIsInteracting(false);
       if (connectionStateLike.isValid) {
         return;
       }
@@ -1131,10 +1291,33 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     void updateSelection(selectedNodeId ?? null);
   }, [selectedNodeId, updateSelection]);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+
+    const instrumentation: StudioCanvasPerformanceInstrumentation = {
+      getMetrics: () => ({
+        ...getPreviewPerformanceMetrics(),
+        ...nodeDataBuilderCacheRef.current.getInstrumentation(),
+      }),
+      resetMetrics: () => {
+        resetPreviewPerformanceMetrics();
+        nodeDataBuilderCacheRef.current.resetInstrumentation();
+      },
+    };
+    window.__WZRD_STUDIO_PERFORMANCE__ = instrumentation;
+    return () => {
+      if (window.__WZRD_STUDIO_PERFORMANCE__ === instrumentation) {
+        delete window.__WZRD_STUDIO_PERFORMANCE__;
+      }
+    };
+  }, [getPreviewPerformanceMetrics, resetPreviewPerformanceMetrics]);
+
   return (
     <div
       ref={canvasContainerRef}
-      className="relative h-full w-full overflow-hidden bg-[#0A0A0A]"
+      className="wzrd-studio-canvas relative h-full w-full overflow-hidden bg-[#0A0A0A]"
       data-walkthrough="canvas"
       onPointerMove={handleCanvasPointerMove}
       onPointerLeave={handleCanvasPointerLeave}
@@ -1155,6 +1338,58 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       />
 
       <ConnectionErrorTooltip rejection={rejection} />
+
+      {(webCompatibilityByNodeId.size > 0 || previewPerformance.feedbackVisible) ? (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-[70] flex w-[min(680px,calc(100%-32px))] -translate-x-1/2 flex-col gap-2">
+          {webCompatibilityByNodeId.size > 0 ? (
+            <div
+              className="pointer-events-auto flex items-center gap-3 rounded-xl border border-[#c7cf8d]/20 bg-[#17180f]/95 px-4 py-3 text-zinc-100 shadow-2xl backdrop-blur-xl"
+              data-component-id="web-compatibility-banner"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c7cf8d]/10 text-[#c7cf8d]">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold">
+                  {webCompatibilityByNodeId.size} {webCompatibilityByNodeId.size === 1 ? 'node needs' : 'nodes need'} attention on web
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Desktop-only tools stay in the graph but won’t run in this browser.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] font-semibold text-zinc-200 transition-colors hover:border-[#c7cf8d]/30 hover:text-white"
+                onClick={() => {
+                  const firstBlockedNodeId = webCompatibilityByNodeId.keys().next().value;
+                  if (typeof firstBlockedNodeId === 'string') {
+                    onSelectNode(firstBlockedNodeId);
+                  }
+                }}
+              >
+                Review nodes
+              </button>
+            </div>
+          ) : null}
+
+          {previewPerformance.feedbackVisible ? (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-[#d4a574]/20 bg-[#171412]/95 px-4 py-3 text-zinc-100 shadow-2xl backdrop-blur-xl"
+              data-component-id="studio-performance-banner"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d4a574]/10 text-[#d4a574]">
+                <Gauge className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold">Canvas performance reduced</p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Cursor sharing, progress updates, and edge animation are reduced while you edit.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {showNodeSelector ? (
@@ -1195,10 +1430,13 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={handleInteractionStart}
           onConnectEnd={onConnectEnd}
           onNodeClick={handleNodeClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDragStop={onNodeDragStop}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDragStop={handleNodeDragStop}
+          onMoveStart={handleInteractionStart}
+          onMoveEnd={handleInteractionEnd}
           onPaneClick={handlePaneClick}
           onDoubleClick={handleCanvasDoubleClick}
           onSelectionChange={({ nodes: selectionNodes }) => {

@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { NodeDefinition } from '@/types/computeFlow';
+import type { EdgeDefinition, NodeDefinition } from '@/types/computeFlow';
 
 const SIGNATURE_METADATA_OMITS = new Set([
   'clientWriteId',
@@ -33,6 +33,25 @@ interface ReactFlowNodeDataSignatureInput {
   inputValue?: unknown;
   inputType?: unknown;
   includeRuntime?: boolean;
+}
+
+export interface ReactFlowNodeDataBuildInput {
+  node: NodeDefinition;
+  incomingEdges: readonly EdgeDefinition[];
+  incomingSourceNodes: readonly NodeDefinition[];
+  includeRuntime: boolean;
+}
+
+export interface ReactFlowNodeBuildInstrumentation {
+  builderInvocations: number;
+  fullSignatureRecomputes: number;
+  reconciliationRuns: number;
+  builderInvocationsByNode: Record<string, number>;
+}
+
+interface ReactFlowNodeDataCacheEntry<TData> {
+  input: ReactFlowNodeDataBuildInput;
+  data: TData;
 }
 
 export function stableStringify(value: unknown): string {
@@ -76,6 +95,123 @@ function sanitizeSignatureBatch(batch: NodeDefinition['batch']): NodeDefinition[
     policy: batch.policy,
     items: batch.items,
   };
+}
+
+function haveSameNodeDataFields(
+  left: NodeDefinition,
+  right: NodeDefinition,
+  includeRuntime: boolean
+): boolean {
+  return (
+    left.id === right.id &&
+    left.kind === right.kind &&
+    left.actionId === right.actionId &&
+    left.mediaType === right.mediaType &&
+    left.workflowType === right.workflowType &&
+    left.executor === right.executor &&
+    left.controls === right.controls &&
+    left.batch === right.batch &&
+    left.variants === right.variants &&
+    left.assetRefs === right.assetRefs &&
+    left.version === right.version &&
+    left.label === right.label &&
+    left.size === right.size &&
+    left.inputs === right.inputs &&
+    left.outputs === right.outputs &&
+    left.params === right.params &&
+    left.metadata === right.metadata &&
+    left.preview === right.preview &&
+    (!includeRuntime ||
+      (left.status === right.status &&
+        left.progress === right.progress &&
+        left.error === right.error &&
+        left.isDirty === right.isDirty))
+  );
+}
+
+function haveSameIncomingEdges(
+  left: readonly EdgeDefinition[],
+  right: readonly EdgeDefinition[]
+): boolean {
+  return left.length === right.length && left.every((edge, index) => Object.is(edge, right[index]));
+}
+
+function haveSameIncomingSourceNodes(
+  left: readonly NodeDefinition[],
+  right: readonly NodeDefinition[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((node, index) => {
+      const other = right[index];
+      return Boolean(other) && haveSameNodeDataFields(node, other, false);
+    })
+  );
+}
+
+export function areReactFlowNodeDataBuildInputsEqual(
+  left: ReactFlowNodeDataBuildInput,
+  right: ReactFlowNodeDataBuildInput
+): boolean {
+  return (
+    left.includeRuntime === right.includeRuntime &&
+    haveSameNodeDataFields(left.node, right.node, left.includeRuntime) &&
+    haveSameIncomingEdges(left.incomingEdges, right.incomingEdges) &&
+    haveSameIncomingSourceNodes(left.incomingSourceNodes, right.incomingSourceNodes)
+  );
+}
+
+export class ReactFlowNodeDataBuilderCache<TData> {
+  private readonly entries = new Map<string, ReactFlowNodeDataCacheEntry<TData>>();
+  private instrumentation: ReactFlowNodeBuildInstrumentation = {
+    builderInvocations: 0,
+    fullSignatureRecomputes: 0,
+    reconciliationRuns: 0,
+    builderInvocationsByNode: {},
+  };
+
+  getOrBuild(input: ReactFlowNodeDataBuildInput, builder: () => TData): TData {
+    const previous = this.entries.get(input.node.id);
+    if (previous && areReactFlowNodeDataBuildInputsEqual(previous.input, input)) {
+      return previous.data;
+    }
+
+    const data = builder();
+    this.entries.set(input.node.id, { input, data });
+    this.instrumentation.builderInvocations += 1;
+    this.instrumentation.fullSignatureRecomputes += 1;
+    this.instrumentation.builderInvocationsByNode[input.node.id] =
+      (this.instrumentation.builderInvocationsByNode[input.node.id] ?? 0) + 1;
+    return data;
+  }
+
+  noteReconciliationRun(): void {
+    this.instrumentation.reconciliationRuns += 1;
+  }
+
+  prune(activeNodeIds: ReadonlySet<string>): void {
+    for (const nodeId of this.entries.keys()) {
+      if (!activeNodeIds.has(nodeId)) {
+        this.entries.delete(nodeId);
+      }
+    }
+  }
+
+  resetInstrumentation(): void {
+    this.instrumentation = {
+      builderInvocations: 0,
+      fullSignatureRecomputes: 0,
+      reconciliationRuns: 0,
+      builderInvocationsByNode: {},
+    };
+  }
+
+  getInstrumentation(): ReactFlowNodeBuildInstrumentation {
+    return {
+      ...this.instrumentation,
+      builderInvocationsByNode: { ...this.instrumentation.builderInvocationsByNode },
+    };
+  }
 }
 
 export function buildReactFlowNodeDataSignature({

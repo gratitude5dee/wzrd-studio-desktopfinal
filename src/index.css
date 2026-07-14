@@ -182,8 +182,25 @@
   }
 }
 
-.react-flow__node.wzrd-generated-node {
+.wzrd-studio-canvas .react-flow__node.wzrd-generated-node {
   animation: wzrd-generated-node-in 420ms cubic-bezier(0.16, 1, 0.3, 1), wzrd-generated-node-ring 1400ms ease-out;
+}
+
+.wzrd-studio-canvas .react-flow__node.wzrd-web-blocked-node::after {
+  content: 'Web blocked';
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  z-index: 20;
+  border: 1px solid rgba(199, 207, 141, 0.28);
+  border-radius: 999px;
+  background: #17180f;
+  padding: 3px 8px;
+  color: #c7cf8d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* Connection rejection red flash animation */

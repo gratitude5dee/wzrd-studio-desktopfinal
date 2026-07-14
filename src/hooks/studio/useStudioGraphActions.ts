@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
+import { flushStudioSave, scheduleStudioSave } from '@/lib/studio/studioSaveCoordinator';
 
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import type { ArtifactRef, DataType, EdgeDefinition, NodeDefinition, Port } from '@/types/computeFlow';
@@ -319,7 +320,6 @@ function getWorkflowPosition(
 }
 
 export function useStudioGraphActions(projectId?: string) {
-  const saveTimeoutRef = useRef<number | null>(null);
   const {
     nodeDefinitions,
     edgeDefinitions,
@@ -337,19 +337,17 @@ export function useStudioGraphActions(projectId?: string) {
     [nodeDefinitions]
   );
 
+  const flushSave = useCallback(
+    () => (projectId ? flushStudioSave(projectId, () => saveGraph(projectId)) : Promise.resolve()),
+    [projectId, saveGraph]
+  );
+
   const scheduleSave = useCallback(() => {
     if (!projectId) {
       return;
     }
 
-    if (saveTimeoutRef.current !== null) {
-      window.clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = window.setTimeout(() => {
-      void saveGraph(projectId);
-      saveTimeoutRef.current = null;
-    }, 350);
+    scheduleStudioSave(projectId, () => saveGraph(projectId));
   }, [projectId, saveGraph]);
 
   const buildNode = useCallback(
@@ -1010,6 +1008,7 @@ export function useStudioGraphActions(projectId?: string) {
     createConnectedActionNode,
     insertActionOnEdge,
     scheduleSave,
+    flushSave,
   };
 }
 

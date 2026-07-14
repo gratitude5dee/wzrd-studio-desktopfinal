@@ -120,6 +120,7 @@ function shotToCameraPayload(shot: ShotControl | undefined) {
 interface ExecuteRequest {
   projectId: string;
   nodeIds?: string[];
+  excludedNodeIds?: string[];
   useCache?: boolean;
   requestId?: string;
 }
@@ -147,7 +148,7 @@ serve(async (req) => {
       });
     }
 
-    const { projectId, nodeIds, useCache = true, requestId }: ExecuteRequest = await req.json();
+    const { projectId, nodeIds, excludedNodeIds = [], useCache = true, requestId }: ExecuteRequest = await req.json();
     console.log('[ComputeExecute] Starting execution for project:', projectId);
 
     if (!projectId) {
@@ -184,6 +185,14 @@ serve(async (req) => {
 
     const canonicalNodes = (nodes as Record<string, any>[]).map(normalizeComputeNodeRow);
     const canonicalNodeMap = new Map(canonicalNodes.map((node) => [node.id, node]));
+    const validatedExcludedNodeIds = excludedNodeIds.filter((nodeId) => {
+      const node = canonicalNodeMap.get(nodeId);
+      if (!node) return false;
+      const action = getNodeActionDefinition(node);
+      return action?.executor === 'ffmpeg' &&
+        action.providerPreference.includes('local') &&
+        !action.providerPreference.some((provider) => provider === 'fal-ai' || provider === 'edge_function');
+    });
     const canonicalEdges = (edges ?? []) as ComputeEdge[];
     const allExecutableNodes = canonicalNodes.filter((node) => !isExecutionExcludedKind(node.kind));
     const allExecutableNodeIds = new Set(allExecutableNodes.map((node) => node.id));
@@ -196,6 +205,7 @@ serve(async (req) => {
         ? buildExecutionSelection(
             nodeIds.filter((nodeId) => allExecutableNodeIds.has(nodeId)),
             allExecutableEdges,
+            validatedExcludedNodeIds,
           )
         : null;
 

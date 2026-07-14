@@ -12,12 +12,11 @@ import {
   Node,
   NodeTypes,
   Panel,
-  useReactFlow,
   ReactFlowProvider,
   Position,
   OnMove,
   BackgroundVariant
-} from 'reactflow';
+} from '@xyflow/react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { GlassButton } from '@/components/ui/glass-button';
 import { PortalHeader } from '@/components/ui/portal-header';
@@ -39,7 +38,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ConceptNode } from './ConceptNode';
 import { ConnectionNode } from './ConnectionNode';
 import { KnowledgeCluster } from './KnowledgeCluster';
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 
 // Node types for the knowledge canvas
 const nodeTypes: NodeTypes = {
@@ -49,7 +48,15 @@ const nodeTypes: NodeTypes = {
 };
 
 // Initial knowledge graph data
-const initialNodes: Node[] = [
+type KnowledgeNodeData = Record<string, unknown> & {
+  label: string;
+  description?: string;
+  category?: string;
+  connections?: number;
+};
+type KnowledgeNode = Node<KnowledgeNodeData>;
+
+const initialNodes: KnowledgeNode[] = [
   {
     id: '1',
     type: 'concept',
@@ -133,20 +140,18 @@ interface KnowledgeCanvasProps {
 const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedNode, setSelectedNode] = useState<KnowledgeNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isSemanticMode, setIsSemanticMode] = useState(false);
   const [showClusters, setShowClusters] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project } = useReactFlow();
-
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((event: React.MouseEvent, node: KnowledgeNode) => {
     setSelectedNode(node);
   }, []);
 
@@ -169,14 +174,18 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
 
   const filteredNodes = useMemo(() => {
     if (!searchQuery) return visibleNodes;
-    return visibleNodes.filter(node =>
-      node.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.data.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return visibleNodes.filter(node => {
+      const label = typeof node.data.label === 'string' ? node.data.label : '';
+      const description = typeof node.data.description === 'string' ? node.data.description : '';
+      return (
+        label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    });
   }, [visibleNodes, searchQuery]);
 
   const addConceptNode = useCallback(() => {
-    const newNode: Node = {
+    const newNode: KnowledgeNode = {
       id: `concept-${Date.now()}`,
       type: 'concept',
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
