@@ -12,6 +12,16 @@ import {
   extractWzrdOpenAIText,
   normalizeWzrdProviderConfig,
 } from "../_shared/wzrdAgentContract.ts";
+import {
+  createByteLimitedStream,
+  fetchValidatedMedia,
+  MAX_SOURCIFY_MEDIA_BYTES,
+  resolveTrustedFinalizeResults,
+  SourcifyMediaError,
+  SourcifyProvenanceError,
+  type DnsResolver,
+  type SourcifyFinalizeReference,
+} from "./finalize-media.ts";
 
 type ActorKey =
   | "youtube-fast"
@@ -99,12 +109,12 @@ type SourcifyResult = {
 type RequestBody =
   | { action: "plan"; topic?: string; settings?: Settings }
   | { action: "run"; topic?: string; actorKey?: ActorKey; input?: Record<string, unknown>; settings?: Settings }
-  | { action: "results"; datasetId?: string; actorKey?: ActorKey; settings?: Settings }
+  | { action: "results"; runId?: string; datasetId?: string; actorKey?: ActorKey; settings?: Settings }
   | {
       action: "finalize";
       projectId?: string;
       assetCategory?: "upload" | "finalized";
-      results?: SourcifyResult[];
+      results?: SourcifyFinalizeReference[];
     };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
@@ -839,6 +849,18 @@ async function apifyFetch(path: string, init: RequestInit = {}) {
   return data;
 }
 
+async function actorRun(runId: string) {
+  const response = await apifyFetch(`/actor-runs/${encodeURIComponent(runId)}`, {
+    method: "GET",
+    headers: {},
+  });
+  const run = asRecord(response.data);
+  return {
+    defaultDatasetId: asString(run.defaultDatasetId),
+    actorId: asString(run.actId ?? run.actorId),
+  };
+}
+
 async function datasetItems(datasetId: string, actorKey?: ActorKey, settings: Settings = {}) {
   const limit = safeSettingNumber(settings.maxItems, 100, 1, 1000);
   const query = new URLSearchParams({
@@ -855,6 +877,26 @@ async function datasetItems(datasetId: string, actorKey?: ActorKey, settings: Se
   return rawItems
     .map((item, index) => normalizeItem(item, actorKey, index))
     .map((result) => ({ ...result, datasetId, scrapedAt }));
+}
+
+async function verifiedDatasetItems(
+  runId: string,
+  datasetId: string,
+  actorKey?: ActorKey,
+  settings: Settings = {},
+) {
+  const run = await actorRun(runId);
+  if (!run.defaultDatasetId || run.defaultDatasetId !== datasetId) {
+    throw new BadRequestError(
+      "datasetId does not belong to the supplied Sourcify run. Re-run Sourcify and try again.",
+    );
+  }
+  return (await datasetItems(datasetId, actorKey, settings)).map((result) => ({
+    ...result,
+    runId,
+    datasetId,
+    actorId: run.actorId,
+  }));
 }
 
 
@@ -938,27 +980,65 @@ async function runActor(body: Extract<RequestBody, { action: "run" }>) {
   };
 }
 
-function assetTypeFromMime(mimeType: string): "image" | "video" | "audio" | "document" | "other" {
+function assetTypeFromMime(mimeType: string): "image" | "video" | "audio" | "other" {
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
   if (mimeType.startsWith("audio/")) return "audio";
-  if (mimeType === "application/pdf" || mimeType === "application/json") return "document";
   return "other";
 }
 
 function extensionFromMime(mimeType: string, url: string): string {
+  const knownExtensions: Record<string, string> = {
+    "audio/aac": "aac",
+    "audio/flac": "flac",
+    "audio/mp4": "m4a",
+    "audio/mpeg": "mp3",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "image/avif": "avif",
+    "image/gif": "gif",
+    "image/heic": "heic",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/svg+xml": "svg",
+    "image/webp": "webp",
+    "video/mp4": "mp4",
+    "video/mpeg": "mpeg",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-m4v": "m4v",
+    "video/x-msvideo": "avi",
+  };
+  if (knownExtensions[mimeType]) return knownExtensions[mimeType];
   try {
     const fromPath = new URL(url).pathname.split(".").pop()?.toLowerCase();
     if (fromPath && /^[a-z0-9]{2,5}$/.test(fromPath)) return fromPath;
   } catch {
     // fall through
   }
-  if (mimeType.includes("mp4")) return "mp4";
-  if (mimeType.includes("webm")) return "webm";
-  if (mimeType.includes("jpeg")) return "jpg";
-  if (mimeType.includes("png")) return "png";
-  if (mimeType.includes("mpeg")) return "mp3";
   return "bin";
+}
+
+const resolveMediaDns: DnsResolver = async (hostname) => {
+  const lookups = await Promise.allSettled([
+    Deno.resolveDns(hostname, "A"),
+    Deno.resolveDns(hostname, "AAAA"),
+  ]);
+  return lookups.flatMap((lookup) => lookup.status === "fulfilled" ? lookup.value : []);
+};
+
+function sourcifyMediaByteLimit(): number {
+  const configured = Number(Deno.env.get("SOURCIFY_MAX_MEDIA_BYTES"));
+  if (!Number.isSafeInteger(configured) || configured <= 0) return MAX_SOURCIFY_MEDIA_BYTES;
+  return Math.min(configured, MAX_SOURCIFY_MEDIA_BYTES);
+}
+
+class FinalizeItemError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FinalizeItemError";
+  }
 }
 
 async function finalizeResults(
@@ -966,8 +1046,9 @@ async function finalizeResults(
   authHeader: string,
   userId: string,
 ) {
-  const results = (body.results ?? []).slice(0, 50);
-  if (results.length === 0) throw new Error("results are required.");
+  const references = body.results ?? [];
+  if (references.length === 0) throw new BadRequestError("results are required.");
+  if (references.length > 50) throw new BadRequestError("A maximum of 50 results can be finalized at once.");
 
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -982,42 +1063,77 @@ async function finalizeResults(
       .eq("id", body.projectId)
       .eq("user_id", userId)
       .single();
-    if (project.error || !project.data) throw new Error("Project not found or access denied.");
+    if (project.error || !project.data) throw new BadRequestError("Project not found or access denied.");
+  }
+
+  let trustedSelections: Awaited<ReturnType<typeof resolveTrustedFinalizeResults<SourcifyResult>>>;
+  try {
+    trustedSelections = await resolveTrustedFinalizeResults<SourcifyResult>({
+      references,
+      loadRun: actorRun,
+      loadDataset: (datasetId, actorKey) => datasetItems(
+        datasetId,
+        isActorKey(actorKey) ? actorKey : undefined,
+        { maxItems: 1000 },
+      ),
+    });
+  } catch (error) {
+    if (error instanceof SourcifyProvenanceError) throw new BadRequestError(error.message);
+    console.error("[sourcify-apify] finalize provenance lookup failed", error instanceof Error ? error.name : "unknown");
+    throw new Error("Could not verify Sourcify run provenance. Re-run Sourcify and try again.");
   }
 
   const assets: Array<{ resultId: string; assetId: string; url: string }> = [];
   const skipped: Array<{ resultId: string; reason: string }> = [];
+  const maxMediaBytes = sourcifyMediaByteLimit();
 
-  for (const result of results) {
+  for (const selection of trustedSelections) {
+    const result: SourcifyResult = {
+      ...selection.item,
+      runId: selection.reference.runId,
+      datasetId: selection.reference.datasetId,
+      actorId: selection.run.actorId,
+      topic: selection.reference.topic,
+    };
     const sourceUrl = result.mediaUrl ?? result.sourceUrl;
     if (!sourceUrl) {
-      skipped.push({ resultId: result.id, reason: "No downloadable URL" });
+      skipped.push({ resultId: result.id, reason: "The trusted dataset item has no downloadable media URL." });
       continue;
     }
 
+    let attemptedStoragePath: string | undefined;
     try {
-      const response = await fetch(sourceUrl);
-      if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
-      const mimeType = response.headers.get("content-type")?.split(";")[0] ?? "application/octet-stream";
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength > 500 * 1024 * 1024) {
-        throw new Error("File exceeds the 500MB Sourcify save limit.");
-      }
+      const media = await fetchValidatedMedia({
+        url: sourceUrl,
+        resolveDns: resolveMediaDns,
+        maxBytes: maxMediaBytes,
+      });
+      const limited = createByteLimitedStream(media.response.body!, {
+        maxBytes: maxMediaBytes,
+        expectedBytes: media.contentLength,
+      });
 
-      const assetType = assetTypeFromMime(mimeType);
-      const extension = extensionFromMime(mimeType, sourceUrl);
+      const assetType = assetTypeFromMime(media.contentType);
+      const extension = extensionFromMime(media.contentType, media.finalUrl.toString());
       const safeTitle = result.title.replace(/[^a-zA-Z0-9.-]/g, "_").slice(0, 60) || "sourcify";
       const fileName = `${safeTitle}.${extension}`;
       const storagePath = body.projectId
         ? `${userId}/${body.projectId}/${assetType}/${Date.now()}_${crypto.randomUUID()}_${fileName}`
         : `${userId}/${assetType}/${Date.now()}_${crypto.randomUUID()}_${fileName}`;
+      attemptedStoragePath = storagePath;
 
-      const upload = await supabaseClient.storage.from("project-assets").upload(storagePath, bytes, {
-        contentType: mimeType,
+      const upload = await supabaseClient.storage.from("project-assets").upload(storagePath, limited.stream, {
+        contentType: media.contentType,
         cacheControl: "3600",
         upsert: false,
       });
-      if (upload.error) throw upload.error;
+      if (upload.error) {
+        throw limited.getFailure() ?? new FinalizeItemError("The media could not be uploaded to project storage.");
+      }
+      const uploadedBytes = limited.getBytesRead();
+      if (uploadedBytes !== media.contentLength) {
+        throw new FinalizeItemError("The media upload did not complete at the declared Content-Length.");
+      }
 
       const publicUrl = supabaseClient.storage.from("project-assets").getPublicUrl(storagePath).data.publicUrl;
       const inserted = await supabaseClient
@@ -1028,9 +1144,9 @@ async function finalizeResults(
           url: publicUrl,
           thumbnail_url: result.thumbnailUrl ?? publicUrl,
           type: assetType,
-          size: bytes.byteLength,
+          size: uploadedBytes,
           metadata: {
-            mime_type: mimeType,
+            mime_type: media.contentType,
             storage_bucket: "project-assets",
             storage_path: storagePath,
             asset_category: body.assetCategory ?? "finalized",
@@ -1058,15 +1174,27 @@ async function finalizeResults(
         .single();
 
       if (inserted.error) {
-        await supabaseClient.storage.from("project-assets").remove([storagePath]);
-        throw inserted.error;
+        throw new FinalizeItemError("The media was uploaded, but its library record could not be saved.");
       }
 
       assets.push({ resultId: result.id, assetId: inserted.data.id, url: inserted.data.url });
+      attemptedStoragePath = undefined;
     } catch (error) {
+      if (attemptedStoragePath) {
+        try {
+          const cleanup = await supabaseClient.storage.from("project-assets").remove([attemptedStoragePath]);
+          if (cleanup.error) {
+            console.warn("[sourcify-apify] failed to clean up an attempted storage upload");
+          }
+        } catch {
+          console.warn("[sourcify-apify] failed to clean up an attempted storage upload");
+        }
+      }
       skipped.push({
         resultId: result.id,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: error instanceof SourcifyMediaError || error instanceof FinalizeItemError
+          ? error.message
+          : "The media could not be saved safely. Re-run Sourcify and try again.",
       });
     }
   }
@@ -1093,7 +1221,9 @@ serve(async (req) => {
         return successResponse(await runActor(body));
       case "results": {
         if (!body.datasetId) return errorResponse("datasetId is required", 400);
-        const results = await datasetItems(body.datasetId, body.actorKey, body.settings);
+        const results = body.runId
+          ? await verifiedDatasetItems(body.runId, body.datasetId, body.actorKey, body.settings)
+          : await datasetItems(body.datasetId, body.actorKey, body.settings);
         return successResponse({ results });
       }
       case "finalize":

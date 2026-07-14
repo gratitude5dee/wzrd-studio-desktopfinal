@@ -29,6 +29,7 @@ type SourcifyInvokeBody =
     }
   | {
       action: "results";
+      runId?: string;
       datasetId: string;
       actorKey?: SourcifyActorKey;
     }
@@ -36,7 +37,14 @@ type SourcifyInvokeBody =
       action: "finalize";
       projectId?: string;
       assetCategory: "upload" | "finalized";
-      results: SourcifyResult[];
+      results: Array<{
+        id: string;
+        runId: string;
+        datasetId: string;
+        actorKey?: SourcifyActorKey;
+        actorId?: string;
+        topic?: string;
+      }>;
     };
 
 async function invokeSourcify<T>(body: SourcifyInvokeBody): Promise<T> {
@@ -170,9 +178,15 @@ export async function runSourcifyActor(input: {
     settings: input.settings,
   });
 
-  const results =
+  const results = (
     response.results ??
-    (response.items ?? []).map((item, index) => normalizeSourcifyResult(item, input.actorKey, index));
+    (response.items ?? []).map((item, index) => normalizeSourcifyResult(item, input.actorKey, index))
+  ).map((result) => ({
+    ...result,
+    actorKey: result.actorKey ?? input.actorKey,
+    runId: result.runId ?? response.runId,
+    datasetId: result.datasetId ?? response.datasetId,
+  }));
 
   return {
     runId: response.runId,
@@ -184,18 +198,25 @@ export async function runSourcifyActor(input: {
 }
 
 export async function fetchSourcifyResults(input: {
+  runId?: string;
   datasetId: string;
   actorKey?: SourcifyActorKey;
 }): Promise<SourcifyResult[]> {
   const response = await invokeSourcify<{ results?: SourcifyResult[]; items?: unknown[] }>({
     action: "results",
+    runId: input.runId,
     datasetId: input.datasetId,
     actorKey: input.actorKey,
   });
   return (
     response.results ??
     (response.items ?? []).map((item, index) => normalizeSourcifyResult(item, input.actorKey, index))
-  );
+  ).map((result) => ({
+    ...result,
+    actorKey: result.actorKey ?? input.actorKey,
+    runId: result.runId ?? input.runId,
+    datasetId: result.datasetId ?? input.datasetId,
+  }));
 }
 
 export async function finalizeSourcifyResults(input: {
@@ -203,6 +224,13 @@ export async function finalizeSourcifyResults(input: {
   assetCategory: "upload" | "finalized";
   results: SourcifyResult[];
 }) {
+  const missingProvenance = input.results.find((result) => !result.id || !result.runId || !result.datasetId);
+  if (missingProvenance) {
+    throw new Error(
+      "A selected result is missing run/dataset provenance. Re-run Sourcify and select a fresh result.",
+    );
+  }
+
   return invokeSourcify<{
     success: boolean;
     assets: Array<{ resultId: string; assetId: string; url: string }>;
@@ -211,21 +239,94 @@ export async function finalizeSourcifyResults(input: {
     action: "finalize",
     projectId: input.projectId,
     assetCategory: input.assetCategory,
-    results: input.results,
+    results: input.results.map((result) => ({
+      id: result.id,
+      runId: result.runId!,
+      datasetId: result.datasetId!,
+      actorKey: result.actorKey,
+      actorId: result.actorId,
+      topic: result.topic,
+    })),
   });
 }
 
-export function downloadSourcifyResults(results: SourcifyResult[]) {
-  for (const result of results) {
+export const MAX_SOURCIFY_DOWNLOADS = 12;
+
+export type SourcifyDownloadIssue = {
+  resultId: string;
+  code: "missing_url" | "invalid_url" | "expired_url" | "download_limit";
+  message: string;
+};
+
+export type SourcifyDownloadOutcome = {
+  opened: number;
+  issues: SourcifyDownloadIssue[];
+};
+
+export function validateSourcifyDownloadUrl(
+  value: unknown,
+  nowMs = Date.now(),
+): { ok: true; url: string } | { ok: false; code: "missing_url" | "invalid_url" | "expired_url"; message: string } {
+  if (typeof value !== "string" || !value.trim()) {
+    return { ok: false, code: "missing_url", message: "This result has no downloadable URL." };
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return { ok: false, code: "invalid_url", message: "This result has an invalid download URL." };
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+    return { ok: false, code: "invalid_url", message: "Only public HTTP(S) download URLs are supported." };
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const isGoogleVideo = hostname === "googlevideo.com" || hostname.endsWith(".googlevideo.com");
+  if (isGoogleVideo && url.pathname.toLowerCase().includes("videoplayback")) {
+    const expiresAtSeconds = Number(url.searchParams.get("expire"));
+    if (Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0 && expiresAtSeconds * 1000 <= nowMs) {
+      return {
+        ok: false,
+        code: "expired_url",
+        message: "This Google Video download link has expired. Re-run the Sourcify downloader to refresh it.",
+      };
+    }
+  }
+
+  return { ok: true, url: url.toString() };
+}
+
+export function downloadSourcifyResults(results: SourcifyResult[]): SourcifyDownloadOutcome {
+  const issues: SourcifyDownloadIssue[] = [];
+  let opened = 0;
+
+  for (const result of results.slice(0, MAX_SOURCIFY_DOWNLOADS)) {
     const url = result.mediaUrl ?? result.sourceUrl;
-    if (!url) continue;
+    const validation = validateSourcifyDownloadUrl(url);
+    if ("code" in validation) {
+      issues.push({ resultId: result.id, code: validation.code, message: validation.message });
+      continue;
+    }
+
     const anchor = document.createElement("a");
-    anchor.href = url;
+    anchor.href = validation.url;
     anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    anchor.download = `${result.platform}-${result.title}`.replace(/[^a-z0-9.-]+/gi, "_").slice(0, 80);
+    anchor.rel = "noopener noreferrer";
+    anchor.download = `${result.platform}-${result.title}`.replace(/[^a-z0-9.-]+/gi, "_").slice(0, 80) || "sourcify-media";
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
+    opened += 1;
   }
+
+  for (const result of results.slice(MAX_SOURCIFY_DOWNLOADS)) {
+    issues.push({
+      resultId: result.id,
+      code: "download_limit",
+      message: `Only the first ${MAX_SOURCIFY_DOWNLOADS} results can be downloaded at once.`,
+    });
+  }
+
+  return { opened, issues };
 }

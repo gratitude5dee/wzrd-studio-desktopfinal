@@ -13,6 +13,12 @@ const sourcifyClientMocks = vi.hoisted(() => ({
   downloadSourcifyResults: vi.fn(),
 }));
 
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+}));
+
 vi.mock("framer-motion", () => ({
   motion: {
     main: ({
@@ -29,9 +35,9 @@ vi.mock("framer-motion", () => ({
 
 vi.mock("sonner", () => ({
   toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
+    success: toastMocks.success,
+    error: toastMocks.error,
+    warning: toastMocks.warning,
   },
 }));
 
@@ -122,6 +128,7 @@ describe("Sourcify page", () => {
     vi.clearAllMocks();
     sourcifyClientMocks.planSourcifyTopic.mockResolvedValue(duplicateActorPlan);
     sourcifyClientMocks.runSourcifyActor.mockResolvedValue({ results: [] });
+    sourcifyClientMocks.downloadSourcifyResults.mockReturnValue({ opened: 0, issues: [] });
   });
 
   it("selects duplicate actor keys independently across Codex targets", async () => {
@@ -151,5 +158,51 @@ describe("Sourcify page", () => {
         actorKey: "youtube-fast",
       }),
     );
+  });
+
+  it("surfaces an expired media link as a rerun prompt", async () => {
+    const singleActorPlan: SourcifyPlan = {
+      ...duplicateActorPlan,
+      actors: [duplicateActorPlan.actors[0]],
+      targets: [{ ...duplicateActorPlan.targets![0], actors: [duplicateActorPlan.actors[0]] }],
+    };
+    sourcifyClientMocks.planSourcifyTopic.mockResolvedValueOnce(singleActorPlan);
+    sourcifyClientMocks.runSourcifyActor.mockResolvedValueOnce({
+      results: [{
+        id: "result-expired",
+        platform: "youtube",
+        actorKey: "youtube-downloader",
+        category: "video",
+        title: "Expired source",
+        sourceUrl: "https://youtube.com/watch?v=expired",
+        mediaUrl: "https://rr1---sn.example.googlevideo.com/videoplayback?expire=1&id=expired",
+        metrics: {},
+        downloadable: true,
+        runId: "run-expired",
+        datasetId: "dataset-expired",
+        raw: {},
+      }],
+    });
+    sourcifyClientMocks.downloadSourcifyResults.mockReturnValueOnce({
+      opened: 0,
+      issues: [{
+        resultId: "result-expired",
+        code: "expired_url",
+        message: "This Google Video download link has expired. Re-run the Sourcify downloader to refresh it.",
+      }],
+    });
+
+    render(
+      <MemoryRouter>
+        <Sourcify />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Plan sources/i }));
+    expect(await screen.findByText("Brand A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Run selected scrapes/i }));
+    expect(await screen.findByText("Expired source")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Download MP4" }));
+
+    expect(toastMocks.warning).toHaveBeenCalledWith(expect.stringMatching(/Re-run the Sourcify downloader/i));
   });
 });

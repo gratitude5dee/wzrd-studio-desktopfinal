@@ -540,9 +540,21 @@ export default function Sourcify() {
     });
   };
 
+  const handleDownloadResults = (selection: SourcifyResult[]) => {
+    const outcome = downloadSourcifyResults(selection);
+    const expired = outcome.issues.find((issue) => issue.code === "expired_url");
+    if (expired) {
+      toast.warning(expired.message);
+    } else if (outcome.issues.length > 0) {
+      const message = outcome.issues[0]?.message ?? "Some selected downloads could not be opened.";
+      if (outcome.opened === 0) toast.error(message);
+      else toast.warning(`${outcome.issues.length} selected download${outcome.issues.length === 1 ? "" : "s"} skipped. ${message}`);
+    }
+  };
+
   const handleDownloadMp4 = (result: SourcifyResult) => {
     if (!isDirectMediaUrl(result.mediaUrl)) return;
-    downloadSourcifyResults([result]);
+    handleDownloadResults([result]);
   };
 
   const handleFetchMp4 = async (requested?: SourcifyResult[]) => {
@@ -782,7 +794,7 @@ export default function Sourcify() {
                 variant="secondary"
                 className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
                 disabled={downloadableSelection.length === 0 || busy !== "idle"}
-                onClick={() => downloadSourcifyResults(downloadableSelection)}
+                onClick={() => handleDownloadResults(downloadableSelection)}
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download MP4s
