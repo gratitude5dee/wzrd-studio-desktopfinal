@@ -42,6 +42,8 @@ import {
 	type PlatformRemotionFolderAPI,
 	type PlatformMoyinAPI,
 	type PlatformUpdatesAPI,
+	type PlatformVideoSearchAPI,
+	type PlatformWallpapersAPI,
 	type ThemeSource,
 	type LicenseInfo,
 } from "@qcut/platform-core";
@@ -50,7 +52,288 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const STORAGE_PREFIX = "qcut:";
+const LEGACY_STORAGE_PREFIX = "qcut:";
+const LEGACY_API_KEYS_KEY = "qcut:api-keys";
+const LEGACY_THEME_KEY = "qcut:theme";
+const PLATFORM_DB_NAME = "wzrd-platform";
+const PLATFORM_DB_VERSION = 1;
+const PLATFORM_KV_STORE = "kv";
+const PLATFORM_API_KEYS_STORE = "apiKeys";
+const PLATFORM_API_KEYS_RECORD = "keys";
+const LOCAL_STORAGE_MIGRATION_KEY = "__migration:local-storage:v1";
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+	return new Promise((resolve, reject) => {
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+	});
+}
+
+function transactionDone(transaction: IDBTransaction): Promise<void> {
+	return new Promise((resolve, reject) => {
+		transaction.oncomplete = () => resolve();
+		transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed"));
+		transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
+	});
+}
+
+function parseLegacyValue(raw: string): unknown {
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return raw;
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, string> {
+	return (
+		!!value &&
+		typeof value === "object" &&
+		!Array.isArray(value) &&
+		Object.values(value).every((entry) => typeof entry === "string")
+	);
+}
+
+function createIndexedDbNamespaces(): {
+	storage: PlatformStorageAPI;
+	apiKeys: PlatformApiKeysAPI;
+} {
+	let databasePromise: Promise<IDBDatabase> | null = null;
+	let migrationPromise: Promise<void> | null = null;
+
+	const openDatabase = () => {
+		if (databasePromise) return databasePromise;
+
+		databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
+			if (typeof indexedDB === "undefined") {
+				reject(new Error("IndexedDB is unavailable"));
+				return;
+			}
+
+			const request = indexedDB.open(PLATFORM_DB_NAME, PLATFORM_DB_VERSION);
+			request.onupgradeneeded = () => {
+				const database = request.result;
+				if (!database.objectStoreNames.contains(PLATFORM_KV_STORE)) {
+					database.createObjectStore(PLATFORM_KV_STORE);
+				}
+				if (!database.objectStoreNames.contains(PLATFORM_API_KEYS_STORE)) {
+					database.createObjectStore(PLATFORM_API_KEYS_STORE);
+				}
+			};
+			request.onsuccess = () => {
+				const database = request.result;
+				database.onversionchange = () => {
+					database.close();
+					databasePromise = null;
+					migrationPromise = null;
+				};
+				resolve(database);
+			};
+			request.onerror = () => {
+				databasePromise = null;
+				reject(request.error ?? new Error("Unable to open IndexedDB"));
+			};
+		});
+
+		return databasePromise;
+	};
+
+	const migrateLocalStorage = async () => {
+		const database = await openDatabase();
+		const checkTransaction = database.transaction(PLATFORM_KV_STORE, "readonly");
+		const checkDone = transactionDone(checkTransaction);
+		const migrated = await requestResult(
+			checkTransaction.objectStore(PLATFORM_KV_STORE).get(LOCAL_STORAGE_MIGRATION_KEY)
+		);
+		await checkDone;
+		if (migrated === true) return;
+
+		const legacyEntries: Array<[string, unknown]> = [];
+		let legacyApiKeys: Record<string, string> | null = null;
+		const migratedLocalStorageKeys: string[] = [];
+
+		if (typeof localStorage !== "undefined") {
+			for (let index = 0; index < localStorage.length; index += 1) {
+				const key = localStorage.key(index);
+				if (
+					!key?.startsWith(LEGACY_STORAGE_PREFIX) ||
+					key === LEGACY_API_KEYS_KEY ||
+					key === LEGACY_THEME_KEY
+				) {
+					continue;
+				}
+
+				const raw = localStorage.getItem(key);
+				if (raw === null) continue;
+				legacyEntries.push([key.slice(LEGACY_STORAGE_PREFIX.length), parseLegacyValue(raw)]);
+				migratedLocalStorageKeys.push(key);
+			}
+
+			const rawApiKeys = localStorage.getItem(LEGACY_API_KEYS_KEY);
+			if (rawApiKeys !== null) {
+				const parsed = parseLegacyValue(rawApiKeys);
+				legacyApiKeys = isRecord(parsed) ? parsed : {};
+			}
+		}
+
+		const transaction = database.transaction(
+			[PLATFORM_KV_STORE, PLATFORM_API_KEYS_STORE],
+			"readwrite"
+		);
+		const kvStore = transaction.objectStore(PLATFORM_KV_STORE);
+		for (const [key, value] of legacyEntries) {
+			kvStore.put(value, key);
+		}
+		kvStore.put(true, LOCAL_STORAGE_MIGRATION_KEY);
+		if (legacyApiKeys) {
+			transaction
+				.objectStore(PLATFORM_API_KEYS_STORE)
+				.put(legacyApiKeys, PLATFORM_API_KEYS_RECORD);
+		}
+		await transactionDone(transaction);
+
+		if (typeof localStorage !== "undefined") {
+			for (const key of migratedLocalStorageKeys) localStorage.removeItem(key);
+			if (legacyApiKeys) localStorage.removeItem(LEGACY_API_KEYS_KEY);
+		}
+	};
+
+	const ensureMigrated = () => {
+		migrationPromise ??= migrateLocalStorage().catch((error) => {
+			migrationPromise = null;
+			throw error;
+		});
+		return migrationPromise;
+	};
+
+	const storage: PlatformStorageAPI = {
+		async save(key, data) {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_KV_STORE, "readwrite");
+				transaction.objectStore(PLATFORM_KV_STORE).put(data, key);
+				await transactionDone(transaction);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		async load(key) {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_KV_STORE, "readonly");
+				const done = transactionDone(transaction);
+				const value = await requestResult(transaction.objectStore(PLATFORM_KV_STORE).get(key));
+				await done;
+				return value ?? null;
+			} catch {
+				return null;
+			}
+		},
+		async remove(key) {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_KV_STORE, "readwrite");
+				transaction.objectStore(PLATFORM_KV_STORE).delete(key);
+				await transactionDone(transaction);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		async list() {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_KV_STORE, "readonly");
+				const done = transactionDone(transaction);
+				const keys = await requestResult(transaction.objectStore(PLATFORM_KV_STORE).getAllKeys());
+				await done;
+				return keys.filter(
+					(key): key is string =>
+						typeof key === "string" && key !== LOCAL_STORAGE_MIGRATION_KEY
+				);
+			} catch {
+				return [];
+			}
+		},
+		async clear() {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_KV_STORE, "readwrite");
+				const done = transactionDone(transaction);
+				const store = transaction.objectStore(PLATFORM_KV_STORE);
+				const keys = await requestResult(store.getAllKeys());
+				for (const key of keys) {
+					if (key !== LOCAL_STORAGE_MIGRATION_KEY) store.delete(key);
+				}
+				await done;
+				return true;
+			} catch {
+				return false;
+			}
+		},
+	};
+
+	const apiKeys: PlatformApiKeysAPI = {
+		async get() {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_API_KEYS_STORE, "readonly");
+				const done = transactionDone(transaction);
+				const value = await requestResult(
+					transaction.objectStore(PLATFORM_API_KEYS_STORE).get(PLATFORM_API_KEYS_RECORD)
+				);
+				await done;
+				return isRecord(value) ? value : {};
+			} catch {
+				return {};
+			}
+		},
+		async set(keys) {
+			try {
+				const current = await apiKeys.get();
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_API_KEYS_STORE, "readwrite");
+				transaction
+					.objectStore(PLATFORM_API_KEYS_STORE)
+					.put({ ...current, ...keys }, PLATFORM_API_KEYS_RECORD);
+				await transactionDone(transaction);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		async clear() {
+			try {
+				await ensureMigrated();
+				const database = await openDatabase();
+				const transaction = database.transaction(PLATFORM_API_KEYS_STORE, "readwrite");
+				transaction.objectStore(PLATFORM_API_KEYS_STORE).delete(PLATFORM_API_KEYS_RECORD);
+				await transactionDone(transaction);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		async status() {
+			const keys = await apiKeys.get();
+			const result: PlatformApiKeysStatus = {};
+			for (const [key, value] of Object.entries(keys)) {
+				result[key] = { set: !!value, source: "indexedDB", shadowedBy: [] };
+			}
+			return result;
+		},
+	};
+
+	return { storage, apiKeys };
+}
 
 /**
  * Desktop-only stub — throws PlatformUnsupportedError on any method call.
@@ -93,49 +376,8 @@ function createGracefulNamespace<T extends object>(): T {
 }
 
 // ---------------------------------------------------------------------------
-// Storage — localStorage (IndexedDB upgrade deferred)
+// Storage — IndexedDB with one-time localStorage migration
 // ---------------------------------------------------------------------------
-
-const storageAdapter: PlatformStorageAPI = {
-	async save(key, data) {
-		try {
-			localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(data));
-			return true;
-		} catch {
-			return false;
-		}
-	},
-	async load(key) {
-		const raw = localStorage.getItem(STORAGE_PREFIX + key);
-		if (raw === null) return null;
-		try {
-			return JSON.parse(raw);
-		} catch {
-			return raw;
-		}
-	},
-	async remove(key) {
-		localStorage.removeItem(STORAGE_PREFIX + key);
-		return true;
-	},
-	async list() {
-		const keys: string[] = [];
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key?.startsWith(STORAGE_PREFIX)) {
-				keys.push(key.slice(STORAGE_PREFIX.length));
-			}
-		}
-		return keys;
-	},
-	async clear() {
-		const keys = await storageAdapter.list();
-		for (const key of keys) {
-			localStorage.removeItem(STORAGE_PREFIX + key);
-		}
-		return true;
-	},
-};
 
 // ---------------------------------------------------------------------------
 // Theme — CSS media queries + localStorage
@@ -255,34 +497,9 @@ const filesAdapter: PlatformFilesAPI = {
 };
 
 // ---------------------------------------------------------------------------
-// API Keys — localStorage-based
+// API Keys — IndexedDB-backed
 // ---------------------------------------------------------------------------
 
-const API_KEYS_KEY = "qcut:api-keys";
-
-const apiKeysAdapter: PlatformApiKeysAPI = {
-	async get() {
-		const raw = localStorage.getItem(API_KEYS_KEY);
-		return raw ? JSON.parse(raw) : {};
-	},
-	async set(keys) {
-		const current = await apiKeysAdapter.get();
-		localStorage.setItem(API_KEYS_KEY, JSON.stringify({ ...current, ...keys }));
-		return true;
-	},
-	async clear() {
-		localStorage.removeItem(API_KEYS_KEY);
-		return true;
-	},
-	async status() {
-		const keys = await apiKeysAdapter.get();
-		const result: PlatformApiKeysStatus = {};
-		for (const [key, value] of Object.entries(keys)) {
-			result[key] = { set: !!value, source: "localStorage", shadowedBy: [] };
-		}
-		return result;
-	},
-};
 
 // ---------------------------------------------------------------------------
 // License — Free tier (no server auth on web)
@@ -418,7 +635,52 @@ const ffmpegGraceful = createGracefulNamespace<PlatformFFmpegAPI>();
 const transcriptionGraceful =
 	createGracefulNamespace<PlatformTranscriptionAPI>();
 const falGraceful = createGracefulNamespace<PlatformFalAPI>();
-const geminiChatGraceful = createGracefulNamespace<PlatformGeminiChatAPI>();
+const geminiChatGraceful: PlatformGeminiChatAPI = {
+	async send() {
+		return { success: false, error: "Gemini chat is unavailable in this browser." };
+	},
+	async suggestGapPrompt() {
+		return null;
+	},
+	async describeFrame() {
+		return null;
+	},
+	onStreamChunk() {},
+	onStreamComplete() {},
+	onStreamError() {},
+	removeListeners() {},
+};
+const videoSearchGraceful: PlatformVideoSearchAPI = {
+	async search() {
+		return { results: [], error: "Video search is unavailable in this browser." };
+	},
+	async indexMedia(_projectId, mediaId) {
+		return {
+			status: "unavailable",
+			mediaId,
+			error: "Video search is unavailable in this browser.",
+		};
+	},
+	async cancelIndexing() {},
+	async indexStatus() {
+		return { indexedMediaIds: [] };
+	},
+	async deleteIndex() {
+		return { ok: false };
+	},
+	async providerStatus() {
+		return { name: "unavailable", available: false };
+	},
+	onIndexProgress() {},
+	removeListeners() {},
+};
+const wallpapersGraceful: PlatformWallpapersAPI = {
+	isAvailable: () => false,
+	list: async () => [],
+	upload: async () => null,
+	delete: async () => false,
+	pick: async () => null,
+};
 const mediaImportGraceful: PlatformMediaImportAPI = {
 	async import() {
 		return null as any;
@@ -503,6 +765,8 @@ const updatesStub = createUnsupportedNamespace<PlatformUpdatesAPI>(
 // ---------------------------------------------------------------------------
 
 export function createWebAdapter(): PlatformAPI {
+	const { storage, apiKeys } = createIndexedDbNamespaces();
+
 	return {
 		platform: "web",
 		isElectron: false,
@@ -512,10 +776,10 @@ export function createWebAdapter(): PlatformAPI {
 
 		// Fully implemented for web
 		files: filesAdapter,
-		storage: storageAdapter,
+		storage,
 		theme: themeAdapter,
 		shell: shellAdapter,
-		apiKeys: apiKeysAdapter,
+		apiKeys,
 		license: licenseAdapter,
 		github: githubAdapter,
 		aiPipeline: aiPipelineAdapter,
@@ -531,6 +795,8 @@ export function createWebAdapter(): PlatformAPI {
 		transcription: transcriptionGraceful,
 		fal: falGraceful,
 		geminiChat: geminiChatGraceful,
+		videoSearch: videoSearchGraceful,
+		wallpapers: wallpapersGraceful,
 		mediaImport: mediaImportGraceful,
 
 		// Desktop-only stubs — throw PlatformUnsupportedError

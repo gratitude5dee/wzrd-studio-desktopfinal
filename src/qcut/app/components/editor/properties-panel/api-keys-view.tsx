@@ -62,6 +62,7 @@ function getActiveSource({
 	if (
 		!status ||
 		status.source === "not-set" ||
+		status.source === "indexedDB" ||
 		status.source === "localStorage"
 	) {
 		return undefined;

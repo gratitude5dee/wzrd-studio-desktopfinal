@@ -47,7 +47,7 @@ export async function getFfmpegWasmFallbackState(
 ): Promise<FfmpegWasmFallbackState> {
 	const {
 		basePath = "/ffmpeg",
-		requireCrossOriginIsolation = true,
+		requireCrossOriginIsolation = false,
 		fetchImpl = globalThis.fetch,
 	} = options;
 

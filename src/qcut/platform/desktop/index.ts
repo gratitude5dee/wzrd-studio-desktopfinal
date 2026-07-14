@@ -192,6 +192,15 @@ export function createDesktopAdapter(): PlatformAPI {
 		mediaImport: createMediaImportNamespace(),
 		skills: createSkillsNamespace(),
 		projectFolder: createProjectFolderNamespace(),
+		geminiChat: electronAPI?.geminiChat ?? web.geminiChat,
+		videoSearch: electronAPI?.videoSearch ?? web.videoSearch,
+		wallpapers: electronAPI?.wallpapers
+			? {
+					...electronAPI.wallpapers,
+					isAvailable: () => true,
+			  }
+			: web.wallpapers,
+		claude: electronAPI?.claude ?? web.claude,
 		analyzeFillers: async (options) => {
 			const api = getElectronAPI();
 			if (!api?.analyzeFillers) {

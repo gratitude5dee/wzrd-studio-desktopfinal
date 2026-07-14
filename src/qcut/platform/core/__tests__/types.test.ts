@@ -20,6 +20,8 @@ import type {
 	PlatformGitHubAPI,
 	PlatformMcpAPI,
 	PlatformProjectJsonAPI,
+	PlatformVideoSearchAPI,
+	PlatformWallpapersAPI,
 } from "../index.js";
 import type { PlatformClaudeAPI } from "../types/claude-api.js";
 
@@ -95,9 +97,11 @@ describe("PlatformAPI type completeness", () => {
 			"remotionFolder",
 			"moyin",
 			"updates",
+			"videoSearch",
+			"wallpapers",
 			"claude",
 		];
-		expect(namespaceKeys.length).toBe(33);
+		expect(namespaceKeys.length).toBe(35);
 	});
 
 	it("all new namespace types are importable", () => {
@@ -121,6 +125,8 @@ describe("PlatformAPI type completeness", () => {
 			remotionFolder?: PlatformRemotionFolderAPI;
 			moyin?: PlatformMoyinAPI;
 			updates?: PlatformUpdatesAPI;
+			videoSearch?: PlatformVideoSearchAPI;
+			wallpapers?: PlatformWallpapersAPI;
 			claude?: PlatformClaudeAPI;
 		} = {};
 		expect(typeCheck).toBeDefined();

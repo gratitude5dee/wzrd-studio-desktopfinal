@@ -13,7 +13,7 @@ import {
 	GRADIENT_PRESETS,
 	type BackgroundConfig,
 } from "@qcut-app/lib/screen-recording/wallpapers";
-import type { WallpaperEntry } from "@qcut-app/types/electron/api-wallpapers";
+import { platform, type PlatformWallpaperEntry } from "@qcut/platform-core";
 
 const BG_TYPES: { value: BackgroundConfig["type"]; label: string }[] = [
 	{ value: "none", label: "None" },
@@ -270,25 +270,25 @@ function WallpaperPicker({
 	selectedPath?: string;
 	onSelect: (path: string) => void;
 }) {
-	const [entries, setEntries] = useState<WallpaperEntry[]>([]);
-	const hasElectron =
-		typeof window !== "undefined" && !!window.electronAPI?.wallpapers;
+	const [entries, setEntries] = useState<PlatformWallpaperEntry[]>([]);
+	const wallpapers = platform().wallpapers;
+	const hasWallpapers = wallpapers.isAvailable();
 
 	const refresh = useCallback(async () => {
-		if (!hasElectron) return;
-		const list = await window.electronAPI!.wallpapers.list();
+		if (!hasWallpapers) return;
+		const list = await wallpapers.list();
 		setEntries(list);
-	}, [hasElectron]);
+	}, [hasWallpapers, wallpapers]);
 
 	useEffect(() => {
 		refresh();
 	}, [refresh]);
 
 	const handleUpload = async () => {
-		if (!hasElectron) return;
-		const filePath = await window.electronAPI!.wallpapers.pick();
+		if (!hasWallpapers) return;
+		const filePath = await wallpapers.pick();
 		if (!filePath) return;
-		const entry = await window.electronAPI!.wallpapers.upload(filePath);
+		const entry = await wallpapers.upload(filePath);
 		if (entry) {
 			onSelect(entry.path);
 			refresh();
@@ -296,9 +296,9 @@ function WallpaperPicker({
 	};
 
 	const handleDelete = async (id: string) => {
-		if (!hasElectron) return;
+		if (!hasWallpapers) return;
 		const deleted = entries.find((e) => e.id === id);
-		await window.electronAPI!.wallpapers.delete(id);
+		await wallpapers.delete(id);
 		if (deleted && selectedPath === deleted.path) {
 			onSelect("");
 		}
@@ -306,7 +306,7 @@ function WallpaperPicker({
 	};
 
 	// Fallback: plain text input for non-Electron environments
-	if (!hasElectron) {
+	if (!hasWallpapers) {
 		return (
 			<PropertyItem direction="column">
 				<PropertyItemLabel>Image path</PropertyItemLabel>

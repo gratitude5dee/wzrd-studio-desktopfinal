@@ -2,7 +2,6 @@ import { TProject } from "@qcut-app/types/project";
 import { MediaItem } from "@qcut-app/stores/media/media-store";
 import { IndexedDBAdapter } from "./indexeddb-adapter";
 import { LocalStorageAdapter } from "./localstorage-adapter";
-import { ElectronStorageAdapter } from "./electron-adapter";
 import { OPFSAdapter } from "./opfs-adapter";
 import {
 	MediaFileData,
@@ -16,6 +15,7 @@ import {
 import type { MediaFolder } from "@qcut-app/stores/media/media-store-types";
 import { TimelineTrack } from "@qcut-app/types/timeline";
 import { debugLog, debugError, debugWarn } from "@qcut-app/lib/debug/debug-config";
+import { platform, type PlatformAPI } from "@qcut/platform-core";
 
 class StorageService {
 	private projectsAdapter!: StorageAdapter<SerializedProject>;
@@ -42,12 +42,16 @@ class StorageService {
 		this.initializeStorage();
 	}
 
+	private getPlatform(): PlatformAPI | null {
+		try {
+			return platform();
+		} catch {
+			return null;
+		}
+	}
+
 	private isElectronEnvironment(): boolean {
-		return (
-			typeof window !== "undefined" &&
-			!!(window as any).electronAPI &&
-			!!(window as any).electronAPI.storage
-		);
+		return this.getPlatform()?.isElectron === true;
 	}
 
 	private async initializeStorage() {
@@ -55,21 +59,7 @@ class StorageService {
 			return; // Already initialized
 		}
 
-		// Try Electron IPC first if available
-		if (this.isElectronEnvironment()) {
-			try {
-				this.projectsAdapter = new ElectronStorageAdapter<SerializedProject>(
-					this.config.projectsDb,
-					"projects"
-				);
-				// Test if Electron IPC works
-				await this.projectsAdapter.list();
-				this.isInitialized = true;
-				return;
-			} catch (error) {}
-		}
-
-		// Try IndexedDB second
+		// Project and media persistence is browser-native in every renderer.
 		try {
 			this.projectsAdapter = new IndexedDBAdapter<SerializedProject>(
 				this.config.projectsDb,
@@ -393,20 +383,18 @@ class StorageService {
 		// Verify or regenerate localPath for videos
 		// Temp files in /tmp may be cleaned up by the OS between sessions
 		let localPath = metadata.localPath;
+		const currentPlatform = this.getPlatform();
 		if (
 			metadata.type === "video" &&
 			actualFile &&
 			actualFile.size > 0 &&
-			this.isElectronEnvironment() &&
-			(window as any).electronAPI?.video?.saveTemp
+			currentPlatform?.isElectron
 		) {
 			// Verify existing localPath still points to a real file
 			let needsRegeneration = !localPath;
-			if (localPath && (window as any).electronAPI?.video?.verifyFile) {
+			if (localPath) {
 				try {
-					const exists = await (window as any).electronAPI.video.verifyFile(
-						localPath
-					);
+					const exists = await currentPlatform.video.verifyFile(localPath);
 					if (!exists) {
 						debugLog(
 							`[StorageService] Temp file missing, will recreate: ${metadata.name}`
@@ -426,7 +414,7 @@ class StorageService {
 				try {
 					const arrayBuffer = await actualFile.arrayBuffer();
 					const uint8Array = new Uint8Array(arrayBuffer);
-					localPath = await (window as any).electronAPI.video.saveTemp(
+					localPath = await currentPlatform.video.saveTemp(
 						uint8Array,
 						metadata.name
 					);
@@ -733,7 +721,7 @@ class StorageService {
 	}
 
 	isIndexedDBSupported(): boolean {
-		return "indexedDB" in window;
+		return typeof indexedDB !== "undefined";
 	}
 
 	isFullySupported(): boolean {

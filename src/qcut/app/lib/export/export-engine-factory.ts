@@ -194,7 +194,7 @@ export class ExportEngineFactory {
 
 		if (await isFfmpegWasmFallbackAvailable()) {
 			console.log(
-				"🚀 EXPORT ENGINE SELECTION: FFmpeg WASM fallback chosen for isolated browser"
+				"🚀 EXPORT ENGINE SELECTION: FFmpeg WASM single-thread fallback chosen for browser"
 			);
 			return {
 				engineType: ExportEngineType.FFMPEG,

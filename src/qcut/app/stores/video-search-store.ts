@@ -8,6 +8,7 @@
  */
 
 import { create } from "zustand";
+import { platform } from "@qcut/platform-core";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -88,13 +89,10 @@ export const useVideoSearchStore = create<
 		set({ isSearching: true, searchError: null });
 
 		try {
-			const api = window.electronAPI?.videoSearch;
-			if (!api) {
-				set({ searchError: "Video search not available", isSearching: false });
-				return;
-			}
-
-			const response = await api.search(projectId, query.trim());
+			const response = await platform().videoSearch.search(
+				projectId,
+				query.trim()
+			);
 
 			if (response.error) {
 				set({ results: [], searchError: response.error, isSearching: false });
@@ -117,13 +115,10 @@ export const useVideoSearchStore = create<
 		mediaName,
 		totalDuration
 	) => {
-		const api = window.electronAPI?.videoSearch;
-		if (!api) return;
-
 		set({ isIndexing: true, indexingProgress: null });
 
 		try {
-			const result = await api.indexMedia(
+			const result = await platform().videoSearch.indexMedia(
 				projectId,
 				mediaId,
 				mediaPath,
@@ -144,18 +139,13 @@ export const useVideoSearchStore = create<
 	},
 
 	cancelIndexing: async (projectId) => {
-		const api = window.electronAPI?.videoSearch;
-		if (!api) return;
-		await api.cancelIndexing(projectId);
+		await platform().videoSearch.cancelIndexing(projectId);
 		set({ isIndexing: false, indexingProgress: null });
 	},
 
 	loadIndexedStatus: async (projectId) => {
-		const api = window.electronAPI?.videoSearch;
-		if (!api) return;
-
 		try {
-			const { indexedMediaIds } = await api.indexStatus(projectId);
+			const { indexedMediaIds } = await platform().videoSearch.indexStatus(projectId);
 			set({ indexedMediaIds });
 		} catch {
 			// Ignore
@@ -163,14 +153,8 @@ export const useVideoSearchStore = create<
 	},
 
 	checkProvider: async () => {
-		const api = window.electronAPI?.videoSearch;
-		if (!api) {
-			set({ providerAvailable: false });
-			return;
-		}
-
 		try {
-			const { available } = await api.providerStatus();
+			const { available } = await platform().videoSearch.providerStatus();
 			set({ providerAvailable: available });
 		} catch {
 			set({ providerAvailable: false });
@@ -180,15 +164,12 @@ export const useVideoSearchStore = create<
 	clearResults: () => set({ results: [], searchError: null, query: "" }),
 
 	setupListeners: () => {
-		const api = window.electronAPI?.videoSearch;
-		if (!api) return;
-
-		api.onIndexProgress((progress) => {
+		platform().videoSearch.onIndexProgress((progress) => {
 			set({ indexingProgress: progress as IndexingProgress });
 		});
 	},
 
 	cleanupListeners: () => {
-		window.electronAPI?.videoSearch?.removeListeners();
+		platform().videoSearch.removeListeners();
 	},
 }));

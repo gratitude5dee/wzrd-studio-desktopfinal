@@ -42,10 +42,89 @@ export interface PlatformGeminiChatAPI {
 		attachments?: Array<{ path: string; mimeType: string; name: string }>;
 		model?: string;
 	}): Promise<{ success: boolean; error?: string }>;
+	suggestGapPrompt(request: {
+		gapDuration: number;
+		mode: string;
+		beforeFrameUrl?: string | null;
+		afterFrameUrl?: string | null;
+	}): Promise<{ suggestedPrompt: string | null; error?: string } | null>;
+	describeFrame(request: {
+		imageDataUrl: string;
+	}): Promise<{ prompt: string | null; error?: string } | null>;
 	onStreamChunk(callback: (data: { text: string }) => void): void;
 	onStreamComplete(callback: () => void): void;
 	onStreamError(callback: (data: { message: string }) => void): void;
 	removeListeners(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Video semantic search
+// ---------------------------------------------------------------------------
+
+export interface PlatformVideoSearchResult {
+	mediaId: string;
+	mediaName: string;
+	chunkIndex: number;
+	startTime: number;
+	endTime: number;
+	score: number;
+	thumbnailPath?: string;
+}
+
+export interface PlatformVideoSearchAPI {
+	search(
+		projectId: string,
+		query: string,
+		options?: { topK?: number; minScore?: number; mediaFilter?: string[] }
+	): Promise<{
+		results: PlatformVideoSearchResult[];
+		error?: string;
+		message?: string;
+	}>;
+	indexMedia(
+		projectId: string,
+		mediaId: string,
+		mediaPath: string,
+		mediaName: string,
+		totalDuration: number
+	): Promise<{
+		status: string;
+		mediaId: string;
+		chunks?: number;
+		error?: string;
+	}>;
+	cancelIndexing(projectId: string): Promise<void>;
+	indexStatus(projectId: string): Promise<{ indexedMediaIds: string[] }>;
+	deleteIndex(projectId: string, mediaId: string): Promise<{ ok: boolean }>;
+	providerStatus(): Promise<{ name: string; available: boolean }>;
+	onIndexProgress(
+		callback: (progress: {
+			phase: string;
+			current: number;
+			total: number;
+			mediaId?: string;
+			mediaName?: string;
+		}) => void
+	): void;
+	removeListeners(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Screen-recording wallpapers
+// ---------------------------------------------------------------------------
+
+export interface PlatformWallpaperEntry {
+	id: string;
+	name: string;
+	path: string;
+}
+
+export interface PlatformWallpapersAPI {
+	isAvailable(): boolean;
+	list(): Promise<PlatformWallpaperEntry[]>;
+	upload(sourcePath: string): Promise<PlatformWallpaperEntry | null>;
+	delete(id: string): Promise<boolean>;
+	pick(): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
  * Storage provider interface for editor persistence.
  *
  * Platform adapters implement this to provide project/timeline storage:
- * - Desktop: ElectronStorageAdapter → IPC → disk
+ * - Desktop: platform storage adapter → IPC → disk
  * - Web: IndexedDB + OPFS
  *
  * @module @qcut/editor-core/storage

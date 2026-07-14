@@ -49,6 +49,7 @@ const StoryboardPage = lazyWithRetry(() => import('@/legacy-pages/StoryboardPage
 const ProjectObservabilityPage = lazyWithRetry(() => import('@/legacy-pages/ProjectObservabilityPage'));
 const DirectorCutPage = lazyWithRetry(() => import('@/legacy-pages/DirectorCutPage'));
 const EditorPage = lazyWithRetry(() => import('@/legacy-pages/EditorPage'));
+const EditorEntryPage = lazyWithRetry(() => import('@/components/editor/EditorEntryPage'));
 const Storyboard = lazyWithRetry(() => import('@/legacy-pages/Storyboard'));
 const ShotEditor = lazyWithRetry(() => import('@/legacy-pages/ShotEditor'));
 const KanvasPage = lazyWithRetry(() => import('@/legacy-pages/KanvasPage'));
@@ -175,7 +176,10 @@ const AuthenticatedRoutes = () => {
                   <Route path="/project/:projectId/timeline" element={<RedirectProjectTimelineAlias />} />
                   <Route path={appRoutes.legacy.storyboardRoot} element={<Navigate to={appRoutes.home} replace />} />
                   <Route path={appRoutes.legacy.timelineRoot} element={<Navigate to={appRoutes.home} replace />} />
-                  <Route path={appRoutes.legacy.editorRoot} element={<Navigate to={appRoutes.home} replace />} />
+                  <Route
+                    path={appRoutes.editor}
+                    element={<ProtectedRoute><EditorEntryPage /></ProtectedRoute>}
+                  />
                   <Route
                     path="/credits"
                     element={<ProtectedRoute><Navigate to={appRoutes.settings.billing} replace /></ProtectedRoute>}

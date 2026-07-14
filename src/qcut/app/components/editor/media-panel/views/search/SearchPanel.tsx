@@ -19,6 +19,7 @@ import { useSearchStore } from "@qcut-app/stores/search-store";
 import { useProjectStore } from "@qcut-app/stores/project-store";
 import type { PersistedTranscription } from "@qcut/editor-core";
 import { SearchResultItem } from "./SearchResultItem";
+import { platform } from "@qcut/platform-core";
 
 /** Debounce delay for search input (ms). */
 const DEBOUNCE_MS = 300;
@@ -82,7 +83,7 @@ export function SearchPanel() {
 		const projectId = activeProject?.id;
 		if (!projectId) return;
 
-		const api = window.electronAPI?.claude?.search;
+		const api = platform().claude?.search;
 		if (!api) return;
 
 		api

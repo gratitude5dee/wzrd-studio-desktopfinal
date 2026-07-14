@@ -40,6 +40,8 @@ import type {
 	PlatformUpdatesAPI,
 	PlatformFillerAnalysisAPI,
 	PlatformPiAgentAPI,
+	PlatformVideoSearchAPI,
+	PlatformWallpapersAPI,
 } from "./integration-api.js";
 import type { PlatformClaudeAPI } from "./claude-api.js";
 
@@ -47,7 +49,7 @@ import type { PlatformClaudeAPI } from "./claude-api.js";
  * The unified platform API contract.
  *
  * Platform adapters implement this interface:
- * - `platform-desktop`: wraps window.electronAPI (full capability)
+ * - `platform-desktop`: wraps the desktop bridge (full capability)
  * - `platform-web`: browser APIs + stubs (QCut Lite)
  *
  * Capabilities that an adapter does not support should throw
@@ -99,6 +101,8 @@ export interface PlatformAPI extends PlatformFillerAnalysisAPI {
 	remotion?: PlatformRemotionAPI;
 	moyin: PlatformMoyinAPI;
 	updates: PlatformUpdatesAPI;
+	videoSearch: PlatformVideoSearchAPI;
+	wallpapers: PlatformWallpapersAPI;
 
 	// -- Pi Agent (optional — desktop-only) --
 	piAgent?: PlatformPiAgentAPI;

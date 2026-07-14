@@ -61,6 +61,10 @@ export type {
 	PlatformUpdatesAPI,
 	PlatformFillerAnalysisAPI,
 	PlatformPiAgentAPI,
+	PlatformVideoSearchAPI,
+	PlatformVideoSearchResult,
+	PlatformWallpapersAPI,
+	PlatformWallpaperEntry,
 } from "./types/integration-api.js";
 
 // Claude API namespaces

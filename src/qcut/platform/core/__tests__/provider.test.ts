@@ -44,6 +44,8 @@ function createMockAdapter(): PlatformAPI {
 		remotionFolder: {} as any,
 		moyin: {} as any,
 		updates: {} as any,
+		videoSearch: {} as any,
+		wallpapers: {} as any,
 		claude: undefined,
 	};
 }

@@ -25,6 +25,7 @@ import { Loader2, Sparkles, RefreshCw, Video, Image } from "lucide-react";
 import type { TimelineElement as TimelineElementType } from "@qcut-app/types/timeline";
 import { CAMERA_MOTION_PRESETS } from "@qcut-app/types/generation";
 import { pausePlaybackForGapInteraction } from "./gap-actions";
+import { platform } from "@qcut/platform-core";
 
 // ---------------------------------------------------------------------------
 // Frame extraction (renderer-side, using canvas)
@@ -119,10 +120,6 @@ export function GapGenerationModal() {
 
 	// Prompt suggestion via Gemini
 	const triggerSuggestion = useCallback(async () => {
-		if (!window.electronAPI?.geminiChat?.suggestGapPrompt) {
-			// No Gemini handler available — skip silently
-			return;
-		}
 		if (!selectedGap) return;
 
 		setSuggesting(true);
@@ -130,14 +127,14 @@ export function GapGenerationModal() {
 		setSuggestionError(false);
 
 		try {
-			const result = await window.electronAPI.geminiChat.suggestGapPrompt({
+			const result = await platform().geminiChat.suggestGapPrompt({
 				gapDuration,
 				mode: mode || "text-to-video",
 				beforeFrameUrl: useGapStore.getState().beforeFrameUrl,
 				afterFrameUrl: useGapStore.getState().afterFrameUrl,
 			});
 
-			if (result.suggestedPrompt) {
+			if (result?.suggestedPrompt) {
 				setSuggestion(result.suggestedPrompt);
 				if (!useGapStore.getState().gapPrompt.trim()) {
 					setPrompt(result.suggestedPrompt);

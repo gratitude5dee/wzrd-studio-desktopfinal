@@ -48,7 +48,21 @@ describe("ffmpeg-web helpers", () => {
 		);
 	});
 
-	it("requires cross-origin isolation by default", async () => {
+	it("uses the single-thread fallback without cross-origin isolation", async () => {
+		Object.defineProperty(globalThis, "Worker", {
+			configurable: true,
+			value: class {},
+		});
+		setCrossOriginIsolated(false);
+		const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+
+		await expect(
+			isFfmpegWasmFallbackAvailable({ fetchImpl: fetchImpl as typeof fetch })
+		).resolves.toBe(true);
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	});
+
+	it("can require cross-origin isolation explicitly", async () => {
 		Object.defineProperty(globalThis, "Worker", {
 			configurable: true,
 			value: class {},
@@ -57,16 +71,15 @@ describe("ffmpeg-web helpers", () => {
 		const fetchImpl = vi.fn();
 
 		await expect(
-			isFfmpegWasmFallbackAvailable({ fetchImpl: fetchImpl as typeof fetch })
-		).resolves.toBe(false);
-		expect(fetchImpl).not.toHaveBeenCalled();
-
-		await expect(
-			getFfmpegWasmFallbackState({ fetchImpl: fetchImpl as typeof fetch })
+			getFfmpegWasmFallbackState({
+				fetchImpl: fetchImpl as typeof fetch,
+				requireCrossOriginIsolation: true,
+			})
 		).resolves.toMatchObject({
 			available: false,
 			reason: "cross_origin_isolation_required",
 		});
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it("returns true when isolation, workers, and assets are available", async () => {

@@ -1,12 +1,15 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { hasDirectElectronGlobal } from "./web-boundary-patterns.mjs";
+
 const roots = ["app", "src"].filter((root) => existsSync(root));
 const extensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
 const ignoredPathFragments = [
 	`${path.sep}__tests__${path.sep}`,
 	`${path.sep}__tests_disabled__${path.sep}`,
+	`${path.sep}test${path.sep}`,
 	".test.",
 	".spec.",
 	`${path.sep}src${path.sep}lib${path.sep}desktop.ts`,
@@ -61,6 +64,15 @@ function checkFile(filePath) {
 				lineNumber,
 				message:
 					"Use the platform adapter instead of direct wzrdDesktop/wzrdQcut globals.",
+			});
+		}
+
+		if (hasDirectElectronGlobal(line)) {
+			violations.push({
+				filePath,
+				lineNumber,
+				message:
+					"Use the platform adapter instead of direct electronAPI globals.",
 			});
 		}
 

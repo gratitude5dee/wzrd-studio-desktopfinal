@@ -27,6 +27,7 @@ export function createWzrdAdapter(): PlatformAPI {
 
 	const wzrdDesktop = (window as any).wzrdDesktop as any;
 	const wzrdQcut = (window as any).wzrdQcut as any;
+	const legacyElectronAPI = (globalThis as any).electronAPI as any;
 
 	const hasCapability = (cap: PlatformCapability) => {
 		// Declare the minimal set of capabilities we actually provide in desktop mode.
@@ -229,5 +230,20 @@ export function createWzrdAdapter(): PlatformAPI {
 				return await wzrdQcut.projectFolder.ensureStructure(projectId);
 			},
 		},
+
+		geminiChat:
+			legacyElectronAPI?.geminiChat ?? wzrdQcut?.geminiChat ?? base.geminiChat,
+		videoSearch:
+			legacyElectronAPI?.videoSearch ?? wzrdQcut?.videoSearch ?? base.videoSearch,
+		wallpapers: (() => {
+			const wallpapers =
+				legacyElectronAPI?.wallpapers ?? wzrdQcut?.wallpapers;
+			if (!wallpapers) return base.wallpapers;
+			return {
+				...wallpapers,
+				isAvailable: () => true,
+			};
+		})(),
+		claude: legacyElectronAPI?.claude ?? wzrdQcut?.claude ?? base.claude,
 	};
 }

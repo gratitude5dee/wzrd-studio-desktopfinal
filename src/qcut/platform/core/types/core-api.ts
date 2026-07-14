@@ -91,7 +91,11 @@ export const KEY_SOURCE_PRECEDENCE = [
 ] as const;
 
 export type KeySource = (typeof KEY_SOURCE_PRECEDENCE)[number];
-export type ApiKeyStatusSource = KeySource | "localStorage" | "not-set";
+export type ApiKeyStatusSource =
+	| KeySource
+	| "indexedDB"
+	| "localStorage"
+	| "not-set";
 
 export interface PlatformApiKeyStatus {
 	set: boolean;

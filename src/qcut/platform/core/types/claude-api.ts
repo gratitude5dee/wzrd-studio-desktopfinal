@@ -388,6 +388,9 @@ export interface PlatformClaudeProjectCrudAPI {
 // ---------------------------------------------------------------------------
 
 export interface PlatformClaudeAPI {
+	search?: {
+		loadTranscriptions(projectId: string): Promise<unknown[]>;
+	};
 	media: PlatformClaudeMediaAPI;
 	timeline: PlatformClaudeTimelineAPI;
 	transaction: PlatformClaudeTransactionAPI;

@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { IDBFactory } from "fake-indexeddb";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { createWebAdapter } from "../index";
 import {
 	PlatformCapability,
@@ -6,7 +7,20 @@ import {
 } from "@qcut/platform-core";
 
 describe("createWebAdapter", () => {
-	const adapter = createWebAdapter();
+	let adapter: ReturnType<typeof createWebAdapter>;
+
+	beforeEach(() => {
+		Object.defineProperty(globalThis, "indexedDB", {
+			configurable: true,
+			value: new IDBFactory(),
+		});
+		Object.defineProperty(window, "open", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		localStorage.clear();
+		adapter = createWebAdapter();
+	});
 
 	it("reports platform as web", () => {
 		expect(adapter.platform).toBe("web");
@@ -47,29 +61,59 @@ describe("createWebAdapter", () => {
 	});
 
 	describe("storage interface", () => {
-		it("save returns boolean", async () => {
-			const result = await adapter.storage.save("test", { data: true });
-			expect(typeof result).toBe("boolean");
+		it("persists values in IndexedDB", async () => {
+			await expect(adapter.storage.save("test", { data: true })).resolves.toBe(true);
+			await expect(adapter.storage.load("test")).resolves.toEqual({ data: true });
+			await expect(adapter.storage.list()).resolves.toContain("test");
 		});
 
-		it("load returns value or null", async () => {
-			const result = await adapter.storage.load("nonexistent-key-12345");
-			expect(result === null || result === undefined).toBe(true);
+		it("removes and clears persisted values", async () => {
+			await adapter.storage.save("first", 1);
+			await adapter.storage.save("second", 2);
+
+			await expect(adapter.storage.remove("first")).resolves.toBe(true);
+			await expect(adapter.storage.load("first")).resolves.toBeNull();
+			await expect(adapter.storage.clear()).resolves.toBe(true);
+			await expect(adapter.storage.list()).resolves.toEqual([]);
 		});
 
-		it("list returns array", async () => {
-			const keys = await adapter.storage.list();
-			expect(Array.isArray(keys)).toBe(true);
+		it("migrates legacy storage and API keys once", async () => {
+			localStorage.setItem("qcut:project", JSON.stringify({ id: "project-1" }));
+			localStorage.setItem("qcut:plain", "legacy-value");
+			localStorage.setItem(
+				"qcut:api-keys",
+				JSON.stringify({ fal: "fal-key", gemini: "gemini-key" })
+			);
+			localStorage.setItem("qcut:theme", "dark");
+
+			await expect(adapter.storage.load("project")).resolves.toEqual({
+				id: "project-1",
+			});
+			await expect(adapter.storage.load("plain")).resolves.toBe("legacy-value");
+			await expect(adapter.apiKeys.get()).resolves.toEqual({
+				fal: "fal-key",
+				gemini: "gemini-key",
+			});
+			await expect(adapter.apiKeys.status()).resolves.toEqual({
+				fal: { set: true, source: "indexedDB", shadowedBy: [] },
+				gemini: { set: true, source: "indexedDB", shadowedBy: [] },
+			});
+
+			expect(localStorage.getItem("qcut:project")).toBeNull();
+			expect(localStorage.getItem("qcut:plain")).toBeNull();
+			expect(localStorage.getItem("qcut:api-keys")).toBeNull();
+			expect(localStorage.getItem("qcut:theme")).toBe("dark");
 		});
 
-		it("remove returns boolean", async () => {
-			const result = await adapter.storage.remove("some-key");
-			expect(typeof result).toBe("boolean");
-		});
+		it("does not repeat the localStorage migration", async () => {
+			localStorage.setItem("qcut:first", JSON.stringify(1));
+			await expect(adapter.storage.load("first")).resolves.toBe(1);
 
-		it("clear returns boolean", async () => {
-			const result = await adapter.storage.clear();
-			expect(typeof result).toBe("boolean");
+			localStorage.setItem("qcut:late", JSON.stringify(2));
+			const secondAdapter = createWebAdapter();
+
+			await expect(secondAdapter.storage.load("late")).resolves.toBeNull();
+			expect(localStorage.getItem("qcut:late")).toBe("2");
 		});
 	});
 
@@ -184,6 +228,24 @@ describe("createWebAdapter", () => {
 			expect(() => {
 				adapter.geminiChat.removeListeners();
 			}).not.toThrow();
+		});
+
+		it("returns graceful unavailable results for migrated desktop namespaces", async () => {
+			await expect(
+				adapter.videoSearch.search("project-1", "opening shot")
+			).resolves.toMatchObject({ results: [], error: expect.any(String) });
+			await expect(adapter.videoSearch.providerStatus()).resolves.toEqual({
+				name: "unavailable",
+				available: false,
+			});
+			expect(adapter.wallpapers.isAvailable()).toBe(false);
+			await expect(adapter.wallpapers.list()).resolves.toEqual([]);
+			await expect(
+				adapter.geminiChat.suggestGapPrompt({
+					gapDuration: 2,
+					mode: "text-to-video",
+				})
+			).resolves.toBeNull();
 		});
 
 		it("video methods return null", async () => {

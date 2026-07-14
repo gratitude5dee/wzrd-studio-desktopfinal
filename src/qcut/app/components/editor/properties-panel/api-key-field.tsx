@@ -151,10 +151,10 @@ export function ApiKeyField({
 export function KeySourceBadge({ source }: { source: ApiKeyStatusSource }) {
 	if (source === "not-set") return null;
 
-	const label =
-		source === "localStorage" ? "web" : PRECEDENCE_BADGE_LABELS[source];
+	const isWebStorage = source === "indexedDB" || source === "localStorage";
+	const label = isWebStorage ? "web" : PRECEDENCE_BADGE_LABELS[source];
 	const tooltipText =
-		source === "localStorage" ? undefined : PRECEDENCE_ONE_LINERS[source];
+		isWebStorage ? undefined : PRECEDENCE_ONE_LINERS[source];
 	const badge = (
 		<span
 			aria-label={tooltipText ?? label}
