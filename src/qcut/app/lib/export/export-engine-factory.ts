@@ -4,8 +4,14 @@ import { TimelineTrack } from "@qcut-app/types/timeline";
 import { MediaItem } from "@qcut-app/stores/media/media-store";
 import { debugLog, debugError, debugWarn } from "@qcut-app/lib/debug/debug-config";
 import { useEffectsStore } from "@qcut-app/stores/ai/effects-store";
+import { useProjectStore } from "@qcut-app/stores/project-store";
 import { platform } from "@qcut/platform-core";
+import { getWzrdProjectContext } from "../../../bridge/wzrd-project-context";
 import { isFfmpegWasmFallbackAvailable } from "@/lib/ffmpeg-web";
+import {
+	analyzeCloudRenderEligibility,
+	CLOUD_EXPORT_SHORT_DURATION_SECONDS,
+} from "./cloud-export";
 
 // Engine types available
 export const ExportEngineType = {
@@ -15,6 +21,7 @@ export const ExportEngineType = {
 	MUXER: "muxer",
 	FFMPEG: "ffmpeg",
 	CLI: "cli",
+	CLOUD: "cloud",
 	REMOTION: "remotion",
 } as const;
 
@@ -51,6 +58,13 @@ function readLocalStorageFlag(key: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+function resolveCloudProjectId(projectId?: string): string | undefined {
+	const qcutProjectId =
+		projectId ?? useProjectStore.getState().activeProject?.id;
+	if (!qcutProjectId) return undefined;
+	return getWzrdProjectContext(qcutProjectId)?.wzrdProjectId ?? qcutProjectId;
 }
 
 export class ExportEngineFactory {
@@ -95,7 +109,9 @@ export class ExportEngineFactory {
 		settings: ExportSettings,
 		duration: number,
 		complexity: "low" | "medium" | "high" = "medium",
-		tracks?: TimelineTrack[]
+		tracks?: TimelineTrack[],
+		mediaItems: MediaItem[] = [],
+		projectId?: string
 	): Promise<EngineRecommendation> {
 		// Auto-select Remotion engine when timeline contains Remotion elements
 		// Check before detectCapabilities() to avoid unnecessary browser API calls
@@ -164,6 +180,34 @@ export class ExportEngineFactory {
 				capabilities,
 				estimatedPerformance: "high",
 			};
+		}
+
+		if (
+			tracks &&
+			duration > CLOUD_EXPORT_SHORT_DURATION_SECONDS &&
+			settings.format === "mp4"
+		) {
+			const cloudProjectId = resolveCloudProjectId(projectId);
+			if (cloudProjectId) {
+				const effectsByElementId = useEffectsStore.getState().activeEffects;
+				const eligibility = analyzeCloudRenderEligibility({
+					projectId: cloudProjectId,
+					tracks,
+					mediaItems,
+					settings: settings as ExportSettingsWithAudio,
+					totalDuration: duration,
+					effectsByElementId,
+				});
+				if (eligibility.eligible) {
+					return {
+						engineType: ExportEngineType.CLOUD,
+						reason:
+							"Cloud render selected for an eligible timeline longer than 30 seconds",
+						capabilities,
+						estimatedPerformance: "high",
+					};
+				}
+			}
 		}
 
 		// Calculate memory requirements for browser environments
@@ -259,11 +303,16 @@ export class ExportEngineFactory {
 				settings,
 				totalDuration,
 				"medium",
-				tracks
+				tracks,
+				mediaItems
 			);
 			selectedEngineType = recommendation.engineType;
 			console.log("  - Recommended engine:", selectedEngineType);
 			console.log("  - Recommendation reason:", recommendation.reason);
+		}
+
+		if (selectedEngineType === ExportEngineType.CLI && !this.isElectron()) {
+			selectedEngineType = ExportEngineType.CLOUD;
 		}
 
 		console.log(
@@ -271,6 +320,22 @@ export class ExportEngineFactory {
 		);
 
 		switch (selectedEngineType) {
+			case ExportEngineType.CLOUD: {
+				const { CloudExportEngine } = await import("./export-engine-cloud");
+				const effectsByElementId = useEffectsStore.getState().activeEffects;
+				return new CloudExportEngine(
+					canvas,
+					settings,
+					tracks,
+					mediaItems,
+					totalDuration,
+					{
+						projectId: resolveCloudProjectId(),
+						effectsByElementId,
+					}
+				);
+			}
+
 			case ExportEngineType.OPTIMIZED:
 				// Import optimized engine dynamically
 				try {

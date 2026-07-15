@@ -194,6 +194,7 @@ export interface PlatformFFmpegAPI {
 	}): Promise<{ success: boolean; error?: string }>;
 	exportVideoCLI(options: Record<string, unknown>): Promise<{
 		success: boolean;
+		code?: "use_cloud_engine";
 		outputPath?: string;
 		outputFile?: string;
 		error?: string;

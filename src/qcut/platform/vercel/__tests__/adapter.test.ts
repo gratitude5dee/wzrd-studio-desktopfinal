@@ -118,43 +118,22 @@ describe("createVercelAdapter", () => {
 		).rejects.toThrow("Unsupported FFmpeg resource");
 	});
 
-	it("queues CLI render offload without pretending the output is ready", async () => {
-		const projectId = "22222222-2222-4222-8222-222222222222";
-		supabaseMocks.getSession.mockResolvedValue({
-			data: { session: { access_token: "token-1" } },
-		});
-		const fetchMock = vi.fn(async () => {
-			return Response.json(
-				{ job: { id: "33333333-3333-4333-8333-333333333333", status: "queued" } },
-				{ status: 202 }
-			);
-		});
+	it("redirects legacy CLI callers to CloudExportEngine without enqueueing", async () => {
+		const fetchMock = vi.fn();
 		globalThis.fetch = fetchMock as typeof fetch;
 
 		const adapter = createVercelAdapter();
 		const result = await adapter.ffmpeg.exportVideoCLI({
-			projectId,
+			projectId: "22222222-2222-4222-8222-222222222222",
 			sessionId: "session-1",
 			duration: 30,
 		});
 
-		expect(result.success).toBe(false);
-		expect(result.error).toContain("async result polling is not wired");
-		expect(fetchMock).toHaveBeenCalledWith(
-			"/api/render",
-			expect.objectContaining({
-				method: "POST",
-				headers: {
-					Authorization: "Bearer token-1",
-					"Content-Type": "application/json",
-				},
-			})
-		);
-		const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-		expect(JSON.parse(String(init.body))).toMatchObject({
-			projectId,
-			idempotencyKey: "ffmpeg-cli:session-1",
-			request: { projectId, sessionId: "session-1", duration: 30 },
+		expect(result).toMatchObject({
+			success: false,
+			code: "use_cloud_engine",
 		});
+		expect(result.error).toContain("CloudExportEngine");
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });

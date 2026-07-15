@@ -18,8 +18,15 @@ vi.mock("@qcut-app/lib/debug/debug-config", () => ({
 vi.mock("@qcut-app/stores/ai/effects-store", () => ({
 	useEffectsStore: {
 		getState: () => ({
+			activeEffects: new Map(),
 			getElementEffects: () => null,
 		}),
+	},
+}));
+
+vi.mock("@qcut-app/stores/project-store", () => ({
+	useProjectStore: {
+		getState: () => ({ activeProject: null }),
 	},
 }));
 
@@ -187,6 +194,43 @@ describe("ExportEngineFactory", () => {
 	});
 
 	describe("getEngineRecommendation", () => {
+		const projectId = "22222222-2222-4222-8222-222222222222";
+		const storedVideo = {
+			id: "media-1",
+			name: "source.mp4",
+			type: "video",
+			file: new File([], "source.mp4", { type: "video/mp4" }),
+			width: 1280,
+			height: 720,
+			metadata: {
+				storageBucket: "project-assets",
+				storagePath: `11111111-1111-4111-8111-111111111111/projects/${projectId}/source.mp4`,
+			},
+		};
+		const videoTracks = [
+			{
+				id: "track-1",
+				type: "video",
+				elements: [
+					{
+						id: "clip-1",
+						type: "media",
+						mediaId: "media-1",
+						startTime: 0,
+						duration: 60,
+						trimStart: 0,
+						trimEnd: 0,
+						x: 0,
+						y: 0,
+						width: 1280,
+						height: 720,
+						rotation: 0,
+						volume: 1,
+					},
+				],
+			},
+		] as any;
+
 		it("recommends CLI engine in Electron", async () => {
 			mockPlatform.isElectron = true;
 			const factory = ExportEngineFactory.getInstance();
@@ -197,6 +241,73 @@ describe("ExportEngineFactory", () => {
 
 			expect(rec.engineType).toBe(ExportEngineType.CLI);
 			expect(rec.estimatedPerformance).toBe("high");
+		});
+
+		it("recommends cloud for an eligible long web timeline", async () => {
+			const factory = ExportEngineFactory.getInstance();
+			(factory as any).capabilities = {
+				hasWebCodecs: true,
+				hasOffscreenCanvas: true,
+				hasWorkers: true,
+				hasSharedArrayBuffer: false,
+				deviceMemoryGB: 8,
+				maxTextureSize: 4096,
+				supportedCodecs: [],
+				performanceScore: 80,
+			};
+
+			const rec = await factory.getEngineRecommendation(
+				{ width: 1280, height: 720, format: "mp4" } as any,
+				60,
+				"medium",
+				videoTracks,
+				[storedVideo] as any,
+				projectId
+			);
+
+			expect(rec.engineType).toBe(ExportEngineType.CLOUD);
+		});
+
+		it("keeps a cloud-ineligible long timeline on the client fallback", async () => {
+			const factory = ExportEngineFactory.getInstance();
+			(factory as any).capabilities = {
+				hasWebCodecs: true,
+				hasOffscreenCanvas: true,
+				hasWorkers: true,
+				hasSharedArrayBuffer: false,
+				deviceMemoryGB: 8,
+				maxTextureSize: 4096,
+				supportedCodecs: [],
+				performanceScore: 80,
+			};
+			vi.spyOn(factory as any, "probeWebCodecsEncoder").mockResolvedValue(true);
+			const markdownTracks = [
+				{
+					id: "track-1",
+					type: "markdown",
+					elements: [
+						{
+							id: "markdown-1",
+							type: "markdown",
+							startTime: 0,
+							duration: 60,
+							trimStart: 0,
+							trimEnd: 0,
+						},
+					],
+				},
+			] as any;
+
+			const rec = await factory.getEngineRecommendation(
+				{ width: 1280, height: 720, format: "mp4" } as any,
+				60,
+				"medium",
+				markdownTracks,
+				[],
+				projectId
+			);
+
+			expect(rec.engineType).toBe(ExportEngineType.MUXER);
 		});
 
 		it("recommends Remotion engine when timeline has Remotion elements", async () => {
@@ -489,7 +600,7 @@ describe("ExportEngineFactory", () => {
 			expect(engine.constructor.name).toBe("ExportEngineMuxer");
 		});
 
-		it("falls back to standard when CLI not in Electron", async () => {
+		it("redirects explicit CLI selection to cloud when not in Electron", async () => {
 			mockPlatform.isElectron = false;
 			const factory = ExportEngineFactory.getInstance();
 			const canvas = createMockCanvas();
@@ -502,7 +613,7 @@ describe("ExportEngineFactory", () => {
 				ExportEngineType.CLI
 			);
 
-			expect(engine).toBeDefined();
+			expect(engine.constructor.name).toBe("CloudExportEngine");
 		});
 
 		it("auto-selects engine type when none specified", async () => {

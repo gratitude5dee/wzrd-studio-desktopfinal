@@ -14,10 +14,6 @@ const FFMPEG_RESOURCE_FILENAMES = new Set([
 	"ffmpeg-core.wasm",
 ]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
 function resolveName(options: CacheRemoteMediaOptions): string {
 	if (options.name) return options.name;
 	try {
@@ -42,11 +38,6 @@ async function getAccessToken(): Promise<string | null> {
 	} catch {
 		return null;
 	}
-}
-
-function resolveProjectId(options: Record<string, unknown>): string | null {
-	const value = options.projectId ?? options.project_id;
-	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function cacheRemoteMediaViaProxy(
@@ -91,69 +82,6 @@ function safeFfmpegResourceUrl(filename: string): string {
 	return `/ffmpeg/${filename}`;
 }
 
-async function queueRenderOffload(options: Record<string, unknown>) {
-	const token = await getAccessToken();
-	if (!token) {
-		return {
-			success: false,
-			error: "Browser render offload requires an authenticated Supabase session.",
-		};
-	}
-
-	const projectId = resolveProjectId(options);
-	if (!projectId) {
-		return {
-			success: false,
-			error: "Browser render offload requires projectId in export options.",
-		};
-	}
-
-	try {
-		const response = await fetch("/api/render", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				projectId,
-				request: options,
-				idempotencyKey:
-					typeof options.sessionId === "string"
-						? `ffmpeg-cli:${options.sessionId}`
-						: undefined,
-			}),
-		});
-		const body = await response.json().catch(() => null);
-
-		if (!response.ok) {
-			return {
-				success: false,
-				error:
-					(isRecord(body) && typeof body.message === "string"
-						? body.message
-						: null) ?? "Unable to queue browser render offload job.",
-			};
-		}
-
-		const job = isRecord(body) && isRecord(body.job) ? body.job : null;
-		const jobId = typeof job?.id === "string" ? job.id : "unknown";
-		const status = typeof job?.status === "string" ? job.status : "queued";
-		return {
-			success: false,
-			error: `Browser render job ${jobId} is ${status}; async result polling is not wired into the CLI export path yet.`,
-		};
-	} catch (error) {
-		return {
-			success: false,
-			error:
-				error instanceof Error
-					? error.message
-					: "Unable to queue browser render offload job.",
-		};
-	}
-}
-
 async function checkSameOriginResource(url: string): Promise<boolean> {
 	try {
 		const response = await fetch(url, { method: "HEAD" });
@@ -189,8 +117,13 @@ export function createVercelAdapter(): PlatformAPI {
 			async getPath() {
 				return safeFfmpegResourceUrl("ffmpeg-core.js");
 			},
-			async exportVideoCLI(options: Record<string, unknown>) {
-				return queueRenderOffload(options);
+			async exportVideoCLI() {
+				return {
+					success: false,
+					code: "use_cloud_engine" as const,
+					error:
+						"Native CLI export is unavailable on web. Use CloudExportEngine instead.",
+				};
 			},
 			async checkHealth() {
 				const [coreOk, wasmOk] = await Promise.all([
