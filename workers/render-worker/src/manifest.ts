@@ -587,7 +587,7 @@ function findUnsupportedFeature(value: unknown, parentKey = ""): string | null {
 	return null;
 }
 
-function collectManifestAssets(manifest: RenderManifestV1): RenderAssetRef[] {
+export function collectManifestAssets(manifest: RenderManifestV1): RenderAssetRef[] {
 	if (manifest.kind === "clipper_vertical") {
 		return manifest.logo
 			? [manifest.source, manifest.logo.source]

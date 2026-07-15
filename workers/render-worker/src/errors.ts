@@ -1,6 +1,7 @@
 export type WorkerErrorCode =
 	| "invalid_job"
 	| "invalid_manifest"
+	| "unsupported_manifest_version"
 	| "asset_not_owned"
 	| "asset_not_found"
 	| "asset_too_large"
@@ -8,6 +9,7 @@ export type WorkerErrorCode =
 	| "asset_probe_failed"
 	| "unsupported_media"
 	| "render_failed"
+	| "render_timeout"
 	| "output_invalid"
 	| "output_upload_failed"
 	| "apify_failed"

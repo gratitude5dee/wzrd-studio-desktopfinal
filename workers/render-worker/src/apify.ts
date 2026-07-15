@@ -11,13 +11,17 @@ import { MAX_RENDER_ASSET_BYTES, type MediaIngestManifestV1 } from "./manifest.j
 import { abortableDelay } from "./process.js";
 
 const APIFY_TERMINAL = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
-const APIFY_ACTIVE = new Set(["READY", "RUNNING", "TIMING-OUT"]);
+const APIFY_ACTIVE = new Set(["READY", "RUNNING", "ABORTING", "TIMING-OUT"]);
 const MAX_APIFY_JSON_BYTES = 4 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 
 function apiHeaders(config: WorkerConfig): Record<string, string> {
 	if (!config.apifyToken) {
-		throw new WorkerError("apify_failed", "APIFY_TOKEN is required for media ingest jobs.", false);
+		throw new WorkerError(
+			"apify_failed",
+			"APIFY_API_TOKEN is required for media ingest jobs.",
+			false
+		);
 	}
 	return { Authorization: `Bearer ${config.apifyToken}`, Accept: "application/json" };
 }

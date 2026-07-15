@@ -3,8 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
 	compileClipperManifest,
 	compileQCutManifest,
+	createFfmpegWorkerError,
 	createAssetResolver,
+	isDeterministicFfmpegFailure,
+	validateOutputExpectation,
+	validateSourceRanges,
 } from "../src/ffmpeg.js";
+import { CommandExecutionError } from "../src/process.js";
 import type { LocalAsset } from "../src/types.js";
 import {
 	makeClipperManifest,
@@ -53,6 +58,8 @@ describe("validated FFmpeg manifest compiler", () => {
 					height: 1080,
 					hasVideo: true,
 					hasAudio: true,
+					videoCodec: "h264",
+					audioCodec: "aac",
 					formatName: "mp4",
 				},
 			},
@@ -67,6 +74,8 @@ describe("validated FFmpeg manifest compiler", () => {
 					height: 100,
 					hasVideo: true,
 					hasAudio: false,
+					videoCodec: "png",
+					audioCodec: null,
 					formatName: "image2",
 				},
 			},
@@ -81,5 +90,65 @@ describe("validated FFmpeg manifest compiler", () => {
 		expect(graph).toContain("crop=1080:1920");
 		expect(graph).toContain("overlay=");
 		expect(compiled.args).toContain("/tmp/logo.png");
+	});
+
+	it("rejects source trims that exceed the probed asset duration", () => {
+		const manifest = makeQCutManifest();
+		const assets = makeLocalAssets(manifest);
+		const video = assets.find((asset) => asset.path.endsWith("video.mp4"));
+		if (!video) throw new Error("fixture mismatch");
+		video.probe.durationSeconds = 4.9;
+
+		expect(() => validateSourceRanges(manifest, assets)).toThrow(
+			/exceeds the probed media duration/i
+		);
+	});
+
+	it("classifies deterministic FFmpeg failures as nonretryable", () => {
+		const deterministic = new CommandExecutionError(
+			"ffmpeg",
+			1,
+			"Invalid argument"
+		);
+		expect(isDeterministicFfmpegFailure(deterministic)).toBe(true);
+		expect(createFfmpegWorkerError("render failed", deterministic)).toMatchObject({
+			code: "render_failed",
+			retryable: false,
+		});
+		expect(
+			isDeterministicFfmpegFailure(
+				new CommandExecutionError(
+					"ffmpeg",
+					1,
+					"Resource temporarily unavailable"
+				)
+			)
+		).toBe(false);
+	});
+
+	it("requires exact manifest dimensions/duration/codecs and required streams", () => {
+		const probe = makeLocalAssets(makeQCutManifest())[0]!.probe;
+		const expected = {
+			width: 640,
+			height: 360,
+			durationSeconds: 10,
+			fps: 30,
+			requireAudio: true,
+			videoCodec: "h264" as const,
+			audioCodec: "aac" as const,
+		};
+		expect(() => validateOutputExpectation(probe, expected)).not.toThrow();
+		expect(() =>
+			validateOutputExpectation({ ...probe, width: 641 }, expected)
+		).toThrow(/does not match/i);
+		expect(() =>
+			validateOutputExpectation({ ...probe, durationSeconds: 11 }, expected)
+		).toThrow(/does not match/i);
+		expect(() =>
+			validateOutputExpectation(
+				{ ...probe, hasAudio: false, audioCodec: null },
+				expected
+			)
+		).toThrow(/required streams/i);
 	});
 });

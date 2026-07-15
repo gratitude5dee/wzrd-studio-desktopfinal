@@ -7,6 +7,7 @@ import {
 	waitForApifyRun,
 } from "./apify.js";
 import type { WorkerConfig } from "./config.js";
+import { getDiskFreeBytes, hasDiskAdmission } from "./disk.js";
 import {
 	JobCancelledError,
 	LeaseLostError,
@@ -18,15 +19,16 @@ import {
 	compileQCutManifest,
 	createAssetResolver,
 	inspectOutput,
+	type OutputExpectation,
 	normalizeIngestMedia,
 	probeMedia,
 	renderWithFfmpeg,
+	validateSourceRanges,
 } from "./ffmpeg.js";
 import type { WorkerHealthState } from "./health.js";
 import {
 	RENDER_MANIFEST_VERSION,
 	type RenderAssetRef,
-	type RenderManifestV1,
 	validateRenderManifest,
 } from "./manifest.js";
 import { abortableDelay } from "./process.js";
@@ -63,6 +65,33 @@ interface HeartbeatHandle {
 	stop(): Promise<void>;
 }
 
+interface RenderDeadline {
+	signal: AbortSignal;
+	stop(): void;
+}
+
+export function createRenderDeadline(
+	timeoutMs: number,
+	parentSignals: readonly AbortSignal[]
+): RenderDeadline {
+	const timeout = new AbortController();
+	const timer = setTimeout(() => {
+		timeout.abort(
+			new WorkerError(
+				"render_timeout",
+				`Render attempt exceeded ${timeoutMs} ms.`,
+				true
+			)
+		);
+	}, timeoutMs);
+	return {
+		signal: AbortSignal.any([...parentSignals, timeout.signal]),
+		stop() {
+			clearTimeout(timer);
+		},
+	};
+}
+
 export function outputStoragePath(job: RenderJobRecord): string {
 	return `${job.user_id}/${job.project_id}/${job.idempotency_hash}/attempts/${job.attempts}-${job.generation}.mp4`;
 }
@@ -74,6 +103,20 @@ export function validateClaimedJob(job: RenderJobRecord): ClaimedRenderJob {
 	} catch {
 		throw new WorkerError("invalid_manifest", "Render manifest is not serializable JSON.", false);
 	}
+	const requestVersion =
+		job.request && typeof job.request === "object" && "manifestVersion" in job.request
+			? (job.request as { manifestVersion?: unknown }).manifestVersion
+			: undefined;
+	if (
+		job.manifest_schema_version !== RENDER_MANIFEST_VERSION ||
+		(requestVersion !== undefined && requestVersion !== RENDER_MANIFEST_VERSION)
+	) {
+		throw new WorkerError(
+			"unsupported_manifest_version",
+			`Only render manifest version ${RENDER_MANIFEST_VERSION} is supported.`,
+			false
+		);
+	}
 	if (
 		!UUID_PATTERN.test(job.id) ||
 		!UUID_PATTERN.test(job.user_id) ||
@@ -83,8 +126,7 @@ export function validateClaimedJob(job: RenderJobRecord): ClaimedRenderJob {
 		job.attempts < 1 ||
 		job.attempts > 3 ||
 		job.max_attempts !== 3 ||
-		job.generation < 0 ||
-		job.manifest_schema_version !== RENDER_MANIFEST_VERSION
+		job.generation < 0
 	) {
 		throw new WorkerError("invalid_job", "Claimed render job violates the queue contract.", false);
 	}
@@ -100,7 +142,13 @@ export function validateClaimedJob(job: RenderJobRecord): ClaimedRenderJob {
 	}
 	const validation = validateRenderManifest(job.request, { allowMediaIngest: true });
 	if (!validation.ok) {
-		throw new WorkerError("invalid_manifest", validation.message, false);
+		throw new WorkerError(
+			validation.error === "unsupported_manifest_version"
+				? "unsupported_manifest_version"
+				: "invalid_manifest",
+			validation.message,
+			false
+		);
 	}
 	if (
 		validation.manifest.kind !== job.kind ||
@@ -123,26 +171,11 @@ export function validateClaimedJob(job: RenderJobRecord): ClaimedRenderJob {
 			false
 		);
 	}
-	return { ...job, manifest: validation.manifest };
-}
-
-function manifestAssets(manifest: RenderManifestV1): RenderAssetRef[] {
-	if (manifest.kind === "clipper_vertical") {
-		return manifest.logo ? [manifest.source, manifest.logo.source] : [manifest.source];
-	}
-	if (manifest.kind === "media_ingest") return [];
-	const assets: RenderAssetRef[] = [];
-	for (const track of manifest.tracks) {
-		if (
-			track.type === "video" ||
-			track.type === "audio" ||
-			track.type === "image" ||
-			track.type === "sticker"
-		) {
-			for (const clip of track.clips) assets.push(clip.source);
-		}
-	}
-	return assets;
+	return {
+		...job,
+		manifest: validation.manifest,
+		assets: validation.assets,
+	};
 }
 
 function setProgress(
@@ -225,7 +258,7 @@ async function prepareAssets(
 	progress: JobProgress
 ): Promise<LocalAsset[]> {
 	const unique = new Map<string, RenderAssetRef>();
-	for (const asset of manifestAssets(job.manifest)) {
+	for (const asset of job.assets) {
 		unique.set(`${asset.bucket}/${asset.path}`, asset);
 	}
 	const assets: LocalAsset[] = [];
@@ -276,7 +309,12 @@ async function renderManifest(
 			(fraction) => setProgress(progress, 55 + fraction * 20, "normalizing", null)
 		);
 		setProgress(progress, 75, "probing", null);
-		const metadata = await inspectOutput(config, normalizedPath, signal);
+		const metadata = await inspectOutput(config, normalizedPath, signal, {
+			durationSeconds: sourceProbe.durationSeconds,
+			requireAudio: sourceProbe.hasAudio,
+			videoCodec: "h264",
+			...(sourceProbe.hasAudio ? { audioCodec: "aac" as const } : {}),
+		});
 		const objectMetadata = {
 			renderJobId: job.id,
 			idempotencyHash: job.idempotency_hash,
@@ -297,6 +335,7 @@ async function renderManifest(
 	}
 
 	const assets = await prepareAssets(client, config, job, directory, signal, progress);
+	validateSourceRanges(job.manifest, assets);
 	const resolver = createAssetResolver(assets);
 	setProgress(progress, 30, "compiling", null);
 	const compiled =
@@ -313,7 +352,16 @@ async function renderManifest(
 		(fraction) => setProgress(progress, 35 + fraction * 50, "rendering", null)
 	);
 	setProgress(progress, 88, "probing", null);
-	const metadata = await inspectOutput(config, outputPath, signal);
+	const expectation: OutputExpectation = {
+		width: job.manifest.output.width,
+		height: job.manifest.output.height,
+		durationSeconds: job.manifest.output.durationSeconds,
+		fps: job.manifest.output.fps,
+		requireAudio: true,
+		videoCodec: "h264",
+		audioCodec: "aac",
+	};
+	const metadata = await inspectOutput(config, outputPath, signal, expectation);
 	return { filePath: outputPath, metadata };
 }
 
@@ -325,10 +373,15 @@ async function processJob(
 ): Promise<void> {
 	const progress: JobProgress = { value: 0, stage: "claimed", message: null };
 	let heartbeat: HeartbeatHandle | null = null;
+	let deadline: RenderDeadline | null = null;
 	let directory: string | null = null;
 	try {
 		heartbeat = await startHeartbeat(client, config, claimed, progress);
-		const signal = AbortSignal.any([heartbeat.signal, shutdownSignal]);
+		deadline = createRenderDeadline(config.renderTimeoutMs, [
+			heartbeat.signal,
+			shutdownSignal,
+		]);
+		const signal = deadline.signal;
 		setProgress(progress, 3, "validating", null);
 		const job = validateClaimedJob(claimed);
 		directory = await mkdtemp(
@@ -412,6 +465,7 @@ async function processJob(
 			})
 		);
 	} finally {
+		deadline?.stop();
 		if (directory) {
 			try {
 				await rm(directory, { recursive: true, force: true });
@@ -473,6 +527,17 @@ export class RenderWorker {
 
 			let jobs: RenderJobRecord[] = [];
 			try {
+				this.health.diskFreeBytes = await getDiskFreeBytes(this.config.workRoot);
+				if (
+					!hasDiskAdmission(
+						this.health.diskFreeBytes,
+						this.config.minFreeDiskBytes
+					)
+				) {
+					this.health.lastClaimError = "insufficient_disk";
+					await abortableDelay(this.config.pollMs, this.shutdownSignal);
+					continue;
+				}
 				// claim_web_render_jobs also sweeps exhausted/cancelled stale leases in
 				// the same transaction, including abandoned final attempts.
 				jobs = await claimJobs(this.client, this.config, available);

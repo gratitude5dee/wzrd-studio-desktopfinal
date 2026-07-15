@@ -127,12 +127,31 @@ describe("FFmpeg fixture smoke", () => {
 			signal,
 			() => undefined
 		);
-		const metadata = await inspectOutput(config, outputPath, signal);
+		const metadata = await inspectOutput(config, outputPath, signal, {
+			width: manifest.output.width,
+			height: manifest.output.height,
+			durationSeconds: manifest.output.durationSeconds,
+			fps: manifest.output.fps,
+			requireAudio: true,
+			videoCodec: "h264",
+			audioCodec: "aac",
+		});
 
 		expect(metadata).toMatchObject({ width: 640, height: 360 });
 		expect(metadata.durationSeconds).toBeGreaterThanOrEqual(3.9);
 		expect(metadata.bytes).toBeGreaterThan(1_000);
 		expect(metadata.sha256).toMatch(/^[0-9a-f]{64}$/);
+		await expect(
+			inspectOutput(config, outputPath, signal, {
+				width: 641,
+				height: 360,
+				durationSeconds: 4,
+				fps: 30,
+				requireAudio: true,
+				videoCodec: "h264",
+				audioCodec: "aac",
+			})
+		).rejects.toMatchObject({ code: "output_invalid", retryable: false });
 
 		const normalizedPath = join(directory, "normalized-ingest.mp4");
 		await normalizeIngestMedia(

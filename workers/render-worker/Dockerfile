@@ -11,7 +11,7 @@ FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    WORK_ROOT=/tmp/wzrd-render-worker
+    WORK_DIR=/tmp/wzrd-render-worker
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates dumb-init ffmpeg fonts-dejavu-core \

@@ -1,4 +1,7 @@
+import { mkdir } from "node:fs/promises";
+
 import { loadConfig } from "./config.js";
+import { getDiskFreeBytes } from "./disk.js";
 import {
 	closeHealthServer,
 	startHealthServer,
@@ -9,6 +12,7 @@ import { RenderWorker } from "./worker.js";
 
 async function main(): Promise<void> {
 	const config = loadConfig();
+	await mkdir(config.workRoot, { recursive: true, mode: 0o700 });
 	const shutdown = new AbortController();
 	const state: WorkerHealthState = {
 		workerId: config.workerId,
@@ -17,6 +21,8 @@ async function main(): Promise<void> {
 		startedAt: new Date().toISOString(),
 		lastClaimAt: null,
 		lastClaimError: null,
+		diskFreeBytes: await getDiskFreeBytes(config.workRoot),
+		minFreeDiskBytes: config.minFreeDiskBytes,
 		shuttingDown: false,
 	};
 	const healthServer = await startHealthServer(config.port, state);

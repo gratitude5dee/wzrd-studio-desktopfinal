@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { validateRenderManifest, verifyManifestAssets } from "../src/manifest.js";
+import {
+	collectManifestAssets,
+	validateRenderManifest,
+	verifyManifestAssets,
+} from "../src/manifest.js";
 import { outputStoragePath, validateClaimedJob } from "../src/worker.js";
 import {
 	IDEMPOTENCY_HASH,
@@ -13,8 +17,9 @@ import {
 describe("worker manifest revalidation", () => {
 	it("accepts the full supported parity fixture and fences job columns", () => {
 		const manifest = makeQCutManifest();
-		expect(validateRenderManifest(manifest)).toMatchObject({ ok: true });
-		expect(validateClaimedJob(makeJob())).toMatchObject({ manifest });
+		const assets = collectManifestAssets(manifest);
+		expect(validateRenderManifest(manifest)).toMatchObject({ ok: true, assets });
+		expect(validateClaimedJob(makeJob())).toMatchObject({ manifest, assets });
 	});
 
 	it("rejects unsafe commands, foreign assets, and mismatched job columns", async () => {
@@ -56,5 +61,18 @@ describe("worker manifest revalidation", () => {
 			content: "x".repeat(200),
 		}));
 		expect(() => validateClaimedJob(makeJob({ request: manifest }))).toThrow(/64 KB/i);
+	});
+
+	it("reports unsupported manifest versions with their specific worker code", () => {
+		expect(() =>
+			validateClaimedJob(
+				makeJob({
+					manifest_schema_version: 2,
+					request: { ...makeQCutManifest(), manifestVersion: 2 },
+				})
+			)
+		).toThrowError(
+			expect.objectContaining({ code: "unsupported_manifest_version" })
+		);
 	});
 });

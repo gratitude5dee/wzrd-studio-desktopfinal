@@ -51,6 +51,41 @@ describe("Apify ingest polling", () => {
 		);
 	});
 
+	it("treats ABORTING as active until a terminal state arrives", async () => {
+		vi.useFakeTimers();
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						data: { status: "ABORTING", defaultDatasetId: "dataset_123" },
+					}),
+					{ status: 200 }
+				)
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						data: { status: "ABORTED", defaultDatasetId: "dataset_123" },
+					}),
+					{ status: 200 }
+				)
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const waiting = waitForApifyRun(
+			makeConfig(),
+			manifest,
+			new AbortController().signal
+		);
+		const rejected = expect(waiting).rejects.toMatchObject({
+			code: "apify_failed",
+			retryable: false,
+		});
+		await vi.advanceTimersByTimeAsync(20);
+		await rejected;
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it("rejects terminal actor failure without polling forever", async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(JSON.stringify({ data: { status: "FAILED", defaultDatasetId: "dataset_123" } }), {

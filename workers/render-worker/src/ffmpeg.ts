@@ -7,8 +7,9 @@ import type {
 	ClipperVerticalManifestV1,
 	QCutTimelineManifestV1,
 	RenderAssetRef,
+	RenderManifestV1,
 } from "./manifest.js";
-import { runCommand } from "./process.js";
+import { CommandExecutionError, runCommand } from "./process.js";
 import { sha256File } from "./storage.js";
 import type { LocalAsset, MediaProbe, OutputMetadata } from "./types.js";
 
@@ -24,6 +25,16 @@ interface CompiledRender {
 
 interface AssetResolver {
 	resolve(source: RenderAssetRef): LocalAsset;
+}
+
+export interface OutputExpectation {
+	width?: number;
+	height?: number;
+	durationSeconds?: number;
+	fps?: number;
+	requireAudio: boolean;
+	videoCodec: "h264";
+	audioCodec?: "aac";
 }
 
 interface AssEvent {
@@ -100,6 +111,113 @@ export function createAssetResolver(assets: LocalAsset[]): AssetResolver {
 			return asset;
 		},
 	};
+}
+
+export function validateSourceRanges(
+	manifest: RenderManifestV1,
+	assets: LocalAsset[]
+): void {
+	if (manifest.kind === "media_ingest") return;
+	const resolver = createAssetResolver(assets);
+	const assertRange = (
+		source: RenderAssetRef,
+		startSeconds: number,
+		durationSeconds: number,
+		requiredStream: "audio" | "video"
+	) => {
+		const asset = resolver.resolve(source);
+		if (
+			(requiredStream === "video" && !asset.probe.hasVideo) ||
+			(requiredStream === "audio" && !asset.probe.hasAudio)
+		) {
+			throw new WorkerError(
+				"unsupported_media",
+				`${source.path} does not contain the required ${requiredStream} stream.`,
+				false
+			);
+		}
+		const sourceEnd = startSeconds + durationSeconds;
+		if (
+			asset.probe.durationSeconds <= 0 ||
+			sourceEnd > asset.probe.durationSeconds + 0.05
+		) {
+			throw new WorkerError(
+				"unsupported_media",
+				`Source trim for ${source.path} exceeds the probed media duration.`,
+				false
+			);
+		}
+	};
+
+	if (manifest.kind === "clipper_vertical") {
+		assertRange(
+			manifest.source,
+			manifest.trim.startSeconds,
+			manifest.trim.durationSeconds,
+			"video"
+		);
+		return;
+	}
+	for (const track of manifest.tracks) {
+		if (track.type !== "video" && track.type !== "audio") continue;
+		for (const clip of track.clips) {
+			assertRange(
+				clip.source,
+				clip.sourceStartSeconds,
+				clip.sourceDurationSeconds,
+				clip.type
+			);
+		}
+	}
+}
+
+const DETERMINISTIC_FFMPEG_ERROR =
+	/(invalid (?:argument|data)|no such (?:file|filter)|matches no streams|error (?:initializing|reinitializing) filters|failed to configure output pad|could not find codec parameters|dimensions not set|width not divisible|height not divisible|concat.*parameters|unsupported codec|conversion failed)/i;
+
+export function isDeterministicFfmpegFailure(error: unknown): boolean {
+	return (
+		error instanceof CommandExecutionError &&
+		DETERMINISTIC_FFMPEG_ERROR.test(error.stderr)
+	);
+}
+
+export function createFfmpegWorkerError(
+	message: string,
+	error: unknown
+): WorkerError {
+	return new WorkerError(
+		"render_failed",
+		message,
+		!isDeterministicFfmpegFailure(error),
+		{ cause: error }
+	);
+}
+
+export function validateOutputExpectation(
+	probe: MediaProbe,
+	expectation: OutputExpectation
+): void {
+	const durationTolerance = expectation.fps
+		? Math.max(0.05, 2 / expectation.fps)
+		: 0.1;
+	if (
+		(expectation.width !== undefined && probe.width !== expectation.width) ||
+		(expectation.height !== undefined && probe.height !== expectation.height) ||
+		(expectation.durationSeconds !== undefined &&
+			Math.abs(probe.durationSeconds - expectation.durationSeconds) >
+				durationTolerance) ||
+		probe.videoCodec !== expectation.videoCodec ||
+		(expectation.requireAudio && !probe.hasAudio) ||
+		(expectation.audioCodec !== undefined &&
+			expectation.requireAudio &&
+			probe.audioCodec !== expectation.audioCodec)
+	) {
+		throw new WorkerError(
+			"output_invalid",
+			"Rendered output does not match the manifest dimensions, duration, codecs, or required streams.",
+			false
+		);
+	}
 }
 
 class FilterGraph {
@@ -781,6 +899,8 @@ export async function probeMedia(
 		height: video ? Number(video.height) || null : null,
 		hasVideo: !!video,
 		hasAudio: !!audio,
+		videoCodec: video && typeof video.codec_name === "string" ? video.codec_name : null,
+		audioCodec: audio && typeof audio.codec_name === "string" ? audio.codec_name : null,
 		formatName: typeof format.format_name === "string" ? format.format_name : "unknown",
 	};
 }
@@ -812,9 +932,10 @@ export async function renderWithFfmpeg(
 		});
 	} catch (error) {
 		if (signal.aborted) throw signal.reason;
-		throw new WorkerError("render_failed", "FFmpeg failed to render the validated manifest.", true, {
-			cause: error,
-		});
+		throw createFfmpegWorkerError(
+			"FFmpeg failed to render the validated manifest.",
+			error
+		);
 	}
 }
 
@@ -874,11 +995,9 @@ export async function normalizeIngestMedia(
 		});
 	} catch (error) {
 		if (signal.aborted) throw signal.reason;
-		throw new WorkerError(
-			"render_failed",
+		throw createFfmpegWorkerError(
 			"FFmpeg failed to normalize completed Apify media.",
-			true,
-			{ cause: error }
+			error
 		);
 	}
 }
@@ -886,7 +1005,8 @@ export async function normalizeIngestMedia(
 export async function inspectOutput(
 	config: WorkerConfig,
 	filePath: string,
-	signal: AbortSignal
+	signal: AbortSignal,
+	expectation?: OutputExpectation
 ): Promise<OutputMetadata> {
 	const [file, probe, sha256] = await Promise.all([
 		stat(filePath),
@@ -905,6 +1025,9 @@ export async function inspectOutput(
 		probe.height > 2_160
 	) {
 		throw new WorkerError("output_invalid", "Rendered output metadata is outside contract bounds.", false);
+	}
+	if (expectation) {
+		validateOutputExpectation(probe, expectation);
 	}
 	return {
 		bytes: file.size,

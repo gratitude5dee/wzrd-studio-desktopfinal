@@ -7,6 +7,17 @@ export interface CommandResult {
 	stderr: string;
 }
 
+export class CommandExecutionError extends Error {
+	constructor(
+		readonly command: string,
+		readonly exitCode: number | string,
+		readonly stderr: string
+	) {
+		super(`${command} exited with ${exitCode}: ${stderr.slice(-4_000)}`);
+		this.name = "CommandExecutionError";
+	}
+}
+
 interface RunCommandOptions {
 	command: string;
 	args: readonly string[];
@@ -88,8 +99,10 @@ export async function runCommand({
 				}
 				if (code !== 0) {
 					reject(
-						new Error(
-							`${command} exited with ${code ?? processSignal ?? "unknown"}: ${stderr.slice(-4_000)}`
+						new CommandExecutionError(
+							command,
+							code ?? processSignal ?? "unknown",
+							stderr
 						)
 					);
 					return;

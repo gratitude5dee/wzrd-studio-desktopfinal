@@ -1,4 +1,4 @@
-import type { RenderManifestV1 } from "./manifest.js";
+import type { RenderAssetRef, RenderManifestV1 } from "./manifest.js";
 
 export interface RenderJobRecord {
 	id: string;
@@ -18,6 +18,7 @@ export interface RenderJobRecord {
 
 export interface ClaimedRenderJob extends RenderJobRecord {
 	manifest: RenderManifestV1;
+	assets: RenderAssetRef[];
 }
 
 export interface JobProgress {
@@ -40,6 +41,8 @@ export interface MediaProbe {
 	height: number | null;
 	hasVideo: boolean;
 	hasAudio: boolean;
+	videoCodec: string | null;
+	audioCodec: string | null;
 	formatName: string;
 }
 
