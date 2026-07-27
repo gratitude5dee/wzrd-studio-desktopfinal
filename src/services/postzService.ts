@@ -7,6 +7,7 @@ import {
   type PostzPostGroupCreateInput,
   type PostzOAuthProviderSummary,
   type PostzOAuthTarget,
+  type PostzComposioProviderSummary,
 } from "@/types/postz";
 
 type InvokeBody =
@@ -64,7 +65,7 @@ async function invokePostzChannels<T>(body: { action: "list" | "seed" }): Promis
 
 type OAuthInvokeBody =
   | { action: "list-providers" }
-  | { action: "start"; provider: string; redirect?: string | null }
+  | { action: "start"; provider: string; redirect?: string | null; app_return_url?: string | null }
   | { action: "list-targets"; provider: string; state_id: string }
   | { action: "finalize"; provider: string; state_id: string; target_id: string };
 
@@ -88,10 +89,39 @@ async function invokePostzOauth<T>(body: OAuthInvokeBody): Promise<T> {
   return data as T;
 }
 
+type ComposioInvokeBody =
+  | { action: "list-providers" }
+  | { action: "list-connected-accounts" }
+  | { action: "connection-status" }
+  | { action: "initiate-connection"; provider: string; app_return_url?: string | null }
+  | { action: "revoke"; channel_id?: string | null; connected_account_id?: string | null }
+  | { action: "execute"; provider: string; tool_slug: string; arguments?: Record<string, unknown> };
+
+async function invokePostzComposio<T>(body: ComposioInvokeBody): Promise<T> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+
+  const { data, error } = await supabase.functions.invoke("postz-composio", {
+    body,
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Postz returned an empty response.");
+  }
+
+  return data as T;
+}
+
 export const postzQueryKeys = {
   oauthTargets: (provider: string, stateId: string) => ["postz", "oauth", "targets", provider, stateId] as const,
   channels: ["postz", "channels"] as const,
   oauthProviders: ["postz", "oauth", "providers"] as const,
+  integrations: ["postz", "integrations"] as const,
   postsWindow: (from: string, to: string, state: string | null) => ["postz", "posts", "window", from, to, state] as const,
   postGroup: (groupId: string) => ["postz", "posts", "group", groupId] as const,
 } as const;
@@ -115,11 +145,12 @@ export const postzService = {
     return res.providers;
   },
 
-  async startOauth(input: { provider: string; redirect?: string | null }): Promise<{ url: string }> {
+  async startOauth(input: { provider: string; redirect?: string | null; app_return_url?: string | null }): Promise<{ url: string }> {
     return invokePostzOauth<{ url: string }>({
       action: "start",
       provider: input.provider,
       redirect: input.redirect ?? null,
+      app_return_url: input.app_return_url ?? null,
     });
   },
 
@@ -138,6 +169,27 @@ export const postzService = {
       provider: input.provider,
       state_id: input.state_id,
       target_id: input.target_id,
+    });
+  },
+
+  async listIntegrationProviders(): Promise<PostzComposioProviderSummary[]> {
+    const res = await invokePostzComposio<{ providers: PostzComposioProviderSummary[] }>({ action: "list-providers" });
+    return res.providers;
+  },
+
+  async startComposioConnection(input: { provider: string; app_return_url?: string | null }): Promise<{ url: string }> {
+    return invokePostzComposio<{ url: string }>({
+      action: "initiate-connection",
+      provider: input.provider,
+      app_return_url: input.app_return_url ?? null,
+    });
+  },
+
+  async revokeComposioConnection(input: { channel_id?: string | null; connected_account_id?: string | null }): Promise<{ success: boolean }> {
+    return invokePostzComposio<{ success: boolean }>({
+      action: "revoke",
+      channel_id: input.channel_id ?? null,
+      connected_account_id: input.connected_account_id ?? null,
     });
   },
 
@@ -191,5 +243,9 @@ export const postzService = {
 
   async findSlot(input: { channel_id?: string | null }): Promise<{ publish_date: string }> {
     return invokePostzPosts<{ publish_date: string }>({ action: "find-slot", channel_id: input.channel_id ?? null });
+  },
+
+  async postNow(input: { group_id: string }): Promise<{ success: boolean; results?: unknown[] }> {
+    return invokePostzPosts<{ success: boolean; results?: unknown[] }>({ action: "post-now", group_id: input.group_id });
   },
 };

@@ -18,6 +18,25 @@ export type PostzOAuthProviderSummary = {
   identifier: PostzProvider;
   name: string;
   configured: boolean;
+  implemented: boolean;
+  connectable?: boolean;
+  toolkit?: string;
+  logo?: string;
+  connected?: boolean;
+  status?: "connected" | "needs_reauth" | "disabled" | "error" | "disconnected";
+  connected_account_id?: string | null;
+  channel_id?: string | null;
+  source?: "native" | "composio";
+};
+
+export type PostzComposioProviderSummary = PostzOAuthProviderSummary & {
+  toolkit: string;
+  logo: string;
+  connected: boolean;
+  status: "connected" | "needs_reauth" | "disabled" | "error" | "disconnected";
+  connected_account_id: string | null;
+  channel_id: string | null;
+  source: "composio";
 };
 
 export type PostzOAuthTarget = {

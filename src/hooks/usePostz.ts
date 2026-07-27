@@ -9,17 +9,19 @@ export const POSTZ_QUERY_KEYS = {
   channels: () => postzQueryKeys.channels,
   postWindows: () => ["postz", "posts", "window"] as const,
   oauthProviders: () => postzQueryKeys.oauthProviders,
+  integrations: () => postzQueryKeys.integrations,
   oauthTargets: (provider: string, stateId: string) => postzQueryKeys.oauthTargets(provider, stateId),
   window: (from: string, to: string, state: string | null) => postzQueryKeys.postsWindow(from, to, state),
   groups: () => ["postz", "posts", "group"] as const,
   group: (groupId: string) => postzQueryKeys.postGroup(groupId),
 };
 
-export function usePostzChannels() {
+export function usePostzChannels(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: POSTZ_QUERY_KEYS.channels(),
     queryFn: () => postzService.listChannels(),
     staleTime: 10_000,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -47,11 +49,54 @@ export function usePostzOauthProviders(options?: { enabled?: boolean }) {
   });
 }
 
+export function usePostzIntegrationProviders(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: postzQueryKeys.integrations,
+    queryFn: () => postzService.listIntegrationProviders(),
+    staleTime: 10_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
 export function useStartPostzOauth() {
   return useMutation({
-    mutationFn: (provider: string) => postzService.startOauth({ provider }),
+    mutationFn: (input: string | { provider: string; app_return_url?: string | null }) => {
+      const payload = typeof input === "string" ? { provider: input } : input;
+      return postzService.startOauth(payload);
+    },
     onError: (error: Error) => {
       toast.error("Unable to start OAuth", { description: error.message });
+    },
+  });
+}
+
+export function useStartPostzIntegration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { provider: string; app_return_url?: string | null }) => postzService.startComposioConnection(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: postzQueryKeys.integrations });
+      queryClient.invalidateQueries({ queryKey: POSTZ_QUERY_KEYS.channels() });
+    },
+    onError: (error: Error) => {
+      toast.error("Unable to start connection", { description: error.message });
+    },
+  });
+}
+
+export function useRevokePostzIntegration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { channel_id?: string | null; connected_account_id?: string | null }) => postzService.revokeComposioConnection(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: postzQueryKeys.integrations });
+      queryClient.invalidateQueries({ queryKey: POSTZ_QUERY_KEYS.channels() });
+      toast.success("Connection revoked");
+    },
+    onError: (error: Error) => {
+      toast.error("Unable to revoke connection", { description: error.message });
     },
   });
 }
@@ -176,6 +221,22 @@ export function useFindPostzSlot() {
     mutationFn: (channelId: string | null) => postzService.findSlot({ channel_id: channelId }),
     onError: (error: Error) => {
       toast.error("Unable to find recommended slot", { description: error.message });
+    },
+  });
+}
+
+export function usePostNowPostzGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (groupId: string) => postzService.postNow({ group_id: groupId }),
+    onSuccess: () => {
+      toast.success("Publishing started");
+      queryClient.invalidateQueries({ queryKey: POSTZ_QUERY_KEYS.postWindows() });
+      queryClient.invalidateQueries({ queryKey: POSTZ_QUERY_KEYS.groups() });
+    },
+    onError: (error: Error) => {
+      toast.error("Unable to publish now", { description: error.message });
     },
   });
 }
