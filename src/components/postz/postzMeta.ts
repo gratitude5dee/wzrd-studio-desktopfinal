@@ -3,7 +3,10 @@ import type { PostzChannelStatus, PostzPostState, PostzProvider } from "@/types/
 export const POSTZ_PROVIDER_META: Record<string, { label: string; colorClass: string }> = {
   tiktok: { label: "TikTok", colorClass: "bg-pink-500/15 text-pink-200 border-pink-500/20" },
   instagram: { label: "Instagram", colorClass: "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/20" },
+  "instagram-standalone": { label: "Instagram", colorClass: "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/20" },
   youtube: { label: "YouTube", colorClass: "bg-red-500/15 text-red-200 border-red-500/20" },
+  facebook: { label: "Facebook", colorClass: "bg-blue-500/15 text-blue-200 border-blue-500/20" },
+  metaads: { label: "Meta Ads", colorClass: "bg-indigo-500/15 text-indigo-200 border-indigo-500/20" },
   x: { label: "X", colorClass: "bg-zinc-500/15 text-zinc-200 border-zinc-500/20" },
   threads: { label: "Threads", colorClass: "bg-zinc-500/15 text-zinc-200 border-zinc-500/20" },
   linkedin: { label: "LinkedIn", colorClass: "bg-sky-500/15 text-sky-200 border-sky-500/20" },

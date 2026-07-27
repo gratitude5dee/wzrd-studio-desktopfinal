@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 
 import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
 import { KanvasLyricsFooter } from '@/components/kanvas-lyrics/KanvasLyricsFooter';
+import AppShell from '@/components/layout/AppShell';
 import { AudioPanel } from '@/components/kanvas-lyrics/AudioPanel';
 import { LyricsPanel } from '@/components/kanvas-lyrics/LyricsPanel';
 import { MarkersPanel } from '@/components/kanvas-lyrics/MarkersPanel';
@@ -608,99 +609,114 @@ const KanvasLyrics = () => {
 
   if (!showWizard) {
     return (
-      <div className="min-h-screen bg-[#050506] text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-[#050506] text-white"
+        contentAs="div"
+        contentClassName="min-h-screen"
+      >
         <KanvasLyricsHeader />
         <TemplatesLanding
           onCreate={() => navigate('/kanvas/lyrics/new')}
           onOpen={(t) => navigate(`/kanvas/lyrics/templates/${t.id}`)}
         />
-      </div>
+      </AppShell>
     );
   }
 
   if (hydrating) {
     return (
-      <div className="min-h-screen bg-[#050506] text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-[#050506] text-white"
+        contentAs="div"
+        contentClassName="min-h-screen"
+      >
         <KanvasLyricsHeader />
         <div className="flex items-center justify-center py-32">
           <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050506] pb-28 text-white">
+    <AppShell
+      activeView="kanvas"
+      className="bg-[#050506] pb-28 text-white"
+      contentAs="div"
+      contentClassName="min-h-screen pb-28"
+    >
       <KanvasLyricsHeader />
 
-      <div className="px-6 pb-8 pt-10 text-center">
-        <button
-          type="button"
-          onClick={() => navigate('/kanvas/lyrics')}
-          className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300 transition-colors hover:bg-white/10"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Back to templates
-        </button>
-        <h1 className="bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-7xl">
-          CREATE TEMPLATE
-        </h1>
-      </div>
+        <div className="px-6 pb-8 pt-10 text-center">
+          <button
+            type="button"
+            onClick={() => navigate('/kanvas/lyrics')}
+            className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back to templates
+          </button>
+          <h1 className="bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-7xl">
+            CREATE TEMPLATE
+          </h1>
+        </div>
 
-      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-5 px-6 pb-24 lg:grid-cols-3">
-        <AudioPanel
-          currentStep={currentStep}
-          audio={audio}
-          isPlaying={engine.isPlaying && currentStep === 1}
-          audioReady={engine.isReady}
-          playheadTime={currentStep === 1 ? playheadTime : 0}
-          onAudioSelected={handleAudioSelected}
-          onDurationChange={handleDurationChange}
-          onZoomChange={handleZoomChange}
-          onSelectionStartChange={handleSelectionStartChange}
-          onSeekClipRelative={handleSeek}
-          onTogglePreview={togglePreview}
-          onConfirm={handleAudioConfirm}
-          onReset={handleAudioReset}
-        />
-        <LyricsPanel
-          currentStep={currentStep}
-          blocks={lyrics}
-          activeWordId={activeWordId}
-          isPlaying={engine.isPlaying && currentStep === 2}
-          playheadTime={playheadTime}
-          duration={audio.selectionDuration}
-          transcribeStatus={transcribeStatus}
-          onTogglePlay={togglePlay}
-          onWordChange={handleWordChange}
-          onDone={handleLyricsDone}
-          onRetryTranscribe={runTranscribe}
-          onManualEntry={handleManualEntry}
-        />
-        <MarkersPanel
-          currentStep={currentStep}
-          markers={markers}
-          peaks={audio.peaks}
-          playheadTime={playheadTime}
-          duration={audio.selectionDuration}
-          isPlaying={engine.isPlaying && currentStep === 3}
-          zoom={audio.zoom}
-          blocks={lyrics}
-          onZoomChange={handleZoomChange}
-          onTogglePlay={togglePlay}
-          onAddMarker={handleAddMarker}
-          onUndoMarkers={handleUndoMarkers}
-          onRedoMarkers={handleRedoMarkers}
-          onClearMarkers={handleClearMarkers}
-          onDeleteNearestMarker={handleDeleteNearestMarker}
-          onSeek={handleSeek}
-          onMarkerDrag={handleMarkerDrag}
-          onMarkerDelete={handleMarkerDelete}
-          onRestart={handleRestart}
-          canUndo={markerHistory.length > 0}
-          canRedo={markerFuture.length > 0}
-        />
-      </main>
+        <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-5 px-6 pb-24 lg:grid-cols-3">
+          <AudioPanel
+            currentStep={currentStep}
+            audio={audio}
+            isPlaying={engine.isPlaying && currentStep === 1}
+            audioReady={engine.isReady}
+            playheadTime={currentStep === 1 ? playheadTime : 0}
+            onAudioSelected={handleAudioSelected}
+            onDurationChange={handleDurationChange}
+            onZoomChange={handleZoomChange}
+            onSelectionStartChange={handleSelectionStartChange}
+            onSeekClipRelative={handleSeek}
+            onTogglePreview={togglePreview}
+            onConfirm={handleAudioConfirm}
+            onReset={handleAudioReset}
+          />
+          <LyricsPanel
+            currentStep={currentStep}
+            blocks={lyrics}
+            activeWordId={activeWordId}
+            isPlaying={engine.isPlaying && currentStep === 2}
+            playheadTime={playheadTime}
+            duration={audio.selectionDuration}
+            transcribeStatus={transcribeStatus}
+            onTogglePlay={togglePlay}
+            onWordChange={handleWordChange}
+            onDone={handleLyricsDone}
+            onRetryTranscribe={runTranscribe}
+            onManualEntry={handleManualEntry}
+          />
+          <MarkersPanel
+            currentStep={currentStep}
+            markers={markers}
+            peaks={audio.peaks}
+            playheadTime={playheadTime}
+            duration={audio.selectionDuration}
+            isPlaying={engine.isPlaying && currentStep === 3}
+            zoom={audio.zoom}
+            blocks={lyrics}
+            onZoomChange={handleZoomChange}
+            onTogglePlay={togglePlay}
+            onAddMarker={handleAddMarker}
+            onUndoMarkers={handleUndoMarkers}
+            onRedoMarkers={handleRedoMarkers}
+            onClearMarkers={handleClearMarkers}
+            onDeleteNearestMarker={handleDeleteNearestMarker}
+            onSeek={handleSeek}
+            onMarkerDrag={handleMarkerDrag}
+            onMarkerDelete={handleMarkerDelete}
+            onRestart={handleRestart}
+            canUndo={markerHistory.length > 0}
+            canRedo={markerFuture.length > 0}
+          />
+        </main>
 
       <button
         type="button"
@@ -730,7 +746,7 @@ const KanvasLyrics = () => {
       )}
 
       <span className="sr-only">{appState}</span>
-    </div>
+    </AppShell>
   );
 };
 

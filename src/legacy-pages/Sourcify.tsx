@@ -1,6 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -16,8 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { MobileBottomNav } from "@/components/home/MobileBottomNav";
-import { Sidebar } from "@/components/home/Sidebar";
+import AppShell from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,9 +23,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { appRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   downloadSourcifyResults,
@@ -379,9 +373,6 @@ function ResultCard({
 }
 
 export default function Sourcify() {
-  const navigate = useNavigate();
-  const isMobile = useIsMobile();
-  const { isCollapsed } = useSidebar();
   const [topic, setTopic] = useState("cinematic creator clips");
   const [settings, setSettings] = useState<SourcifySettings>(DEFAULT_SOURCIFY_SETTINGS);
   const [plan, setPlan] = useState<SourcifyPlan | null>(null);
@@ -446,14 +437,6 @@ export default function Sourcify() {
     () => filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id)),
     [filteredIds, selectedIds],
   );
-
-  const handleHomeViewChange = useCallback((view: string) => {
-    navigate(appRoutes.home, { state: { activeView: view } });
-  }, [navigate]);
-
-  const handleCreateProject = useCallback(() => {
-    navigate(appRoutes.projectSetup);
-  }, [navigate]);
 
   const updateSetting = (key: keyof SourcifySettings, value: number | boolean) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -731,73 +714,63 @@ export default function Sourcify() {
   };
 
   return (
-    <div className="min-h-screen bg-[#08090d] text-zinc-100">
-      <div className="hidden md:block">
-        <Sidebar activeView="sourcify" onViewChange={handleHomeViewChange} />
-      </div>
-
-      <motion.main
-        className="min-h-screen pb-24 md:pb-8"
-        animate={{ marginLeft: isMobile ? 0 : isCollapsed ? 0 : 256 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        initial={false}
-      >
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6">
-          <header className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <DatabaseZap className="h-5 w-5 text-orange-300" />
-                <Badge variant="secondary" className="border-orange-300/20 bg-orange-400/10 text-orange-100">
-                  Apify
-                </Badge>
-                <Badge variant="secondary" className="border-sky-300/20 bg-sky-400/10 text-sky-100">
-                  Codex planner
-                </Badge>
-              </div>
-              <h1 className="text-2xl font-semibold tracking-normal text-white md:text-3xl">Sourcify</h1>
+    <AppShell activeView="sourcify">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6">
+        <header className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <DatabaseZap className="h-5 w-5 text-orange-300" />
+              <Badge variant="secondary" className="border-orange-300/20 bg-orange-400/10 text-orange-100">
+                Apify
+              </Badge>
+              <Badge variant="secondary" className="border-sky-300/20 bg-sky-400/10 text-sky-100">
+                Codex planner
+              </Badge>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                disabled={selectedResults.length === 0 || busy !== "idle"}
-                onClick={() => handleSave("upload")}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add to library
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                disabled={selectedResults.length === 0 || needsDownloadSelection.length === 0 || busy !== "idle"}
-                onClick={() => void handleFetchMp4()}
-              >
-                {busy === "downloading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                Fetch MP4s
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                disabled={downloadableSelection.length === 0 || busy !== "idle"}
-                onClick={() => downloadSourcifyResults(downloadableSelection)}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download MP4s
-              </Button>
-              <Button
-                type="button"
-                className="bg-orange-500 text-white hover:bg-orange-400"
-                disabled={selectedResults.length === 0 || busy !== "idle"}
-                onClick={() => handleSave("finalized")}
-              >
-                {busy === "saving" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                Finalize
-              </Button>
-            </div>
-          </header>
+            <h1 className="text-2xl font-semibold tracking-normal text-white md:text-3xl">Sourcify</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+              disabled={selectedResults.length === 0 || busy !== "idle"}
+              onClick={() => handleSave("upload")}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add to library
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+              disabled={selectedResults.length === 0 || needsDownloadSelection.length === 0 || busy !== "idle"}
+              onClick={() => void handleFetchMp4()}
+            >
+              {busy === "downloading" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Fetch MP4s
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+              disabled={downloadableSelection.length === 0 || busy !== "idle"}
+              onClick={() => downloadSourcifyResults(downloadableSelection)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download MP4s
+            </Button>
+            <Button
+              type="button"
+              className="bg-orange-500 text-white hover:bg-orange-400"
+              disabled={selectedResults.length === 0 || busy !== "idle"}
+              onClick={() => handleSave("finalized")}
+            >
+              {busy === "saving" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Finalize
+            </Button>
+          </div>
+        </header>
 
           <section className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
             <div className="space-y-4">
@@ -1026,14 +999,7 @@ export default function Sourcify() {
               })
             )}
           </section>
-        </div>
-      </motion.main>
-
-      <MobileBottomNav
-        activeView="sourcify"
-        onViewChange={handleHomeViewChange}
-        onCreateProject={handleCreateProject}
-      />
-    </div>
+      </div>
+    </AppShell>
   );
 }

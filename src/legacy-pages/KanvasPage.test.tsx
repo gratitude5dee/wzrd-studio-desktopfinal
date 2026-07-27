@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import KanvasPage from "@/legacy-pages/KanvasPage";
@@ -312,6 +312,14 @@ vi.mock("@/components/kanvas/LipsyncStudioSection", () => ({
   ),
 }));
 
+vi.mock("@/components/worldview", () => ({
+  WorldviewSection: () => <section>Worldview Studio Mock</section>,
+}));
+
+vi.mock("@/components/character-creation", () => ({
+  CharacterCreationSection: () => <section>Character Creation Mock</section>,
+}));
+
 vi.mock("@/hooks/useUserTier", () => ({
   useUserTier: vi.fn(() => ({
     tier: "free",
@@ -328,11 +336,24 @@ vi.mock("@/hooks/useUserTier", () => ({
 
 const mockedUseUserTier = vi.mocked(useUserTier);
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location-value">{`${location.pathname}${location.search}`}</span>;
+}
+
 function renderPage(initialEntry = "/kanvas") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/kanvas" element={<KanvasPage />} />
+        <Route
+          path="/kanvas"
+          element={
+            <>
+              <KanvasPage />
+              <LocationProbe />
+            </>
+          }
+        />
         <Route path="/home" element={<div>Home Destination</div>} />
       </Routes>
     </MemoryRouter>
@@ -353,7 +374,8 @@ describe("KanvasPage", () => {
   it("renders the multi-studio shell and defaults to image", async () => {
     renderPage("/kanvas");
 
-    expect(screen.getAllByRole("button", { name: "Home" })[0]).toBeInTheDocument();
+    expect(screen.getByTestId("app-sidebar")).toHaveAttribute("data-state", "expanded");
+    expect(screen.getByRole("button", { name: /^kanvas$/i })).toHaveAttribute("aria-current", "page");
     expect(
       await screen.findByText(/TURN IDEAS/i)
     ).toBeInTheDocument();
@@ -422,5 +444,47 @@ describe("KanvasPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("VEED Fabric 1.0")[0]).toBeInTheDocument();
     });
+  });
+
+  it("preserves unrelated query params when switching studios", async () => {
+    renderPage("/kanvas?prompt=neon-hook&studio=image");
+
+    await screen.findByText(/TURN IDEAS/i);
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole("button", { name: /^video$/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-value")).toHaveTextContent("studio=video");
+      expect(screen.getByTestId("location-value")).toHaveTextContent("prompt=neon-hook");
+    });
+  });
+
+  it("keeps app navigation in the sidebar and studio navigation in the Kanvas controls", async () => {
+    renderPage("/kanvas?studio=worldview");
+
+    expect(await screen.findByText("Worldview Studio Mock")).toBeInTheDocument();
+
+    const rail = within(screen.getByTestId("app-sidebar"));
+    for (const label of [
+      "WZRDOS",
+      "Studio",
+      "All Projects",
+      "Asset Store",
+      "Aura",
+      "Kanvas",
+      "IP Vault",
+      "Clipper",
+      "Sourcify",
+      "Postz",
+      "Settings",
+      "Integrations",
+    ]) {
+      expect(rail.getByRole("button", { name: new RegExp(`^${label}$`, "i") })).toBeInTheDocument();
+    }
+
+    for (const label of ["Image", "Video", "Edit", "Lip Sync", "Cinema Studio", "Worldview", "Characters", "Lyrics"]) {
+      expect(rail.getByRole("button", { name: new RegExp(`^${label}$`, "i") })).toBeInTheDocument();
+    }
   });
 });

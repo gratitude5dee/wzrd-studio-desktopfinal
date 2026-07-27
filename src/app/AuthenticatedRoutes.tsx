@@ -40,7 +40,9 @@ const lazyWithRetry = <T extends { default: React.ComponentType<Record<string, n
   });
 
 const Home = lazyWithRetry(() => import('@/legacy-pages/Home'));
-const SettingsBillingPage = lazyWithRetry(() => import('@/legacy-pages/SettingsBillingPage'));
+const WzrdOS = lazyWithRetry(() => import('@/legacy-pages/WzrdOS'));
+const CreativeIntelligence = lazyWithRetry(() => import('@/legacy-pages/CreativeIntelligence'));
+const SystemPage = lazyWithRetry(() => import('@/legacy-pages/SystemPage'));
 const SettingsBillingDocsPage = lazyWithRetry(() => import('@/legacy-pages/SettingsBillingDocsPage'));
 const ProjectSetup = lazyWithRetry(() => import('@/legacy-pages/ProjectSetup'));
 const StudioPage = lazyWithRetry(() => import('@/legacy-pages/StudioPage'));
@@ -126,7 +128,31 @@ const AuthenticatedRoutes = () => {
                     element={<ProtectedRoute><Home /></ProtectedRoute>}
                   />
                   <Route
+                    path={appRoutes.wzrdos}
+                    element={<ProtectedRoute><WzrdOS /></ProtectedRoute>}
+                  />
+                  <Route
+                    path={appRoutes.creativeIntelligence}
+                    element={<ProtectedRoute><CreativeIntelligence /></ProtectedRoute>}
+                  />
+                  <Route
+                    path={appRoutes.system}
+                    element={<ProtectedRoute><SystemPage /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/system/:section"
+                    element={<ProtectedRoute><SystemPage /></ProtectedRoute>}
+                  />
+                  <Route
+                    path={appRoutes.systemBillingDocs}
+                    element={<ProtectedRoute><SettingsBillingDocsPage /></ProtectedRoute>}
+                  />
+                  <Route
                     path={appRoutes.projectSetup}
+                    element={<ProtectedRoute><ProjectSetup /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/project-setup/:projectId"
                     element={<ProtectedRoute><ProjectSetup /></ProtectedRoute>}
                   />
                   <Route
@@ -178,15 +204,15 @@ const AuthenticatedRoutes = () => {
                   <Route path={appRoutes.legacy.editorRoot} element={<Navigate to={appRoutes.home} replace />} />
                   <Route
                     path="/credits"
-                    element={<ProtectedRoute><Navigate to={appRoutes.settings.billing} replace /></ProtectedRoute>}
+                    element={<ProtectedRoute><Navigate to={appRoutes.systemBilling} replace /></ProtectedRoute>}
                   />
                   <Route
                     path={appRoutes.settings.billing}
-                    element={<ProtectedRoute><SettingsBillingPage /></ProtectedRoute>}
+                    element={<ProtectedRoute><Navigate to={appRoutes.systemBilling} replace /></ProtectedRoute>}
                   />
                   <Route
                     path={appRoutes.settings.billingDocs}
-                    element={<ProtectedRoute><SettingsBillingDocsPage /></ProtectedRoute>}
+                    element={<ProtectedRoute><Navigate to={appRoutes.systemBillingDocs} replace /></ProtectedRoute>}
                   />
                   <Route
                     path={appRoutes.storyboardGenerator}
@@ -281,6 +307,16 @@ const AuthenticatedRoutes = () => {
                     element={
                       <ProtectedRoute>
                         <StudioErrorBoundary fallbackTitle="Postz error" fallbackDescription="The social schedule calendar hit an unexpected issue">
+                          <Postz />
+                        </StudioErrorBoundary>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path={appRoutes.postzConnected}
+                    element={
+                      <ProtectedRoute>
+                        <StudioErrorBoundary fallbackTitle="Postz connection error" fallbackDescription="The social account callback hit an unexpected issue">
                           <Postz />
                         </StudioErrorBoundary>
                       </ProtectedRoute>

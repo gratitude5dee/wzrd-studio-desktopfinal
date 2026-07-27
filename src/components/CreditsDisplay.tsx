@@ -26,7 +26,7 @@ const CreditsDisplay = ({ showTooltip = true, showButton = false }: CreditsDispl
   }
 
   const handleGetMoreCredits = () => {
-    navigate(appRoutes.settings.billing);
+    navigate(appRoutes.systemBilling);
   };
 
   const content = (

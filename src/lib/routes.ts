@@ -6,6 +6,8 @@ export interface RouteManifestEntry {
   category: RouteCategory;
 }
 
+export type SystemSectionId = 'profile' | 'appearance' | 'models' | 'billing' | 'integrations' | 'api-keys';
+
 export const appRoutes = {
   landing: '/',
   login: '/login',
@@ -25,12 +27,27 @@ export const appRoutes = {
   clipper: '/clipper',
   sourcify: '/sourcify',
   postz: '/postz',
+  postzConnected: '/postz/connected',
+  dashboard: '/dashboard',
+  dashboardToolkits: '/dashboard/toolkits',
+  dashboardSettings: '/dashboard/settings',
+  wzrdos: '/wzrdos',
+  creativeIntelligence: '/creative-intelligence',
+  system: '/system',
+  systemAppearance: '/system/appearance',
+  systemModels: '/system/models',
+  systemBilling: '/system/billing',
+  systemBillingDocs: '/system/billing/docs',
+  systemIntegrations: '/system/integrations',
+  systemApiKeys: '/system/api-keys',
+  systemSection: (section: SystemSectionId) => (section === 'profile' ? appRoutes.system : `/system/${section}`),
   clipStudio: '/clip-studio',
   settings: {
     billing: '/settings/billing',
     billingDocs: '/settings/billing/docs',
   },
   projects: {
+    setup: (projectId: string) => `${appRoutes.projectSetup}?projectId=${encodeURIComponent(projectId)}`,
     studio: (projectId: string) => `/projects/${projectId}/studio`,
     timeline: (projectId: string) => `/projects/${projectId}/timeline`,
     editor: (projectId: string) => `/projects/${projectId}/editor`,
@@ -67,6 +84,7 @@ export const ROUTE_MANIFEST: RouteManifestEntry[] = [
   { id: 'login', pattern: appRoutes.login, category: 'support' },
   { id: 'home', pattern: appRoutes.home, category: 'core' },
   { id: 'project-setup', pattern: appRoutes.projectSetup, category: 'core' },
+  { id: 'project-setup-project', pattern: '/project-setup/:projectId', category: 'core' },
   { id: 'assets', pattern: appRoutes.assets, category: 'support' },
   { id: 'ip-vault', pattern: appRoutes.ipVault, category: 'core' },
   { id: 'learning-studio', pattern: appRoutes.learningStudio, category: 'support' },
@@ -81,6 +99,17 @@ export const ROUTE_MANIFEST: RouteManifestEntry[] = [
   { id: 'clipper', pattern: appRoutes.clipper, category: 'core' },
   { id: 'sourcify', pattern: appRoutes.sourcify, category: 'core' },
   { id: 'postz', pattern: appRoutes.postz, category: 'core' },
+  { id: 'postz-connected', pattern: appRoutes.postzConnected, category: 'core' },
+  { id: 'wzrdos', pattern: appRoutes.wzrdos, category: 'core' },
+  { id: 'creative-intelligence', pattern: appRoutes.creativeIntelligence, category: 'core' },
+  { id: 'system', pattern: appRoutes.system, category: 'core' },
+  { id: 'system-appearance', pattern: appRoutes.systemAppearance, category: 'core' },
+  { id: 'system-models', pattern: appRoutes.systemModels, category: 'core' },
+  { id: 'system-billing', pattern: appRoutes.systemBilling, category: 'core' },
+  { id: 'system-billing-docs', pattern: appRoutes.systemBillingDocs, category: 'core' },
+  { id: 'system-integrations', pattern: appRoutes.systemIntegrations, category: 'core' },
+  { id: 'system-api-keys', pattern: appRoutes.systemApiKeys, category: 'core' },
+  { id: 'system-section', pattern: '/system/:section', category: 'core' },
   { id: 'clip-studio', pattern: appRoutes.clipStudio, category: 'legacy' },
   { id: 'settings-billing', pattern: appRoutes.settings.billing, category: 'core' },
   { id: 'settings-billing-docs', pattern: appRoutes.settings.billingDocs, category: 'core' },
@@ -111,6 +140,40 @@ export const ROUTE_MANIFEST: RouteManifestEntry[] = [
 
 function stripQueryAndHash(path: string) {
   return path.split('#')[0]?.split('?')[0] ?? path;
+}
+
+const SYSTEM_SECTION_PATHS: Record<SystemSectionId, string> = {
+  profile: appRoutes.system,
+  appearance: appRoutes.systemAppearance,
+  models: appRoutes.systemModels,
+  billing: appRoutes.systemBilling,
+  integrations: appRoutes.systemIntegrations,
+  'api-keys': appRoutes.systemApiKeys,
+};
+
+export function getSystemSectionPath(section: SystemSectionId): string {
+  return SYSTEM_SECTION_PATHS[section];
+}
+
+export function getSystemSectionFromLocation(pathname: string, search = ''): SystemSectionId {
+  const path = stripQueryAndHash(pathname);
+  const requested = new URLSearchParams(search).get('section');
+  if (path === appRoutes.system && requested && requested in SYSTEM_SECTION_PATHS) {
+    return requested as SystemSectionId;
+  }
+
+  const pathMatch = (Object.entries(SYSTEM_SECTION_PATHS) as Array<[SystemSectionId, string]>).find(
+    ([, sectionPath]) => path === sectionPath,
+  );
+  if (pathMatch) {
+    return pathMatch[0];
+  }
+
+  if (requested && requested in SYSTEM_SECTION_PATHS) {
+    return requested as SystemSectionId;
+  }
+
+  return 'profile';
 }
 
 function patternToRegExp(pattern: string) {

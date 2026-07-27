@@ -26,7 +26,7 @@ export const MobileHeader = ({ onMenuClick }: MobileHeaderProps) => {
       <div className="flex items-center gap-2">
         <img 
           src={staticAssetUrl(wzrdLogo)}
-          alt="MOG STUDIO" 
+          alt="WZRD"
           className="h-8 object-contain"
         />
         <span className="text-[10px] text-primary bg-primary/15 px-1.5 py-0.5 rounded-full border border-primary/25 font-medium">

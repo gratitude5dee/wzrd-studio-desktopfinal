@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, UserPlus, Plus, FolderKanban, Activity, Image, Sparkles, Settings, HelpCircle, ChevronDown, ChevronRight, User, LogOut, Palette, Coins, Search } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, UserPlus, Plus, FolderKanban, Activity, Image, Sparkles, Settings, HelpCircle, ChevronDown, LogOut, Palette, Coins, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
 import wzrdLogo from '@/assets/wzrd-logo.png';
 import { ProjectList } from '@/components/home/ProjectList';
 import { AuraProjectList } from '@/components/home/AuraProjectList';
 import { AuraAssetStore } from '@/components/home/AuraAssetStore';
 import { ProjectListView } from '@/components/home/ProjectListView';
-import { Sidebar } from '@/components/home/Sidebar';
-import { MobileBottomNav } from '@/components/home/MobileBottomNav';
-import { MobileHeader } from '@/components/home/MobileHeader';
-import { MobileSidebarDrawer } from '@/components/home/MobileSidebarDrawer';
+import AppShell from '@/components/layout/AppShell';
+import { HOME_NAV_VIEW_IDS } from '@/components/home/navConfig';
 import { SearchBar } from '@/components/home/SearchBar';
 import { SortDropdown, SortOption } from '@/components/home/SortDropdown';
 import { ProjectViewModeSelector } from '@/components/home/ProjectViewModeSelector';
@@ -32,7 +29,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
 import { useOnboardingTour } from '@/hooks/useOnboardingTour';
-import { useSidebar } from '@/contexts/SidebarContext';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabaseService } from '@/services/supabaseService';
 import { useToast } from '@/hooks/use-toast';
@@ -45,7 +41,6 @@ import { appRoutes } from '@/lib/routes';
 import { staticAssetUrl } from '@/lib/staticAsset';
 
 type ViewMode = 'grid' | 'list';
-const HOME_NAV_VIEW_IDS = new Set(['all', 'aura', 'asset-store', 'ip-vault', 'shared', 'community']);
 
 export default function Home() {
   const navigate = useNavigate();
@@ -53,10 +48,8 @@ export default function Home() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { availableCredits } = useCredits();
-  const { isCollapsed, setIsCollapsed } = useSidebar();
   const onboarding = useOnboardingTour();
   const isDemo = isDemoModeEnabled();
-  const isMobile = useIsMobile();
 
   const [activeView, setActiveView] = useState('all');
   const [activeTab, setActiveTab] = useState<'all' | 'private' | 'public'>('all');
@@ -66,7 +59,6 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     const nextView = (location.state as { activeView?: unknown } | null)?.activeView;
@@ -224,33 +216,13 @@ export default function Home() {
   return (
     <>
       {isDemo && <DemoBanner />}
-      <div className="min-h-screen bg-background flex w-full">
-        {/* Desktop Sidebar - hidden on mobile */}
-        <div className="hidden md:block">
-          <Sidebar
-            activeView={activeView}
-            onViewChange={setActiveView}
-          />
-        </div>
-
-        {/* Mobile Sidebar Drawer */}
-        <MobileSidebarDrawer
-          isOpen={isMobileSidebarOpen}
-          onClose={() => setIsMobileSidebarOpen(false)}
-          activeView={activeView}
-          onViewChange={setActiveView}
-        />
-
-        {/* Main Content */}
-        <motion.div 
-          className="flex-1 pb-20 md:pb-0"
-          animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 0 : 256) }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          initial={false}
-        >
-          {/* Mobile Header */}
-          <MobileHeader onMenuClick={() => setIsMobileSidebarOpen(true)} />
-
+      <AppShell
+        activeView={activeView}
+        onViewChange={setActiveView}
+        contentAs="div"
+        className="flex w-full bg-background text-foreground"
+        contentClassName="flex-1 pb-20 md:pb-0"
+      >
           {/* Mobile Search & Filter Chips */}
           <div className="md:hidden">
             <div className="mx-4 mt-3 mb-2">
@@ -292,25 +264,6 @@ export default function Home() {
             {/* Row 1: Title + Project Count + Actions */}
             <div className="h-16 flex items-center justify-between px-6">
               <div className="flex items-center gap-4">
-                <AnimatePresence>
-                  {isCollapsed && (
-                    <motion.button
-                      initial={{ opacity: 0, x: -10, scale: 0.8 }}
-                      animate={{ opacity: 1, x: 0, scale: 1 }}
-                      exit={{ opacity: 0, x: -10, scale: 0.8 }}
-                      transition={{ duration: 0.2 }}
-                      onClick={() => setIsCollapsed(false)}
-                      className={cn(
-                        "w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
-                        "bg-zinc-100 dark:bg-white/[0.06] border border-zinc-200 dark:border-white/[0.1]",
-                        "hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_0_12px_rgba(249,115,22,0.15)]",
-                        "text-zinc-500 dark:text-zinc-400 hover:text-orange-500"
-                      )}
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </motion.button>
-                  )}
-                </AnimatePresence>
                 <img 
                   src={staticAssetUrl(wzrdLogo)} 
                   alt="WZRD STUDIO Logo" 
@@ -332,12 +285,13 @@ export default function Home() {
               </div>
               
               <div className="flex items-center gap-2">
-                {/* Settings dropdown */}
+                {/* System dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label="Open System menu"
                       className={cn(
                         "h-9 px-2 gap-1 transition-all duration-200",
                         "text-text-secondary hover:text-text-primary hover:bg-surface-2",
@@ -358,7 +312,7 @@ export default function Home() {
                     </DropdownMenuLabel>
                     
                     <DropdownMenuItem 
-                      onClick={() => navigate(appRoutes.settings.billing)} 
+                      onClick={() => navigate(appRoutes.systemBilling)}
                       className="hover:bg-[rgba(249,115,22,0.06)] cursor-pointer"
                     >
                       <Coins className="mr-2 h-4 w-4" />
@@ -371,7 +325,8 @@ export default function Home() {
                       Preferences
                     </DropdownMenuLabel>
                     
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
+                      onClick={() => navigate(appRoutes.systemAppearance)}
                       className="hover:bg-[rgba(249,115,22,0.06)] cursor-pointer"
                     >
                       <Palette className="mr-2 h-4 w-4" />
@@ -601,15 +556,7 @@ export default function Home() {
               />
             )}
           </main>
-        </motion.div>
-
-        {/* Mobile Bottom Navigation */}
-        <MobileBottomNav
-          activeView={activeView}
-          onViewChange={setActiveView}
-          onCreateProject={handleCreateProject}
-        />
-      </div>
+      </AppShell>
 
       {/* Onboarding Tour */}
       <OnboardingTour

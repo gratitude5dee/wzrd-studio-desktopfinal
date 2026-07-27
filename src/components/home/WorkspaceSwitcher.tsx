@@ -40,6 +40,7 @@ export const WorkspaceSwitcher = ({ isCollapsed = false }: WorkspaceSwitcherProp
             "w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.04] transition-colors group",
             isCollapsed && "justify-center"
           )}
+          aria-label={isCollapsed ? `${userName} workspace menu` : 'Switch workspace'}
           whileTap={{ scale: 0.98 }}
         >
           {/* Avatar with ShineBorder on hover */}

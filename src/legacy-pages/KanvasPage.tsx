@@ -1,4 +1,4 @@
-import { Suspense, lazy, startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 
 function safeTimeAgo(dateStr: string | null | undefined): string {
@@ -11,23 +11,16 @@ import {
   ArrowLeft,
   AudioLines,
   CheckCircle2,
-  Clapperboard,
   Film,
-  Globe2,
   Home,
-  Image as ImageIcon,
   Info,
   Keyboard,
   Loader2,
   LogOut,
-  Mic2,
-  Music2,
-  Pencil,
   Settings,
   SlidersHorizontal,
   Sparkles,
   Upload,
-  Video,
   Wand2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -110,7 +103,13 @@ import type {
   KanvasMode,
   KanvasStudio,
 } from "@/features/kanvas/types";
-import { KanvasSidebar } from "@/components/kanvas/KanvasSidebar";
+import { Sidebar } from "@/components/home/Sidebar";
+import { AppSidebarInset } from "@/components/home/AppSidebarInset";
+import {
+  APP_SIDEBAR_COLLAPSED_WIDTH,
+  APP_SIDEBAR_EXPANDED_WIDTH,
+  useSidebar,
+} from "@/contexts/SidebarContext";
 import {
   isFalKanvasModel,
   isGmiKanvasModel,
@@ -123,6 +122,11 @@ import { appRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { useRegisterVoiceActions } from "@/voice/VoiceAgentProvider";
 import type { VoiceActionRegistration } from "@/voice/actions/registry";
+import {
+  KANVAS_LYRICS_NAV_ITEM,
+  KANVAS_STUDIO_ICON_BY_KEY,
+  KANVAS_STUDIO_NAV,
+} from "@/components/kanvas/studioNavConfig";
 
 const ACCEPTED_TYPES: Record<KanvasAssetType, string> = {
   image: "image/*",
@@ -148,15 +152,8 @@ const CharacterCreationSection = lazy(() =>
   }))
 );
 
-const STUDIO_ICONS: Record<KanvasStudio, LucideIcon> = {
-  image: ImageIcon,
-  video: Video,
-  edit: Pencil,
-  cinema: Clapperboard,
-  lipsync: Mic2,
-  worldview: Globe2,
-  "character-creation": Sparkles,
-};
+const STUDIO_ICONS: Record<KanvasStudio, LucideIcon> = KANVAS_STUDIO_ICON_BY_KEY;
+const LyricsIcon = KANVAS_LYRICS_NAV_ITEM.Icon;
 
 function mergeAssets(current: KanvasAsset[], incoming: KanvasAsset[]): KanvasAsset[] {
   const map = new Map(current.map((asset) => [asset.id, asset]));
@@ -791,6 +788,7 @@ function PreviewStage({
 export default function KanvasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isCollapsed, offset } = useSidebar();
   const studio = normalizeStudioParam(searchParams.get("studio"));
 
   const [modelsByStudio, setModelsByStudio] = useState<Partial<Record<KanvasStudio, KanvasModel[]>>>({});
@@ -1128,6 +1126,10 @@ export default function KanvasPage() {
     });
   }
 
+  const handleHomeViewChange = useCallback((view: string) => {
+    navigate(appRoutes.home, { state: { activeView: view } });
+  }, [navigate]);
+
   async function handleAssetUpload(file: File, assetType: KanvasAssetType) {
     setUploadingByType((current) => ({ ...current, [assetType]: true }));
     try {
@@ -1392,8 +1394,55 @@ export default function KanvasPage() {
   const voiceActions = useMemo<VoiceActionRegistration[]>(
     () => [
       {
+        name: "kanvas_set_prompt",
+        scope: "kanvas",
+        description: "Set the prompt or creative direction for the active Kanvas studio.",
+        schema: {
+          type: "object",
+          properties: {
+            studio: { type: "string" },
+            prompt: { type: "string" },
+          },
+          required: ["prompt"],
+          additionalProperties: false,
+        },
+        handler: (input) => {
+          const payload = input as { studio?: KanvasStudio; prompt?: string | null };
+          const requestedStudio = payload.studio ? normalizeStudioParam(payload.studio) : studio;
+          if (!payload.prompt?.trim()) {
+            return {
+              ok: false,
+              status: "invalid_input",
+              message: "Tell me the prompt to place in Kanvas.",
+              errorCode: "missing_kanvas_prompt",
+            };
+          }
+          if (requestedStudio !== studio) {
+            setStudio(requestedStudio);
+          }
+          applyVoicePrompt(requestedStudio, payload.prompt);
+          return {
+            ok: true,
+            status: "completed",
+            message: `${KANVAS_STUDIO_META[requestedStudio].label} prompt updated.`,
+            data: { studio: requestedStudio, prompt: payload.prompt },
+            uiFocus: "kanvas-composer",
+          };
+        },
+      },
+      {
         name: "kanvas_set_studio",
         scope: "kanvas",
+        description: "Switch the active Kanvas studio.",
+        schema: {
+          type: "object",
+          properties: {
+            studio: { type: "string" },
+            prompt: { type: "string" },
+          },
+          required: ["studio"],
+          additionalProperties: false,
+        },
         handler: (input) => {
           const payload = input as { studio?: KanvasStudio; prompt?: string | null };
           const nextStudio = normalizeStudioParam(payload.studio);
@@ -1410,6 +1459,15 @@ export default function KanvasPage() {
       {
         name: "kanvas_generate",
         scope: "kanvas",
+        description: "Start a Kanvas generation in the current or requested studio.",
+        schema: {
+          type: "object",
+          properties: {
+            studio: { type: "string" },
+            prompt: { type: "string" },
+          },
+          additionalProperties: false,
+        },
         confirmation: {
           risk: "generation",
           message: "This will spend credits to start a Kanvas generation. Should I continue?",
@@ -1462,14 +1520,20 @@ export default function KanvasPage() {
   const allCharacterMentions = useMemo(() => {
     try { return getMentionListFn(); } catch { return []; }
   }, [blueprintList, getMentionListFn]);
+  const sidebarOffset =
+    typeof offset === "number"
+      ? offset
+      : isCollapsed
+        ? APP_SIDEBAR_COLLAPSED_WIDTH
+        : APP_SIDEBAR_EXPANDED_WIDTH;
 
   return (
     <div className="relative h-screen bg-[#050506] text-white overflow-hidden">
       {/* Floating sidebar nav (fixed overlay) */}
-      <KanvasSidebar activeStudio={studio} onStudioChange={setStudio} />
+      <Sidebar activeView="kanvas" onViewChange={handleHomeViewChange} />
 
-      {/* Main content area — full width */}
-      <div className="relative w-full h-full overflow-auto">
+      {/* Main content area */}
+      <AppSidebarInset className="relative h-full overflow-auto">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.05),transparent_24%)] pointer-events-none" />
         <div className="relative">
           {/* Slim status header */}
@@ -1483,22 +1547,14 @@ export default function KanvasPage() {
 
               {/* Center: Pill-slider studio nav — hidden on mobile (bottom nav replaces it) */}
               <div className="hidden md:inline-flex items-center bg-[#111] rounded-full p-1 border border-white/[0.06] gap-0.5">
-                {KANVAS_STUDIO_ORDER.map((s) => {
-                  const Icon = {
-                    image: ImageIcon,
-                    video: Video,
-                    edit: Pencil,
-                    cinema: Clapperboard,
-                    lipsync: Mic2,
-                    worldview: Globe2,
-                    'character-creation': Sparkles,
-                  }[s] as typeof ImageIcon;
-                  const isActive = studio === s;
+                {KANVAS_STUDIO_NAV.map((item) => {
+                  const Icon = item.Icon;
+                  const isActive = studio === item.key;
                   return (
                     <button
-                      key={s}
+                      key={item.key}
                       type="button"
-                      onClick={() => setStudio(s)}
+                      onClick={() => setStudio(item.key)}
                       className={cn(
                         'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200',
                         isActive
@@ -1507,22 +1563,22 @@ export default function KanvasPage() {
                       )}
                     >
                       <Icon className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">{KANVAS_STUDIO_META[s].label}</span>
+                      <span className="hidden md:inline">{item.label}</span>
                     </button>
                   );
                 })}
                 {/* Lyrics — separate route, not a KanvasStudio */}
                 <button
                   type="button"
-                  onClick={() => navigate(appRoutes.kanvasLyrics)}
+                  onClick={() => navigate(KANVAS_LYRICS_NAV_ITEM.routeOverride)}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200',
                     'text-zinc-500 hover:text-zinc-300'
                   )}
                   aria-label="Open Lyrics wizard"
                 >
-                  <Music2 className="h-3.5 w-3.5" />
-                  <span className="hidden md:inline">Lyrics</span>
+                  <LyricsIcon className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">{KANVAS_LYRICS_NAV_ITEM.label}</span>
                 </button>
               </div>
 
@@ -1782,7 +1838,7 @@ export default function KanvasPage() {
             </div>
           )}
         </div>
-      </div>
+      </AppSidebarInset>
 
       {/* Film grain overlay */}
       <svg className="pointer-events-none fixed inset-0 z-[1] w-full h-full mix-blend-overlay opacity-[0.03]" aria-hidden="true">
@@ -1793,7 +1849,10 @@ export default function KanvasPage() {
       </svg>
 
       {/* Bottom status bar */}
-      <div className="hidden md:flex fixed bottom-0 left-0 right-0 h-8 z-[55] bg-[#0A0A0A]/80 backdrop-blur-xl border-t border-white/[0.04] items-center justify-between px-4">
+      <div
+        className="hidden md:flex fixed bottom-0 right-0 h-8 z-[55] bg-[#0A0A0A]/80 backdrop-blur-xl border-t border-white/[0.04] items-center justify-between px-4 transition-[left] duration-300 ease-out"
+        style={{ left: `${sidebarOffset}px` }}
+      >
         <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-medium">WZRD Studio</span>
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-1.5 rounded-full bg-[#f97316] shadow-[0_0_6px_rgba(249,115,22,0.5)] animate-pulse" />
@@ -1807,27 +1866,37 @@ export default function KanvasPage() {
 
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-[55] bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-white/[0.06] pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-center justify-around px-2 py-2">
-          {KANVAS_STUDIO_ORDER.map((s) => {
-            const Icon = STUDIO_ICONS[s];
-            const isActive = studio === s;
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {KANVAS_STUDIO_NAV.map((item) => {
+            const Icon = item.Icon;
+            const isActive = studio === item.key;
             return (
               <button
-                key={s}
+                key={item.key}
                 type="button"
-                onClick={() => setStudio(s)}
+                onClick={() => setStudio(item.key)}
+                aria-pressed={isActive}
                 className={cn(
-                  'flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-all',
+                  'flex min-w-[86px] items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all',
                   isActive
-                    ? 'text-[#f97316]'
-                    : 'text-zinc-500 active:text-zinc-300',
+                    ? 'border-[#f97316]/40 bg-[#f97316]/10 text-[#f97316]'
+                    : 'border-white/[0.06] bg-white/[0.03] text-zinc-500 active:text-zinc-300',
                 )}
               >
-                <Icon className="h-5 w-5" />
-                <span className="text-[9px] font-medium">{KANVAS_STUDIO_META[s].label}</span>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => navigate(KANVAS_LYRICS_NAV_ITEM.routeOverride)}
+            className="flex min-w-[82px] items-center justify-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-zinc-500 transition-all active:text-zinc-300"
+            aria-label="Open Lyrics wizard"
+          >
+            <LyricsIcon className="h-4 w-4 shrink-0" />
+            <span>{KANVAS_LYRICS_NAV_ITEM.label}</span>
+          </button>
         </div>
       </div>
 
@@ -1846,7 +1915,7 @@ export default function KanvasPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-[#f97316] text-black hover:bg-[#fb923c]"
-              onClick={() => navigate(appRoutes.settings.billing)}
+              onClick={() => navigate(appRoutes.systemBilling)}
             >
               Get More Credits
             </AlertDialogAction>

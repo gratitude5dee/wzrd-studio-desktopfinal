@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns";
 import { toast } from "sonner";
 
-import { MobileBottomNav } from "@/components/home/MobileBottomNav";
-import { Sidebar } from "@/components/home/Sidebar";
+import AppShell from "@/components/layout/AppShell";
 import { ChannelRail } from "@/components/postz/ChannelRail";
 import { AddChannelDialog } from "@/components/postz/AddChannelDialog";
 import { CompleteChannelDialog } from "@/components/postz/CompleteChannelDialog";
@@ -20,8 +18,6 @@ import type { ProjectAsset } from "@/types/assets";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useAssets } from "@/hooks/useAssets";
 import {
   POSTZ_QUERY_KEYS,
@@ -73,9 +69,6 @@ export default function Postz() {
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  const isMobile = useIsMobile();
-  const { isCollapsed } = useSidebar();
-
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const [stateFilter, setStateFilter] = useState(POSTZ_STATE_FILTER_ALL as PostzStateFilter);
   const stateParam = stateFilter === POSTZ_STATE_FILTER_ALL ? null : (stateFilter as PostzPostState);
@@ -92,8 +85,8 @@ export default function Postz() {
     params.delete("state_id");
 
     const nextSearch = params.toString();
-    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
-  }, [location.pathname, location.search, navigate]);
+    navigate({ pathname: appRoutes.postz, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+  }, [location.search, navigate]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -171,17 +164,6 @@ export default function Postz() {
     sortOrder: "desc",
   });
 
-  const handleHomeViewChange = useCallback(
-    (view: string) => {
-      navigate(appRoutes.home, { state: { activeView: view } });
-    },
-    [navigate],
-  );
-
-  const handleCreateProject = useCallback(() => {
-    navigate(appRoutes.projectSetup);
-  }, [navigate]);
-
   const shiftMonth = (amount: number) => {
     setAnchor((current) => startOfMonth(new Date(current.getFullYear(), current.getMonth() + amount, 1)));
   };
@@ -215,61 +197,51 @@ export default function Postz() {
   const channels = channelsQuery.data ?? [];
 
   return (
-    <div className="min-h-screen bg-[#08090d] text-zinc-100">
-      <div className="hidden md:block">
-        <Sidebar activeView="postz" onViewChange={handleHomeViewChange} />
-      </div>
-
-      <motion.main
-        className="min-h-screen pb-24 md:pb-8"
-        animate={{ marginLeft: isMobile ? 0 : isCollapsed ? 0 : 256 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        initial={false}
-      >
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6">
-          <header className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-orange-300" />
-                <Badge variant="secondary" className="border-orange-300/20 bg-orange-400/10 text-orange-100">
-                  Postiz
-                </Badge>
-              </div>
-              <h1 className="text-2xl font-semibold tracking-normal text-white md:text-3xl">Postz</h1>
-              <p className="mt-1 text-sm text-zinc-500">Schedule multi-channel posts (Phase 3: real channels + OAuth).</p>
+    <AppShell activeView="postz">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6">
+        <header className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-orange-300" />
+              <Badge variant="secondary" className="border-orange-300/20 bg-orange-400/10 text-orange-100">
+                Native scheduler
+              </Badge>
             </div>
+            <h1 className="text-2xl font-semibold tracking-normal text-white md:text-3xl">Postz</h1>
+            <p className="mt-1 text-sm text-zinc-500">Connect channels, schedule posts, and let WZRD publish automatically.</p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                className="bg-orange-500 text-white hover:bg-orange-500/90"
-                onClick={() => openNewComposer(roundToNextQuarterHour(new Date()))}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New post
-              </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              className="bg-orange-500 text-white hover:bg-orange-500/90"
+              onClick={() => openNewComposer(roundToNextQuarterHour(new Date()))}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New post
+            </Button>
 
-              <Button
-                type="button"
-                variant="secondary"
-                className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                onClick={() => shiftMonth(-1)}
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="min-w-40 text-center text-sm font-semibold text-zinc-200">{monthLabel(anchor)}</div>
-              <Button
-                type="button"
-                variant="secondary"
-                className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                onClick={() => shiftMonth(1)}
-                aria-label="Next month"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </header>
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+              onClick={() => shiftMonth(-1)}
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="min-w-40 text-center text-sm font-semibold text-zinc-200">{monthLabel(anchor)}</div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+              onClick={() => shiftMonth(1)}
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
@@ -423,10 +395,7 @@ export default function Postz() {
               )}
             </aside>
           </section>
-        </div>
-      </motion.main>
-
-      <MobileBottomNav activeView="postz" onViewChange={handleHomeViewChange} onCreateProject={handleCreateProject} />
+      </div>
 
       <PostComposer
         open={composerOpen}
@@ -459,6 +428,6 @@ export default function Postz() {
           }}
         />
       )}
-    </div>
+    </AppShell>
   );
 }
