@@ -21,6 +21,7 @@ describe('voice agent config', () => {
     expect(tools).toHaveLength(1);
     expect(tools[0].name).toBe('execute_worldstudio_action');
     expect(tools[0].type).toBe('function');
+    expect(tools[0].strict).toBe(false);
     expect(tools[0].parameters).toHaveProperty('properties');
     expect(
       ((tools[0].parameters.properties as any).name.enum as string[]),
@@ -30,6 +31,9 @@ describe('voice agent config', () => {
       'timeline_open_shot',
       'timeline_generate_all_images',
       'asset_store_save_current',
+      'kanvas_set_prompt',
+      'kanvas_lipsync_set_step',
+      'kanvas_lipsync_set_mode',
     ]));
   });
 });

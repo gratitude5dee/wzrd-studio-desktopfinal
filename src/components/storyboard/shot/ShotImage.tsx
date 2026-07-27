@@ -2,7 +2,7 @@ import React from 'react';
 import { Loader2, Wand2, Play, ImageOff, AlertTriangle, RefreshCw, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { ImageStatus } from '@/types/storyboardTypes';
+import { ImageStatus, VideoStatus } from '@/types/storyboardTypes';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -14,7 +14,7 @@ interface ShotImageProps {
   shotId: string;
   imageUrl: string | null;
   videoUrl: string | null;
-  videoStatus: 'pending' | 'generating' | 'completed' | 'failed';
+  videoStatus: VideoStatus;
   status: ImageStatus;
   imageProgress?: number;
   isGenerating: boolean;
@@ -23,7 +23,7 @@ interface ShotImageProps {
   upscaleStatus?: string;
   onGenerateImage: () => void;
   onGenerateVisualPrompt: () => void;
-  onUpdate?: (updates: { video_url?: string; video_status?: 'pending' | 'generating' | 'completed' | 'failed'; image_url?: string }) => void;
+  onUpdate?: (updates: { video_url?: string; video_status?: VideoStatus; image_url?: string }) => void;
 }
 
 const ShotImage: React.FC<ShotImageProps> = ({
@@ -205,7 +205,7 @@ const ShotImage: React.FC<ShotImageProps> = ({
   }
   
   // Video Generating State
-  if (videoStatus === 'generating' || isGeneratingVideo) {
+  if (videoStatus === 'queued' || videoStatus === 'generating' || isGeneratingVideo) {
     return (
       <div className="w-full aspect-video relative group/video overflow-hidden">
         {imageUrl ? (
@@ -263,7 +263,7 @@ const ShotImage: React.FC<ShotImageProps> = ({
   return (
     <div className="w-full aspect-video bg-zinc-900/50 backdrop-blur-sm flex flex-col items-center justify-center p-3 relative overflow-hidden border-b border-white/5 pointer-events-auto">
       {/* Progress bar overlay for generating state */}
-      {(isGenerating || status === 'generating') && (
+      {(isGenerating || status === 'queued' || status === 'generating') && (
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800 z-20">
           <motion.div 
             className="h-full bg-gradient-to-r from-[#555555] to-[#f97316]"
@@ -274,10 +274,12 @@ const ShotImage: React.FC<ShotImageProps> = ({
         </div>
       )}
       <div className="relative z-10 pointer-events-auto">
-        {isGenerating || status === 'generating' ? (
+        {isGenerating || status === 'queued' || status === 'generating' ? (
           <div className="flex flex-col items-center justify-center gap-2">
             <Loader2 className="mb-1 h-5 w-5 animate-spin text-[#fdba74]" />
-            <span className="text-xs text-zinc-300">Generating image... {imageProgress > 0 ? `${imageProgress}%` : ''}</span>
+            <span className="text-xs text-zinc-300">
+              {status === 'queued' ? 'Queued image...' : 'Generating image...'} {imageProgress > 0 ? `${imageProgress}%` : ''}
+            </span>
           </div>
         ) : status === 'failed' ? (
           <div className="flex flex-col items-center justify-center gap-2">

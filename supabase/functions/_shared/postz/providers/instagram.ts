@@ -1,4 +1,4 @@
-import type { AuthTokenDetails, OAuthTarget, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
+import type { AuthTokenDetails, ChannelRow, OAuthTarget, PostDetails, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -69,6 +69,7 @@ const CAPABILITIES: ProviderCapabilities = {
 const instagramProvider: PostzProvider = {
   identifier: "instagram",
   name: "Instagram (Facebook Business)",
+  implemented: true,
   capabilities: CAPABILITIES,
   requiredEnvVars: ["POSTZ_INSTAGRAM_CLIENT_ID", "POSTZ_INSTAGRAM_CLIENT_SECRET"],
 
@@ -141,8 +142,66 @@ const instagramProvider: PostzProvider = {
     throw new Error("Instagram refreshToken not implemented yet");
   },
 
-  async post(): Promise<PostResponse[]> {
-    throw new Error("Instagram publishing not implemented yet");
+  async post(channel: ChannelRow, accessToken: string, posts: PostDetails[]): Promise<PostResponse[]> {
+    const [pageAccessToken] = accessToken.split("___");
+    if (!pageAccessToken) throw new Error("Instagram channel is missing a page access token");
+
+    const responses: PostResponse[] = [];
+
+    for (const post of posts) {
+      const media = post.media?.[0];
+      if (!media?.url) throw new Error("Instagram publishing requires media");
+
+      const createParams = new URLSearchParams({
+        caption: post.message ?? "",
+        access_token: pageAccessToken,
+      });
+
+      if (media.type === "video") {
+        createParams.set("media_type", "REELS");
+        createParams.set("video_url", media.url);
+      } else {
+        createParams.set("image_url", media.url);
+      }
+
+      const createJson = await fetchJson(
+        `https://graph.facebook.com/v20.0/${encodeURIComponent(channel.provider_account_id)}/media?${createParams.toString()}`,
+      );
+      const creationId = String(createJson.id ?? "");
+      if (!creationId) throw new Error(`Instagram media container missing id: ${JSON.stringify(createJson)}`);
+
+      for (let i = 0; i < 20; i += 1) {
+        const statusJson = await fetchJson(
+          `https://graph.facebook.com/v20.0/${encodeURIComponent(creationId)}?fields=status_code&access_token=${encodeURIComponent(pageAccessToken)}`,
+        );
+        const status = String(statusJson.status_code ?? "");
+        if (status === "FINISHED") break;
+        if (status === "ERROR" || status === "EXPIRED") {
+          throw new Error(`Instagram media container failed: ${JSON.stringify(statusJson)}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+
+      const publishParams = new URLSearchParams({
+        creation_id: creationId,
+        access_token: pageAccessToken,
+      });
+      const publishJson = await fetchJson(
+        `https://graph.facebook.com/v20.0/${encodeURIComponent(channel.provider_account_id)}/media_publish?${publishParams.toString()}`,
+      );
+
+      const mediaId = String(publishJson.id ?? "");
+      if (!mediaId) throw new Error(`Instagram publish missing media id: ${JSON.stringify(publishJson)}`);
+
+      responses.push({
+        id: post.id,
+        postId: mediaId,
+        releaseURL: channel.username ? `https://www.instagram.com/${channel.username}/` : "https://www.instagram.com/",
+        status: "published",
+      });
+    }
+
+    return responses;
   },
 
   async listTargets(accessToken: string): Promise<OAuthTarget[]> {

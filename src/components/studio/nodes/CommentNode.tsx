@@ -11,6 +11,7 @@ interface CommentNodeData {
   content?: string;
   color?: string;
   collapsed?: boolean;
+  frame?: boolean;
   params?: CommentNodeData;
   nodeDefinition?: NodeDefinition;
 }
@@ -37,6 +38,7 @@ export const CommentNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
   const color = params?.color || nodeData?.color || COMMENT_COLORS[0].value;
+  const isFrame = Boolean(params?.frame || nodeData?.frame);
 
   useEffect(() => {
     setTitle(params?.title || nodeData?.title || 'Comment');
@@ -86,6 +88,60 @@ export const CommentNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       contentRef.current.focus();
     }
   }, [isEditingContent]);
+
+  if (isFrame) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className={cn(
+          'h-full w-full rounded-xl border-2 transition-shadow',
+          selected ? 'shadow-[0_0_0_1px_rgba(255,255,255,0.18),0_0_36px_rgba(249,115,22,0.14)]' : ''
+        )}
+        style={{
+          backgroundColor: `${color}08`,
+          borderColor: selected ? color : `${color}55`,
+        }}
+      >
+        <div
+          className="flex items-center gap-2 rounded-t-lg border-b px-3 py-2"
+          style={{
+            backgroundColor: `${color}14`,
+            borderColor: `${color}30`,
+            color,
+          }}
+        >
+          <GripVertical className="h-4 w-4 opacity-60" />
+          {isEditingTitle ? (
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={handleTitleSubmit}
+              onKeyDown={(event) => event.key === 'Enter' && handleTitleSubmit()}
+              className="nodrag flex-1 bg-transparent text-xs font-semibold uppercase tracking-[0.18em] outline-none"
+              style={{ color }}
+            />
+          ) : (
+            <span
+              className="flex-1 cursor-text truncate text-xs font-semibold uppercase tracking-[0.18em]"
+              onDoubleClick={() => setIsEditingTitle(true)}
+            >
+              {title}
+            </span>
+          )}
+          <button
+            onClick={handleDelete}
+            className="nodrag rounded p-1 opacity-55 transition-opacity hover:bg-black/20 hover:opacity-100"
+            aria-label="Delete frame"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

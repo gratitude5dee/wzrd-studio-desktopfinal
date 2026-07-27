@@ -2,6 +2,7 @@ import { expect, test, type ElementHandle, type Page } from '@playwright/test';
 
 const imageEditNodeId = '00000000-0000-4000-8000-000000000101';
 const videoNodeId = '00000000-0000-4000-8000-000000000102';
+const firstPerfNodeId = '00000000-0000-4000-8001-000000000001';
 const existingNodeIds = [imageEditNodeId, videoNodeId] as const;
 
 type NodeSnapshot = {
@@ -16,6 +17,24 @@ type StabilitySnapshot = {
   viewportTransform: string;
   nodeCount: number;
   nodes: NodeSnapshot[];
+};
+
+type StudioRenderPerfSnapshot = {
+  canvasRenderCount: number;
+  nodeRenders: Array<{
+    id: string;
+    label: string;
+    count: number;
+    lastRenderedAt: number;
+  }>;
+};
+
+type StudioTestApi = {
+  seedPopulationGraph: () => Promise<void>;
+  populateNewNodes: () => Promise<void>;
+  seedLargeGraph: (count?: number) => Promise<void>;
+  resetPerfStats: () => void;
+  readPerfSnapshot: () => StudioRenderPerfSnapshot;
 };
 
 function nodeSelector(id: string) {
@@ -126,9 +145,9 @@ function expectStableSnapshot(before: StabilitySnapshot, current: StabilitySnaps
 test('populating new ImageEdit and Video nodes keeps existing cards visually stable', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/studio?e2e=node-population');
-  await page.waitForFunction(() => Boolean((window as any).__wzrdStudioTest));
+  await page.waitForFunction(() => Boolean((window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest));
 
-  await page.evaluate(() => (window as any).__wzrdStudioTest.seedPopulationGraph());
+  await page.evaluate(() => (window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest?.seedPopulationGraph());
 
   for (const id of existingNodeIds) {
     await expect(page.locator(nodeSelector(id))).toBeVisible();
@@ -141,7 +160,7 @@ test('populating new ImageEdit and Video nodes keeps existing cards visually sta
   const handles = await captureElementHandles(page);
 
   await page.evaluate(() => {
-    void (window as any).__wzrdStudioTest.populateNewNodes();
+    void (window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest?.populateNewNodes();
   });
 
   for (let index = 0; index < 8; index += 1) {
@@ -151,4 +170,51 @@ test('populating new ImageEdit and Video nodes keeps existing cards visually sta
   }
 
   await expect(page.locator('.react-flow__node')).toHaveCount(4);
+});
+
+test('60-node graph drag stays within debug render budget', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/studio?e2e=node-population&debugPerf=1');
+  await page.waitForFunction(() => Boolean((window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest));
+
+  await page.evaluate(() => (window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest?.seedLargeGraph(60));
+
+  await expect(page.locator('text=60 nodes')).toBeVisible();
+  const firstNode = page.locator(nodeSelector(firstPerfNodeId));
+  await expect(firstNode).toBeVisible();
+  await firstNode.click();
+  await nextFrame(page);
+
+  await page.evaluate(() => (window as Window & { __wzrdStudioTest?: StudioTestApi }).__wzrdStudioTest?.resetPerfStats());
+  const beforeBox = await firstNode.boundingBox();
+  if (!beforeBox) {
+    throw new Error('Unable to read first perf node bounds before drag');
+  }
+
+  await page.mouse.move(beforeBox.x + beforeBox.width / 2, beforeBox.y + beforeBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(beforeBox.x + beforeBox.width / 2 + 80, beforeBox.y + beforeBox.height / 2 + 24, { steps: 8 });
+  await page.mouse.up();
+  await nextFrame(page);
+  await nextFrame(page);
+
+  const afterBox = await firstNode.boundingBox();
+  if (!afterBox) {
+    throw new Error('Unable to read first perf node bounds after drag');
+  }
+  expect(afterBox.x).toBeGreaterThan(beforeBox.x + 20);
+
+  const snapshot = await page.evaluate(() => (
+    window as Window & { __wzrdStudioTest?: StudioTestApi }
+  ).__wzrdStudioTest?.readPerfSnapshot());
+  if (!snapshot) {
+    throw new Error('Unable to read studio perf snapshot');
+  }
+
+  const renderedNodeIds = snapshot.nodeRenders
+    .filter((node: { count: number }) => node.count > 0)
+    .map((node: { id: string }) => node.id);
+  const offTargetRenders = renderedNodeIds.filter((id: string) => id !== firstPerfNodeId);
+
+  expect(offTargetRenders).toHaveLength(0);
 });

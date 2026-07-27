@@ -1,6 +1,6 @@
 
 import { memo, useState, useMemo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { Upload, X, CircleDashed, Coins } from 'lucide-react';
 import { useCredits } from '@/hooks/useCredits';
 import { useAuth } from '@/providers/AuthProvider';

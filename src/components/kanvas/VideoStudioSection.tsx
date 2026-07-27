@@ -23,12 +23,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/features/kanvas/types";
-import { getJobPrimaryUrl, isJobActive } from "@/features/kanvas/helpers";
+import { isJobActive, normalizeKanvasJobMedia } from "@/features/kanvas/helpers";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import type { CharacterMention } from "@/types/character-creation";
 import { musicPolishAssets } from "@/lib/musicPolishAssets";
 import type { MusicPolishAsset } from "@/lib/musicPolishAssets";
+import { KanvasMediaPreview } from "@/components/kanvas/KanvasMediaPreview";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -83,16 +84,21 @@ function Dropzone({
           previewUrl ? "border-[#f97316]/30 bg-black/40" : "border-zinc-800 bg-black/30 hover:border-[#f97316]/50"
         )}
       >
-        {previewUrl && previewType === "video" ? (
-          <video
-            src={previewUrl}
-            className="absolute inset-0 h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
-            muted
-            playsInline
-            preload="metadata"
+        {previewUrl ? (
+          <KanvasMediaPreview
+            media={{
+              kind: previewType,
+              primaryUrl: previewUrl,
+              previewUrl,
+              thumbnailUrl: previewUrl,
+              posterUrl: previewType === "video" ? previewUrl : null,
+              alt: label,
+              sourceType: "asset",
+              status: "ready",
+            }}
+            aspectClassName="absolute inset-0"
+            className="h-full w-full opacity-80 transition-opacity group-hover:opacity-100"
           />
-        ) : previewUrl ? (
-          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" loading="lazy" decoding="async" />
         ) : uploading ? (
           <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
         ) : (
@@ -225,7 +231,7 @@ export function VideoStudioSection({
 
   const completedJobs = jobs.filter((j) => j.status === "completed");
   const recentResults = completedJobs.slice(0, 4);
-  const previewUrl = selectedJob ? getJobPrimaryUrl(selectedJob) : null;
+  const selectedMedia = selectedJob ? normalizeKanvasJobMedia(selectedJob) : null;
 
   const handlePromptInput = (value: string) => {
     onPromptChange(value);
@@ -437,10 +443,18 @@ export function VideoStudioSection({
         {/* Active job */}
         {selectedJob && (
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-            {previewUrl && selectedJob.resultPayload?.mediaType === "video" ? (
-              <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" poster={selectedJob.resultPayload?.thumbnailUrl ?? undefined} className="aspect-video w-full bg-black object-cover" />
-            ) : previewUrl ? (
-              <img src={previewUrl} alt="Output" className="aspect-video w-full object-cover" decoding="async" />
+            {selectedMedia?.status === "ready" ? (
+              <KanvasMediaPreview
+                media={{ ...selectedMedia, alt: "Generated video output" }}
+                controls
+                autoPlay
+                loop
+                muted
+                aspectClassName="aspect-video"
+                className="w-full"
+                loading="eager"
+                showErrorLabel
+              />
             ) : isJobActive(selectedJob) ? (
               <div className="flex aspect-video flex-col items-center justify-center gap-4">
                 <Loader2 className="h-10 w-10 animate-spin text-[#f97316]" />
@@ -527,15 +541,16 @@ export function VideoStudioSection({
             </div>
             <div className="grid grid-cols-4 gap-4">
               {recentResults.map((job) => {
-                const url = getJobPrimaryUrl(job);
-                if (!url) return null;
+                const media = normalizeKanvasJobMedia(job);
                 return (
                   <div key={job.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl bg-[#1a1919]">
-                    {job.resultPayload?.mediaType === "video" ? (
-                      <video src={url} muted playsInline preload="metadata" poster={job.resultPayload?.thumbnailUrl ?? undefined} className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
-                    ) : (
-                      <img src={url} alt="Creation" className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" loading="lazy" decoding="async" />
-                    )}
+                    <KanvasMediaPreview
+                      media={{ ...media, alt: "Recent video creation" }}
+                      aspectClassName="aspect-[9/16]"
+                      className="h-full w-full"
+                      mediaClassName="grayscale transition-all duration-500 group-hover:grayscale-0"
+                      showErrorLabel
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                     <div className="absolute right-2 top-2">
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm">
@@ -620,8 +635,18 @@ export function VideoStudioSection({
 
       <div className="min-w-0 flex-1 space-y-8">
         <div className="overflow-hidden rounded-2xl border border-white/5 bg-black/40">
-          {previewUrl ? (
-            <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" className="aspect-video w-full bg-black object-cover" />
+          {selectedMedia?.status === "ready" ? (
+            <KanvasMediaPreview
+              media={{ ...selectedMedia, alt: "Video edit preview" }}
+              controls
+              autoPlay
+              loop
+              muted
+              aspectClassName="aspect-video"
+              className="w-full"
+              loading="eager"
+              showErrorLabel
+            />
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-4">
               <Eye className="h-12 w-12 text-zinc-800" />

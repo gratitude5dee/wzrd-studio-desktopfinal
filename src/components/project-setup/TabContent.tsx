@@ -1,14 +1,16 @@
-import { Suspense, lazy, Component, ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Suspense, lazy, Component, ReactNode, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useProjectContext } from './ProjectContext';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ProjectSetupTab } from './types';
 
 // Lazy imports with retry logic for dynamic chunk loading
 const ConceptTab = lazy(() => import('./ConceptTab').catch(() => import('./ConceptTab')));
 const StorylineTab = lazy(() => import('./StorylineTab').catch(() => import('./StorylineTab')));
 const SettingsTab = lazy(() => import('./SettingsTab').catch(() => import('./SettingsTab')));
 const BreakdownTab = lazy(() => import('./BreakdownTab').catch(() => import('./BreakdownTab')));
+const TAB_ORDER: ProjectSetupTab[] = ['concept', 'storyline', 'settings', 'breakdown'];
 
 // Error boundary for lazy loaded components
 class TabErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -61,70 +63,66 @@ const TabFallback = () => (
 
 const TabContent = () => {
   const { activeTab, projectData, updateProjectData } = useProjectContext();
+  const [mountedTabs, setMountedTabs] = useState<Set<ProjectSetupTab>>(
+    () => new Set([activeTab])
+  );
+
+  useEffect(() => {
+    setMountedTabs((current) => {
+      if (current.has(activeTab)) return current;
+      const next = new Set(current);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
+  const mountedTabList = useMemo(
+    () => TAB_ORDER.filter((tab) => mountedTabs.has(tab)),
+    [mountedTabs]
+  );
 
   const tabContentVariants = {
-    hidden: { opacity: 0, x: 20 },
+    inactive: { opacity: 0, x: 0, transition: { duration: 0.15 } },
     visible: { opacity: 1, x: 0, transition: { duration: 0.4 } },
-    exit: { opacity: 0, x: -20, transition: { duration: 0.3 } }
   } as const;
+
+  const renderTabContent = (tab: ProjectSetupTab) => {
+    switch (tab) {
+      case 'concept':
+        return <ConceptTab projectData={projectData} updateProjectData={updateProjectData} />;
+      case 'storyline':
+        return <StorylineTab projectData={projectData} updateProjectData={updateProjectData} />;
+      case 'settings':
+        return <SettingsTab projectData={projectData} updateProjectData={updateProjectData} />;
+      case 'breakdown':
+        return <BreakdownTab projectData={projectData} updateProjectData={updateProjectData} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="flex-1 overflow-auto bg-[#111319]">
       <TabErrorBoundary>
-        <AnimatePresence mode="wait">
-          {activeTab === 'concept' && (
+        {mountedTabList.map((tab) => {
+          const isActive = activeTab === tab;
+
+          return (
             <motion.div
-              key="concept"
+              key={tab}
               variants={tabContentVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
+              initial={false}
+              animate={isActive ? 'visible' : 'inactive'}
+              hidden={!isActive}
+              aria-hidden={!isActive}
+              data-project-setup-tab={tab}
             >
               <Suspense fallback={<TabFallback />}>
-                <ConceptTab projectData={projectData} updateProjectData={updateProjectData} />
+                {renderTabContent(tab)}
               </Suspense>
             </motion.div>
-          )}
-          {activeTab === 'storyline' && (
-            <motion.div
-              key="storyline"
-              variants={tabContentVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <Suspense fallback={<TabFallback />}>
-                <StorylineTab projectData={projectData} updateProjectData={updateProjectData} />
-              </Suspense>
-            </motion.div>
-          )}
-          {activeTab === 'settings' && (
-            <motion.div
-              key="settings"
-              variants={tabContentVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <Suspense fallback={<TabFallback />}>
-                <SettingsTab projectData={projectData} updateProjectData={updateProjectData} />
-              </Suspense>
-            </motion.div>
-          )}
-          {activeTab === 'breakdown' && (
-            <motion.div
-              key="breakdown"
-              variants={tabContentVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <Suspense fallback={<TabFallback />}>
-                <BreakdownTab projectData={projectData} updateProjectData={updateProjectData} />
-              </Suspense>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          );
+        })}
       </TabErrorBoundary>
     </div>
   );

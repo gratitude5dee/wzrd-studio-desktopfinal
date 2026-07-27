@@ -3,12 +3,19 @@ import { authenticateRequest, AuthError } from "../_shared/auth.ts";
 import { errorResponse, handleCors, successResponse } from "../_shared/response.ts";
 
 /**
- * GA endpoint for ephemeral client secrets.
- * Do NOT add an `openai-beta` header — that causes the
- * "api_version_mismatch" error when the key is later used
- * with the GA `/v1/realtime` WebRTC endpoint.
+ * GA endpoint for ephemeral client secrets. The browser uses the returned
+ * `value` with `/v1/realtime/calls`; never send a standard OpenAI API key
+ * to the client.
  */
-const OPENAI_REALTIME_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/sessions";
+const OPENAI_REALTIME_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets";
+
+async function hashSafetyIdentifier(userId: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`wzrd:${userId}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,25 +27,32 @@ serve(async (req) => {
   }
 
   try {
-    await authenticateRequest(req.headers);
+    const user = await authenticateRequest(req.headers);
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
       return errorResponse("OPENAI_API_KEY is not configured", 500);
     }
 
-    const model = Deno.env.get("WZRD_REALTIME_MODEL") || "gpt-realtime";
+    const model = Deno.env.get("WZRD_REALTIME_MODEL") || "gpt-realtime-2";
     const voice = Deno.env.get("WZRD_REALTIME_VOICE") || "marin";
+    const safetyIdentifier = await hashSafetyIdentifier(user.id);
 
     const response = await fetch(OPENAI_REALTIME_CLIENT_SECRETS_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": safetyIdentifier,
       },
       body: JSON.stringify({
-        model,
-        voice,
+        session: {
+          type: "realtime",
+          model,
+          audio: {
+            output: { voice },
+          },
+        },
       }),
     });
 

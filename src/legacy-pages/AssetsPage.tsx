@@ -1,10 +1,14 @@
 import { AuraAssetStore } from '@/components/home/AuraAssetStore';
+import AppShell from '@/components/layout/AppShell';
 
 const AssetsPage = () => {
   return (
-    <main className="min-h-screen bg-background p-4 md:p-6" data-testid="asset-management-page">
+    <AppShell
+      activeView="asset-store"
+      contentClassName="min-h-screen bg-background p-4 text-foreground md:p-6"
+    >
       <AuraAssetStore />
-    </main>
+    </AppShell>
   );
 };
 

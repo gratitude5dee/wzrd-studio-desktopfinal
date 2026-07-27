@@ -2,7 +2,9 @@
 import type { CharacterIdentityProfile, EvaluationSummary, ReviewStatus, ShotPacket } from '@/lib/evaluation';
 
 // Image status to track generation progress
-export type ImageStatus = 'pending' | 'prompt_ready' | 'generating' | 'completed' | 'failed';
+export type ImageStatus = 'pending' | 'queued' | 'prompt_ready' | 'generating' | 'completed' | 'failed';
+
+export type VideoStatus = 'pending' | 'queued' | 'generating' | 'completed' | 'failed';
 
 // Audio status to track generation progress
 export type AudioStatus = 'pending' | 'generating' | 'completed' | 'failed';
@@ -26,12 +28,16 @@ export interface ShotDetails {
   image_url: string | null;
   image_asset_id?: string | null;
   image_status: ImageStatus;
+  image_generation_error?: string | null;
+  image_generation_attempts?: number | null;
   image_history?: any[];
   upscale_status?: string | null;
   upscaled_image_url?: string | null;
   video_url: string | null;
   video_asset_id?: string | null;
-  video_status: 'pending' | 'generating' | 'completed' | 'failed';
+  video_status: VideoStatus;
+  video_generation_error?: string | null;
+  video_generation_attempts?: number | null;
   audio_url: string | null;
   audio_status: AudioStatus;
   luma_generation_id: string | null;

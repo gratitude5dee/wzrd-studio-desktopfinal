@@ -44,7 +44,7 @@ const StudioBottomBar = () => {
             <span>Low credits</span>
             <button
               className="ml-1 underline hover:no-underline"
-              onClick={() => navigate(appRoutes.settings.billing)}
+              onClick={() => navigate(appRoutes.systemBilling)}
             >
               Upgrade
             </button>

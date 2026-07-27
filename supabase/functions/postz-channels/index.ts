@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 import { authenticateRequest } from "../_shared/auth.ts";
 import { errorResponse, handleCors, safeErrorResponse, successResponse } from "../_shared/response.ts";
+import { isPostzComposioEnabled, listComposioProviderSummaries } from "../_shared/postz/composio.ts";
 
 type ActionBody =
   | { action: "list" }
@@ -50,6 +51,10 @@ serve(async (req) => {
       requiredEnv("SUPABASE_URL"),
       requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
     );
+
+    if (isPostzComposioEnabled()) {
+      await listComposioProviderSummaries({ supabaseAdmin, ownerId: user.id });
+    }
 
     if (body.action === "seed") {
       // Seed demo channels for Phase 2 so the UI can be used before OAuth/provider work lands.

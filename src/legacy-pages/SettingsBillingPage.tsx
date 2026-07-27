@@ -519,7 +519,7 @@ const SettingsBillingPage = () => {
         <Card className="border-zinc-800/60 bg-zinc-950/40 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-zinc-400">Need help understanding billing modes, webhooks, or checkout?</p>
-            <Link to={appRoutes.settings.billingDocs}>
+            <Link to={appRoutes.systemBillingDocs}>
               <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-zinc-200">
                 <FileText className="mr-2 h-4 w-4" /> Billing Docs
               </Button>

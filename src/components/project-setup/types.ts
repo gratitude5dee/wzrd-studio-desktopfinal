@@ -144,11 +144,14 @@ export interface ProjectData {
 // Character type definition for reuse across components
 export interface Character {
   id: string;
+  project_id?: string;
   name: string;
   description?: string | null;
   image_url?: string | null;
   image_status?: 'pending' | 'generating' | 'completed' | 'failed';
   image_generation_error?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // Storyline type definition

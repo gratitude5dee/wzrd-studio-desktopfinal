@@ -38,7 +38,7 @@ import { usePtyTerminalStore } from "@qcut-app/stores/pty-terminal-store";
 import { debugError, debugLog } from "@qcut-app/lib/debug/debug-config";
 
 import { projectService } from "@/services/supabaseService";
-import { assetService } from "@/services/assetService";
+import { videoEditorService } from "@/services/videoEditorService";
 import { setWzrdProjectContext } from "./bridge/wzrd-project-context";
 import { installEditorAgentApi } from "./bridge/agent-api";
 import { maybeImportLegacyTimeline } from "./bridge/legacy-importer";
@@ -76,25 +76,10 @@ function shouldUseLocalProjectData(projectId: string): boolean {
 	return !isUuid(projectId) && readPublicFlag("BYPASS_AUTH_FOR_TESTS", ["VITE_BYPASS_AUTH_FOR_TESTS"]);
 }
 
-function guessMediaType(asset: {
-	asset_type?: string;
-	mime_type?: string;
-}): "image" | "video" | "audio" {
-	const mime = asset.mime_type ?? "";
-	if (mime.startsWith("video/")) return "video";
-	if (mime.startsWith("audio/")) return "audio";
-	const kind = (asset.asset_type ?? "").toLowerCase();
-	if (kind === "video" || kind === "audio" || kind === "image") return kind as any;
-	return "image";
-}
-
-function numberValue(value: unknown): number | undefined {
-	if (typeof value === "number" && Number.isFinite(value)) return value;
-	if (typeof value === "string" && value.trim()) {
-		const parsed = Number(value);
-		if (Number.isFinite(parsed)) return parsed;
-	}
-	return undefined;
+function mimeTypeForMediaType(type: "image" | "video" | "audio"): string {
+	if (type === "video") return "video/mp4";
+	if (type === "audio") return "audio/mpeg";
+	return "image/png";
 }
 
 export function QCutEditor({ projectId }: { projectId: string }) {
@@ -277,7 +262,7 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 			if (useLocalProjectData) return;
 
 			try {
-				const assets = await assetService.list({ projectId: wzrdProjectId });
+				const assets = await videoEditorService.getMediaLibrary(wzrdProjectId);
 				if (abortController.signal.aborted) return;
 
 				const mediaStore = useMediaStore.getState();
@@ -287,10 +272,8 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 					if (abortController.signal.aborted) return;
 					if (existingIds.has(asset.id)) continue;
 
-					const type = guessMediaType(asset);
-
-					const cdnUrl =
-						asset.cdn_url || asset.preview_url || asset.thumbnail_url || null;
+					const type = asset.mediaType;
+					const cdnUrl = asset.playbackUrl || asset.url || asset.proxyUrl || null;
 					if (!cdnUrl) continue;
 
 					let url: string | undefined = cdnUrl;
@@ -311,34 +294,27 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 						}
 					}
 
-					const meta = (asset.media_metadata ?? {}) as Record<string, unknown>;
-					const duration = numberValue(meta.durationSeconds ?? meta.duration ?? meta.duration_ms);
-					const width = numberValue(meta.width);
-					const height = numberValue(meta.height);
-					const fps = numberValue(meta.fps);
-
 					// Placeholder file (size 0) — playback uses `url` (see media-source WZRD-EDIT).
-					const file = new File([], asset.file_name || "asset", {
-						type: asset.mime_type || undefined,
+					const file = new File([], asset.name || "asset", {
+						type: mimeTypeForMediaType(type),
 					});
 
 					await mediaStore.addMediaItem(qcutProjectId, {
 						id: asset.id,
-						name: asset.original_file_name || asset.file_name,
+						name: asset.name,
 						type,
 						file,
 						url,
-						thumbnailUrl: asset.thumbnail_url ?? undefined,
-						originalUrl: asset.cdn_url ?? undefined,
+						thumbnailUrl: asset.thumbnailUrl ?? undefined,
+						originalUrl: asset.url ?? undefined,
 						localPath,
-						duration,
-						width,
-						height,
-						fps,
+						duration: asset.durationSeconds,
 						metadata: {
 							source: "wzrd-asset",
 							assetId: asset.id,
-							assetType: asset.asset_type,
+							sourceType: asset.sourceType,
+							mediaStatus: asset.mediaStatus,
+							mediaError: asset.mediaError,
 						},
 					});
 				}

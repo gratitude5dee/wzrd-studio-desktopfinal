@@ -4,10 +4,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { errorResponse, handleCors, safeErrorResponse, successResponse } from "../_shared/response.ts";
 import { decryptToken, encryptToken } from "../_shared/postz/crypto.ts";
+import { isPostzComposioEnabled, listComposioProviderSummaries, startComposioConnection } from "../_shared/postz/composio.ts";
 import { getProvider, isProviderConfigured, listProviders } from "../_shared/postz/providers/index.ts";
 import type { OAuthTarget } from "../_shared/postz/providers/types.ts";
 
-type StartBody = { action: "start"; provider: string; redirect?: string | null };
+type StartBody = { action: "start"; provider: string; redirect?: string | null; app_return_url?: string | null };
 type ListProvidersBody = { action: "list-providers" };
 type ListTargetsBody = { action: "list-targets"; provider: string; state_id: string };
 type FinalizeBody = { action: "finalize"; provider: string; state_id: string; target_id: string };
@@ -26,6 +27,7 @@ type OAuthStateRow = {
   refresh_token_ref?: string | null;
   token_expires_at?: string | null;
   auth_details?: any;
+  app_return_url?: string | null;
 };
 
 function requiredEnv(name: string): string {
@@ -54,6 +56,73 @@ function makeState(): string {
 function getDefaultRedirect(): string {
   const base = requiredEnv("SUPABASE_URL");
   return `${base.replace(/\/+$/, "")}/functions/v1/postz-oauth`;
+}
+
+function defaultAppReturnUrl(): string {
+  return "wzrd://postz/connected";
+}
+
+function originOf(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAppReturnUrl(value: string | null | undefined): string {
+  const fallback = defaultAppReturnUrl();
+  if (!value) return fallback;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol === "wzrd:") return url.toString();
+    if (url.pathname === "/" || url.pathname === "") {
+      url.pathname = "/postz/connected";
+    }
+    return url.toString();
+  } catch {
+    return fallback;
+  }
+}
+
+function isAllowedAppReturnUrl(value: string, requestOrigin: string | null): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "wzrd:") return true;
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return false;
+
+    const publicWebUrl = Deno.env.get("PUBLIC_WEB_URL");
+    const allowedOrigins = new Set(
+      (publicWebUrl ?? "")
+        .split(",")
+        .map((item) => originOf(item.trim()))
+        .filter((item): item is string => Boolean(item)),
+    );
+    if (requestOrigin) allowedOrigins.add(requestOrigin);
+    allowedOrigins.add("http://localhost:3000");
+    allowedOrigins.add("http://localhost:5173");
+    allowedOrigins.add("http://127.0.0.1:3000");
+    allowedOrigins.add("http://127.0.0.1:5173");
+
+    return allowedOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
+function connectionRedirectUrl(base: string | null | undefined, params: Record<string, string | null | undefined>): string {
+  const target = normalizeAppReturnUrl(base);
+  const url = new URL(target);
+  url.searchParams.set("connected", "1");
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== "") {
+      url.searchParams.set(key, value);
+    }
+  }
+  return url.toString();
 }
 
 function redirectResponse(url: string, status = 302) {
@@ -149,7 +218,14 @@ serve(async (req) => {
       const error = url.searchParams.get("error");
 
       if (error) {
-        return redirectResponse(`wzrd://postz/connected?status=error&error=${encodeURIComponent(error)}`);
+        const { data: stateRow } = state
+          ? await supabaseAdmin
+            .from("postz_oauth_state")
+            .select("app_return_url")
+            .eq("state", state)
+            .maybeSingle()
+          : { data: null };
+        return redirectResponse(connectionRedirectUrl((stateRow as any)?.app_return_url, { status: "error", error }));
       }
 
       if (!code || !state) {
@@ -169,6 +245,7 @@ serve(async (req) => {
       }
 
       const row = oauthState as unknown as OAuthStateRow;
+      const appReturnUrl = row.app_return_url ?? defaultAppReturnUrl();
       const provider = getProvider(row.provider);
       if (!provider) {
         return errorResponse("Unsupported provider", 400);
@@ -182,7 +259,7 @@ serve(async (req) => {
 
       if (tokenDetails.error) {
         return redirectResponse(
-          `wzrd://postz/connected?status=error&provider=${encodeURIComponent(row.provider)}&error=${encodeURIComponent(tokenDetails.error)}`,
+          connectionRedirectUrl(appReturnUrl, { status: "error", provider: row.provider, error: tokenDetails.error }),
         );
       }
 
@@ -243,13 +320,35 @@ serve(async (req) => {
           await supabaseAdmin.from("postz_oauth_state").delete().eq("id", row.id);
 
           return redirectResponse(
-            `wzrd://postz/connected?status=success&provider=${encodeURIComponent(row.provider)}&channel=${encodeURIComponent(channelId)}`,
+            connectionRedirectUrl(appReturnUrl, { status: "success", provider: row.provider, channel: channelId }),
+          );
+        }
+
+        if (targets.length === 0) {
+          const channelId = await upsertChannel({
+            supabaseAdmin,
+            ownerId: row.owner_id,
+            provider: row.provider,
+            providerAccountId: tokenDetails.id,
+            name: tokenDetails.name,
+            username: tokenDetails.username,
+            picture: tokenDetails.picture ?? null,
+            tokenRef: accessTokenRef,
+            refreshRef,
+            tokenExpiresAt: expiresAt,
+            additionalSettings: tokenDetails.additionalSettings ?? [],
+          });
+
+          await supabaseAdmin.from("postz_oauth_state").delete().eq("id", row.id);
+
+          return redirectResponse(
+            connectionRedirectUrl(appReturnUrl, { status: "success", provider: row.provider, channel: channelId }),
           );
         }
 
         // Needs user choice (page/channel/etc.) — redirect back with a state reference.
         return redirectResponse(
-          `wzrd://postz/connected?status=needs_target&provider=${encodeURIComponent(row.provider)}&state_id=${encodeURIComponent(row.id)}`,
+          connectionRedirectUrl(appReturnUrl, { status: "needs_target", provider: row.provider, state_id: row.id }),
         );
       }
 
@@ -270,7 +369,7 @@ serve(async (req) => {
       await supabaseAdmin.from("postz_oauth_state").delete().eq("id", row.id);
 
       return redirectResponse(
-        `wzrd://postz/connected?status=success&provider=${encodeURIComponent(row.provider)}&channel=${encodeURIComponent(channelId)}`,
+        connectionRedirectUrl(appReturnUrl, { status: "success", provider: row.provider, channel: channelId }),
       );
     }
 
@@ -280,6 +379,30 @@ serve(async (req) => {
 
     const user = await authenticateRequest(req.headers);
     const body = (await req.json()) as ActionBody;
+
+    if (isPostzComposioEnabled()) {
+      if (body.action === "list-providers") {
+        const providers = await listComposioProviderSummaries({ supabaseAdmin, ownerId: user.id });
+        return successResponse({ providers });
+      }
+
+      if (body.action === "start") {
+        const appReturnUrl = normalizeAppReturnUrl(body.app_return_url);
+        if (!isAllowedAppReturnUrl(appReturnUrl, req.headers.get("Origin"))) {
+          return errorResponse("App return URL is not allowed", 400);
+        }
+        const result = await startComposioConnection({
+          ownerId: user.id,
+          provider: body.provider,
+          callbackUrl: appReturnUrl,
+        });
+        return successResponse(result);
+      }
+
+      if (body.action === "list-targets" || body.action === "finalize") {
+        return errorResponse("Composio connections do not require target selection", 400);
+      }
+    }
 
     if (body.action === "list-providers") {
       return successResponse({ providers: listProviders() });
@@ -291,11 +414,19 @@ serve(async (req) => {
         return errorResponse("Unsupported provider", 400);
       }
 
+      if (provider.implemented !== true) {
+        return errorResponse("Provider not implemented", 400);
+      }
+
       if (!isProviderConfigured(provider)) {
         return errorResponse("Provider not configured", 400);
       }
 
       const redirect = body.redirect ?? getDefaultRedirect();
+      const appReturnUrl = normalizeAppReturnUrl(body.app_return_url);
+      if (!isAllowedAppReturnUrl(appReturnUrl, req.headers.get("Origin"))) {
+        return errorResponse("App return URL is not allowed", 400);
+      }
       const state = makeState();
       const codeVerifier = makeCodeVerifier();
 
@@ -308,6 +439,7 @@ serve(async (req) => {
         state: authUrl.state,
         code_verifier: authUrl.codeVerifier,
         redirect,
+        app_return_url: appReturnUrl,
         expires_at: expiresAt,
       };
 

@@ -8,9 +8,10 @@ import {
 	QUALITY_SIZE_ESTIMATES,
 	getSupportedFormats,
 } from "@qcut-app/types/export";
-import { useElectron } from "@qcut-app/hooks/useElectron";
 // Export engine factory and types will be imported dynamically when needed
 import { debugLog, debugWarn } from "@qcut-app/lib/debug/debug-config";
+
+type EngineSelection = "auto" | "standard" | "ffmpeg" | "cli";
 
 /**
  * Hook for managing export settings state, derived metadata (supported formats, resolution, size estimates),
@@ -20,15 +21,12 @@ export function useExportSettings() {
 	const { isDialogOpen, panelView, settings, updateSettings } =
 		useExportStore();
 	const { getTotalDuration, tracks } = useTimelineStore();
-	const { isElectron } = useElectron();
 	const isExportUiActive = isDialogOpen || panelView === "export";
 
 	const [quality, setQuality] = useState<ExportQuality>(settings.quality);
 	const [format, setFormat] = useState<ExportFormat>(settings.format);
 	const [filename, setFilename] = useState(settings.filename);
-	const [engineType, setEngineType] = useState<"standard" | "ffmpeg" | "cli">(
-		isElectron() ? "cli" : "standard"
-	);
+	const [engineType, setEngineType] = useState<EngineSelection>("auto");
 	const [ffmpegAvailable, setFfmpegAvailable] = useState(false);
 	const [engineRecommendation, setEngineRecommendation] = useState<
 		string | null
@@ -79,7 +77,11 @@ export function useExportSettings() {
 						[ExportEngineType.REMOTION]: "Remotion Engine",
 					};
 
-					const label = engineLabels[recommendation.engineType];
+					const label =
+						recommendation.engineType === ExportEngineType.MUXER &&
+						recommendation.capabilities.hasWebGPU
+							? "WebGPU + WebCodecs (Hardware H.264)"
+							: engineLabels[recommendation.engineType];
 					const performance =
 						recommendation.estimatedPerformance.charAt(0).toUpperCase() +
 						recommendation.estimatedPerformance.slice(1);

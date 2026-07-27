@@ -261,7 +261,9 @@ serve(async (req) => {
                 prompt_idea: promptIdea,
                 visual_prompt: null,
                 image_status: 'pending',
+                image_generation_error: null,
                 video_status: 'pending',
+                video_generation_error: null,
                 audio_status: 'pending',
               })
               .select('id, shot_number')
@@ -309,6 +311,7 @@ serve(async (req) => {
                     .update({
                       visual_prompt: shot.visual_prompt,
                       image_status: 'prompt_ready',
+                      image_generation_error: null,
                       failure_reason: null,
                     })
                     .eq('id', shot.id);

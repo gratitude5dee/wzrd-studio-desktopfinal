@@ -67,9 +67,8 @@ export const ComputeEdge = memo(
             strokeDasharray="6 6"
             strokeLinecap="round"
             opacity={0.95}
-          >
-            <animate attributeName="stroke-dashoffset" values="0;-12" dur="0.8s" repeatCount="indefinite" />
-          </path>
+            className="animate-[studio-flow_0.8s_linear_infinite]"
+          />
         ) : null}
 
         <circle cx={sourceX} cy={sourceY} r={selected ? 2.4 : 2} fill={strokeColor} opacity={0.72} />

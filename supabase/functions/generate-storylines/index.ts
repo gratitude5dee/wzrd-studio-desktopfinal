@@ -703,7 +703,8 @@ serve(async (req) => {
                   camera_movement: shotIdea.camera_movement,
                   duration_seconds: shotIdea.duration_seconds,
                   composition_notes: shotIdea.composition_notes,
-                  image_status: 'prompt_ready'
+                  image_status: 'prompt_ready',
+                  image_generation_error: null
                 });
               });
             });

@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Node } from 'reactflow';
+import type { Node } from '@xyflow/react';
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;

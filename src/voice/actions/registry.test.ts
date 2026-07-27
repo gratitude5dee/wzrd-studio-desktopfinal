@@ -135,4 +135,39 @@ describe('voice action registry', () => {
     });
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  it('filters and blocks actions that are unavailable for the current app context', async () => {
+    const registry = createVoiceActionRegistry();
+    const handler = vi.fn(async () => ({
+      ok: true as const,
+      status: 'completed' as const,
+      message: 'generated',
+    }));
+
+    registry.register({
+      name: 'kanvas_generate',
+      scope: 'kanvas',
+      availability: (context) => context.app?.currentStudio === 'image',
+      handler,
+    });
+
+    expect(registry.list({ app: { currentStudio: 'video' } })).toHaveLength(0);
+
+    await expect(
+      registry.execute('kanvas_generate', {}, { app: { currentStudio: 'video' } }),
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 'unavailable',
+      errorCode: 'voice_action_unavailable',
+    });
+    expect(handler).not.toHaveBeenCalled();
+
+    await expect(
+      registry.execute('kanvas_generate', {}, { app: { currentStudio: 'image' } }),
+    ).resolves.toMatchObject({
+      ok: true,
+      status: 'completed',
+      traceId: expect.stringMatching(/^voice_kanvas_generate_/),
+    });
+  });
 });

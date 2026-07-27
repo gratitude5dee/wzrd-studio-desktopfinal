@@ -5,11 +5,14 @@ import type {
   KanvasGenerationRequest,
   KanvasImageToImageRequest,
   KanvasImageToVideoRequest,
+  KanvasAsset,
   KanvasJob,
   KanvasLipSyncRequest,
   KanvasMediaType,
   KanvasMode,
+  KanvasStudioMeta,
   KanvasReferenceToVideoRequest,
+  NormalizedKanvasMedia,
   KanvasResultPayload,
   KanvasStudio,
   KanvasTalkingHeadRequest,
@@ -24,44 +27,81 @@ export const KANVAS_STUDIO_ORDER: KanvasStudio[] = ["image", "video", "edit", "l
 
 export const KANVAS_STUDIO_META: Record<
   KanvasStudio,
-  { label: string; headline: string; description: string }
+  KanvasStudioMeta
 > = {
   image: {
+    key: "image",
     label: "Image",
     headline: "Image Studio",
     description: "Transform prompts and references into styled stills.",
+    icon: "image",
+    mediaKinds: ["image"],
+    queryValue: "image",
+    supportsGeneration: true,
   },
   video: {
+    key: "video",
     label: "Video",
     headline: "Video Studio",
     description: "Turn prompts and frames into motion-first clips.",
+    icon: "video",
+    mediaKinds: ["image", "video"],
+    queryValue: "video",
+    supportsGeneration: true,
   },
   edit: {
+    key: "edit",
     label: "Edit",
     headline: "Edit Studio",
     description: "Inpaint, relight, upscale, and refine your assets.",
+    icon: "pencil",
+    mediaKinds: ["image"],
+    queryValue: "edit",
+    supportsGeneration: false,
   },
   cinema: {
+    key: "cinema",
     label: "Cinema Studio",
     headline: "Cinema Studio 2.0",
     description: "Compose a cinematic still with camera and lens language.",
+    icon: "clapperboard",
+    mediaKinds: ["image"],
+    queryValue: "cinema",
+    supportsGeneration: true,
   },
   lipsync: {
+    key: "lipsync",
     label: "Lip Sync",
     headline: "Lip Sync",
     description: "Animate portraits or existing footage with synced speech.",
+    icon: "mic",
+    mediaKinds: ["image", "video", "audio"],
+    queryValue: "lipsync",
+    supportsGeneration: true,
   },
   worldview: {
+    key: "worldview",
     label: "Worldview",
     headline: "Worldview Studio",
     description: "Generate 3D worlds, capture takes, and compose AI shots.",
+    icon: "globe",
+    mediaKinds: ["image", "video"],
+    queryValue: "worldview",
+    supportsGeneration: false,
   },
   "character-creation": {
+    key: "character-creation",
     label: "Characters",
     headline: "Character Creation",
     description: "Design characters & objects, store them, and reference with @mentions.",
+    icon: "sparkles",
+    mediaKinds: ["image"],
+    queryValue: "character-creation",
+    supportsGeneration: false,
   },
 };
+
+export const KANVAS_STUDIO_NAV_ITEMS = KANVAS_STUDIO_ORDER.map((studio) => KANVAS_STUDIO_META[studio]);
 
 export const KANVAS_CAMERAS: Record<string, string> = {
   "Modular 8K Digital": "modular 8K digital cinema camera",
@@ -355,6 +395,69 @@ export function buildLipSyncRequest(input: {
   };
 }
 
+function normalizeMediaUrl(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getAssetTitle(asset: KanvasAsset): string {
+  return asset.original_file_name || asset.file_name || "Kanvas asset";
+}
+
+export function normalizeKanvasAssetMedia(asset: KanvasAsset): NormalizedKanvasMedia {
+  const primaryUrl = normalizeMediaUrl(asset.cdn_url) ?? normalizeMediaUrl(asset.preview_url) ?? normalizeMediaUrl(asset.thumbnail_url);
+  const previewUrl = normalizeMediaUrl(asset.preview_url) ?? normalizeMediaUrl(asset.thumbnail_url) ?? primaryUrl;
+  const thumbnailUrl = normalizeMediaUrl(asset.thumbnail_url) ?? previewUrl;
+  const kind = asset.asset_type === "image" || asset.asset_type === "video" ? asset.asset_type : "unknown";
+
+  return {
+    kind,
+    primaryUrl,
+    previewUrl,
+    thumbnailUrl,
+    posterUrl: kind === "video" ? thumbnailUrl : null,
+    alt: getAssetTitle(asset),
+    sourceType: "asset",
+    status: primaryUrl || previewUrl || thumbnailUrl ? "ready" : "missing",
+  };
+}
+
+export function normalizeKanvasJobMedia(job: KanvasJob | null): NormalizedKanvasMedia {
+  if (!job) {
+    return {
+      kind: "unknown",
+      primaryUrl: null,
+      previewUrl: null,
+      thumbnailUrl: null,
+      posterUrl: null,
+      alt: "Kanvas output",
+      sourceType: "unknown",
+      status: "missing",
+    };
+  }
+
+  const primaryUrl = normalizeMediaUrl(job.resultPayload?.primaryUrl) ?? normalizeMediaUrl(job.resultUrl);
+  const previewUrl = normalizeMediaUrl(job.resultPayload?.previewUrl) ?? primaryUrl;
+  const thumbnailUrl = normalizeMediaUrl(job.resultPayload?.thumbnailUrl) ?? previewUrl;
+  const kind =
+    job.resultPayload?.mediaType === "image" || job.resultPayload?.mediaType === "video"
+      ? job.resultPayload.mediaType
+      : job.jobType === "image" || job.jobType === "video"
+        ? job.jobType
+        : "unknown";
+  const isLoading = job.status === "queued" || job.status === "processing";
+
+  return {
+    kind,
+    primaryUrl,
+    previewUrl,
+    thumbnailUrl,
+    posterUrl: kind === "video" ? thumbnailUrl : null,
+    alt: `${KANVAS_STUDIO_META[job.studio]?.label ?? "Kanvas"} output`,
+    sourceType: "job",
+    status: primaryUrl || previewUrl || thumbnailUrl ? "ready" : isLoading ? "loading" : "missing",
+  };
+}
+
 export function normalizeKanvasJobRow(row: GenerationJobRow): KanvasJob {
   // Support both snake_case (DB rows) and camelCase (edge function responses)
   const rawResultPayload = row.result_payload ?? (row as any).resultPayload;
@@ -426,7 +529,8 @@ export function normalizeKanvasJobRow(row: GenerationJobRow): KanvasJob {
 }
 
 export function getJobPrimaryUrl(job: KanvasJob | null): string | null {
-  return job?.resultPayload?.primaryUrl || job?.resultPayload?.previewUrl || job?.resultUrl || null;
+  const media = normalizeKanvasJobMedia(job);
+  return media.primaryUrl || media.previewUrl || null;
 }
 
 export function isJobActive(job: KanvasJob): boolean {

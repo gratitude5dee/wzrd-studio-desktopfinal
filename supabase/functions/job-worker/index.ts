@@ -37,7 +37,8 @@ const taskProcessors = {
         project_id,
         shot_number: index + 1,
         prompt_idea: idea,
-        image_status: 'pending'
+        image_status: 'pending',
+        image_generation_error: null
       }));
 
       const { error: insertError } = await supabase
@@ -92,7 +93,8 @@ const taskProcessors = {
         .from('shots')
         .update({ 
           visual_prompt: data.text, 
-          image_status: 'prompt_ready' 
+          image_status: 'prompt_ready',
+          image_generation_error: null
         })
         .eq('id', shot_id);
 

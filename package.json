@@ -165,7 +165,6 @@
     "react-markdown": "^10.0.1",
     "react-resizable-panels": "^4.6.4",
     "react-router-dom": "^6.26.2",
-    "reactflow": "^11.11.4",
     "recharts": "^2.12.7",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",

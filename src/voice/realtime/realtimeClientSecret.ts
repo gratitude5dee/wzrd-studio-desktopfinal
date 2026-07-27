@@ -4,6 +4,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/config'
 export interface RealtimeSessionInfo {
   clientSecret: string;
   model: string | null;
+  expiresAt: number | null;
+  session: Record<string, unknown> | null;
 }
 
 export function extractRealtimeClientSecret(payload: unknown): string | null {
@@ -29,7 +31,24 @@ export function extractRealtimeModel(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const record = payload as Record<string, unknown>;
   if (typeof record.model === 'string') return record.model;
+  const session = record.session;
+  if (session && typeof session === 'object') {
+    const model = (session as Record<string, unknown>).model;
+    if (typeof model === 'string') return model;
+  }
   return null;
+}
+
+export function extractRealtimeExpiresAt(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = (payload as Record<string, unknown>).expires_at;
+  return typeof value === 'number' ? value : null;
+}
+
+export function extractRealtimeSession(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const session = (payload as Record<string, unknown>).session;
+  return session && typeof session === 'object' ? (session as Record<string, unknown>) : null;
 }
 
 /**
@@ -98,6 +117,8 @@ export async function fetchRealtimeClientSecret(): Promise<RealtimeSessionInfo> 
   }
 
   const model = extractRealtimeModel(payload);
+  const expiresAt = extractRealtimeExpiresAt(payload);
+  const session = extractRealtimeSession(payload);
 
-  return { clientSecret: secret, model };
+  return { clientSecret: secret, model, expiresAt, session };
 }

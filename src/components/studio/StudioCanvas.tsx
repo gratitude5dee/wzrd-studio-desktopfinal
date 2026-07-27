@@ -11,6 +11,7 @@ import {
   NodeTypes,
   ReactFlow,
   ReactFlowProvider,
+  Viewport,
   useEdgesState,
   useNodesInitialized,
   useNodesState,
@@ -33,6 +34,7 @@ import { BezierConnection } from './connections/BezierConnection';
 import { CustomConnectionLine } from './ConnectionLine';
 import { ConnectionNodeSelector } from './ConnectionNodeSelector';
 import { CanvasToolbar } from './canvas/CanvasToolbar';
+import { CanvasContextMenu } from './canvas/CanvasContextMenu';
 import { ConnectionModeIndicator } from './canvas/ConnectionModeIndicator';
 import { KeyboardShortcutsOverlay } from './KeyboardShortcutsOverlay';
 import { QueueIndicator } from './QueueIndicator';
@@ -72,11 +74,26 @@ import { resolveIncomingForUI } from '@/lib/compute/applyBinding';
 import { buildFloraSeedGraph, FLORA_EXAMPLE_COPY, isFloraSeedNode } from '@/lib/studio/floraSeed';
 import { getMediaActionById } from '@/lib/studio/mediaActionRegistry';
 import {
+  areStringArraysEqual,
+  buildFrameNodeForSelection,
+  normalizeSelectionIds,
+  toggleSelectionId,
+  type SelectionFrameSource,
+} from '@/lib/studio/selection';
+import {
   buildReactFlowNodeDataSignature,
   reconcileReactFlowEdges,
   reconcileReactFlowNodes,
   stableStringify,
 } from '@/lib/studio/reactFlowReconciliation';
+import {
+  StudioRenderPerfOverlay,
+} from '@/components/perf/StudioRenderPerfOverlay';
+import {
+  isStudioRenderPerfEnabled,
+  recordStudioCanvasRender,
+  recordStudioNodeRender,
+} from '@/components/perf/studioRenderPerfStore';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StudioCanvasProps {
@@ -85,12 +102,22 @@ interface StudioCanvasProps {
   onSelectNode: (id: string | null) => void;
 }
 
+type StudioContextMenuState = {
+  x: number;
+  y: number;
+  flowPosition: { x: number; y: number };
+  targetNodeId?: string;
+};
+
 function withErrorBoundary(Component: React.ComponentType<any>) {
-  return React.memo((props: any) => (
-    <NodeErrorBoundary nodeId={props.id}>
-      <Component {...props} />
-    </NodeErrorBoundary>
-  ));
+  return React.memo((props: any) => {
+    recordStudioNodeRender(props.id, props.data?.label ?? props.type);
+    return (
+      <NodeErrorBoundary nodeId={props.id}>
+        <Component {...props} />
+      </NodeErrorBoundary>
+    );
+  });
 }
 
 const nodeTypes: NodeTypes = {
@@ -126,6 +153,108 @@ const defaultEdgeOptions = {
     dataType: 'data',
   },
 };
+
+function graphViewStateToViewport(viewState: { center: [number, number]; zoom: number }): Viewport {
+  return {
+    x: viewState.center[0],
+    y: viewState.center[1],
+    zoom: viewState.zoom,
+  };
+}
+
+function viewportToGraphViewState(viewport: Viewport) {
+  return {
+    center: [viewport.x, viewport.y] as [number, number],
+    zoom: viewport.zoom,
+  };
+}
+
+function hasViewportChanged(current: { center: [number, number]; zoom: number }, next: Viewport): boolean {
+  return (
+    Math.abs(current.center[0] - next.x) > 0.5 ||
+    Math.abs(current.center[1] - next.y) > 0.5 ||
+    Math.abs(current.zoom - next.zoom) > 0.001
+  );
+}
+
+interface StudioPresenceLayerProps {
+  projectId?: string;
+  currentUserId?: string;
+  selectedNodeId: string | null;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function StudioPresenceLayer({
+  projectId,
+  currentUserId,
+  selectedNodeId,
+  containerRef,
+}: StudioPresenceLayerProps) {
+  const { onlineUsers, updateCursor, clearCursor, updateSelection } = usePresence(projectId ?? null);
+  const cursorFrameRef = useRef<number | null>(null);
+  const pendingCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  const flushCursorUpdate = useCallback(() => {
+    cursorFrameRef.current = null;
+    const position = pendingCursorPositionRef.current;
+    if (!position) {
+      return;
+    }
+
+    void updateCursor(position.x, position.y);
+  }, [updateCursor]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!projectId || !container) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      pendingCursorPositionRef.current = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+
+      if (cursorFrameRef.current === null) {
+        cursorFrameRef.current = window.requestAnimationFrame(flushCursorUpdate);
+      }
+    };
+
+    const handlePointerLeave = () => {
+      pendingCursorPositionRef.current = null;
+      if (cursorFrameRef.current !== null) {
+        window.cancelAnimationFrame(cursorFrameRef.current);
+        cursorFrameRef.current = null;
+      }
+      void clearCursor();
+    };
+
+    container.addEventListener('pointermove', handlePointerMove, { passive: true });
+    container.addEventListener('pointerleave', handlePointerLeave);
+
+    return () => {
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerleave', handlePointerLeave);
+      if (cursorFrameRef.current !== null) {
+        window.cancelAnimationFrame(cursorFrameRef.current);
+        cursorFrameRef.current = null;
+      }
+    };
+  }, [clearCursor, containerRef, flushCursorUpdate, projectId]);
+
+  useEffect(() => {
+    void updateSelection(selectedNodeId ?? null);
+  }, [selectedNodeId, updateSelection]);
+
+  return (
+    <FloraCollaboratorCursors
+      users={onlineUsers}
+      currentUserId={currentUserId}
+    />
+  );
+}
 
 
 
@@ -186,8 +315,9 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   selectedNodeId,
   onSelectNode,
 }) => {
+  recordStudioCanvasRender();
   const { user } = useAuth();
-  const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
+  const { screenToFlowPosition, fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const pendingEdgesCount = useComputeFlowStore(s => s.pendingEdges.length);
   const flushPendingEdges = useComputeFlowStore(s => s.flushPendingEdges);
@@ -202,9 +332,12 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   } = useConnectionMode();
   const nodeDefinitions = useComputeFlowStore((state) => state.nodeDefinitions);
   const edgeDefinitions = useComputeFlowStore((state) => state.edgeDefinitions);
+  const viewState = useComputeFlowStore((state) => state.viewState);
+  const setViewState = useComputeFlowStore((state) => state.setViewState);
   const loadGraph = useComputeFlowStore((state) => state.loadGraph);
   const saveGraph = useComputeFlowStore((state) => state.saveGraph);
   const addNodesAndEdgesAtomic = useComputeFlowStore((state) => state.addNodesAndEdgesAtomic);
+  const updateGraphAtomic = useComputeFlowStore((state) => state.updateGraphAtomic);
   const addNode = useComputeFlowStore((state) => state.addNode);
   const executeGraphStreaming = useComputeFlowStore((state) => state.executeGraphStreaming);
   const cancelExecution = useComputeFlowStore((state) => state.cancelExecution);
@@ -227,11 +360,9 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   useStudioPopulationTestHarness(onSelectNode);
 
   useComputeFlowRealtime(projectId);
-  const { onlineUsers, updateCursor, clearCursor, updateSelection } = usePresence(projectId ?? null);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
-  const cursorThrottleRef = useRef<number | null>(null);
-  const pendingCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const [hydratedProjectId, setHydratedProjectId] = useState<string | null>(projectId ?? null);
   const nodeDefinitionsById = useMemo(
     () => new Map(nodeDefinitions.map((node) => [node.id, node])),
     [nodeDefinitions]
@@ -259,6 +390,9 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState<Edge>([]);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(() => (
+    selectedNodeId ? [selectedNodeId] : []
+  ));
   const { onNodeDragStart, onNodeDragStop, filterNodeChanges } = useNodePositionSync({
     useComputeFlow: true,
     projectId,
@@ -275,8 +409,81 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   const [showGrid, setShowGrid] = useState(true);
   const [promptDraft, setPromptDraft] = useState('');
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<StudioContextMenuState | null>(null);
 
   useUnsavedChangesWarning();
+
+  const selectedNodeIdsSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
+
+  const selectNodes = useCallback(
+    (ids: string[], primaryId?: string | null) => {
+      const nextIds = normalizeSelectionIds(ids, nodeIds);
+      setSelectedNodeIds((current) => (
+        areStringArraysEqual(current, nextIds) ? current : nextIds
+      ));
+
+      const nextPrimaryId =
+        (primaryId && nextIds.includes(primaryId) ? primaryId : undefined) ??
+        nextIds[0] ??
+        null;
+      if (nextPrimaryId !== selectedNodeId) {
+        onSelectNode(nextPrimaryId);
+      }
+    },
+    [nodeIds, onSelectNode, selectedNodeId]
+  );
+
+  const selectSingleNode = useCallback(
+    (id: string | null) => {
+      selectNodes(id ? [id] : [], id);
+    },
+    [selectNodes]
+  );
+
+  const clearSelection = useCallback(() => {
+    selectNodes([], null);
+  }, [selectNodes]);
+
+  const toggleNodeSelection = useCallback(
+    (id: string) => {
+      const nextIds = normalizeSelectionIds(toggleSelectionId(selectedNodeIds, id), nodeIds);
+      const nextPrimaryId = nextIds.includes(id) ? id : nextIds[0] ?? null;
+      setSelectedNodeIds((current) => (
+        areStringArraysEqual(current, nextIds) ? current : nextIds
+      ));
+      if (nextPrimaryId !== selectedNodeId) {
+        onSelectNode(nextPrimaryId);
+      }
+    },
+    [nodeIds, onSelectNode, selectedNodeId, selectedNodeIds]
+  );
+
+  useEffect(() => {
+    if (!selectedNodeId) {
+      setSelectedNodeIds((current) => (current.length === 0 ? current : []));
+      return;
+    }
+
+    if (!nodeIds.has(selectedNodeId)) {
+      return;
+    }
+
+    setSelectedNodeIds((current) => (
+      current.includes(selectedNodeId) ? current : [selectedNodeId]
+    ));
+  }, [nodeIds, selectedNodeId]);
+
+  useEffect(() => {
+    const nextIds = normalizeSelectionIds(selectedNodeIds, nodeIds);
+    if (areStringArraysEqual(selectedNodeIds, nextIds)) {
+      return;
+    }
+
+    setSelectedNodeIds(nextIds);
+    if (!nextIds.includes(selectedNodeId ?? '')) {
+      onSelectNode(nextIds[0] ?? null);
+    }
+  }, [nodeIds, onSelectNode, selectedNodeId, selectedNodeIds]);
 
   const getNodeTypeFromKind = useCallback((kind: string): string => {
     const kindToType: Record<string, string> = {
@@ -311,47 +518,11 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     return kindToType[kind] || 'compute';
   }, []);
 
-  const flushCursorUpdate = useCallback(() => {
-    cursorThrottleRef.current = null;
-    if (!pendingCursorPositionRef.current) {
-      return;
-    }
-
-    const { x, y } = pendingCursorPositionRef.current;
-    void updateCursor(x, y);
-  }, [updateCursor]);
-
-  const handleCanvasPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!projectId || !canvasContainerRef.current) {
-        return;
-      }
-
-      const rect = canvasContainerRef.current.getBoundingClientRect();
-      pendingCursorPositionRef.current = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      };
-
-      if (cursorThrottleRef.current === null) {
-        cursorThrottleRef.current = window.setTimeout(flushCursorUpdate, 60);
-      }
-    },
-    [flushCursorUpdate, projectId]
-  );
-
-  const handleCanvasPointerLeave = useCallback(() => {
-    pendingCursorPositionRef.current = null;
-    if (cursorThrottleRef.current !== null) {
-      window.clearTimeout(cursorThrottleRef.current);
-      cursorThrottleRef.current = null;
-    }
-    void clearCursor();
-  }, [clearCursor]);
-
   const onNodesChange = useCallback(
     (changes: any[]) => {
-      const safeChanges = changes.filter((change) => change.type !== 'remove');
+      const safeChanges = changes.filter(
+        (change) => change.type !== 'remove' && change.type !== 'add' && change.type !== 'replace'
+      );
       onNodesChangeBase(filterNodeChanges(safeChanges));
     },
     [filterNodeChanges, onNodesChangeBase]
@@ -430,12 +601,16 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   const handleDuplicateNodeRef = useLatestRef(handleDuplicateNode);
   const removeNodeRef = useLatestRef(removeNode);
   const scheduleSaveRef = useLatestRef(scheduleSave);
-  const onSelectNodeRef = useLatestRef(onSelectNode);
+  const selectSingleNodeRef = useLatestRef(selectSingleNode);
   const selectedNodeIdRef = useLatestRef(selectedNodeId);
   const updateNodeModelSelectionRef = useLatestRef(updateNodeModelSelection);
   const openConnectionMenuFromPortRef = useLatestRef(openConnectionMenuFromPort);
 
   useEffect(() => {
+    if (projectId && hydratedProjectId !== projectId) {
+      return;
+    }
+
     const computeNodes: Node[] = nodeDefinitions.map((nodeDef) => {
       const incomingEdges = incomingEdgesByTargetNode.get(nodeDef.id) || [];
 
@@ -533,7 +708,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           removeNodeRef.current(nodeDef.id);
           scheduleSaveRef.current();
           if (selectedNodeIdRef.current === nodeDef.id) {
-            onSelectNodeRef.current(null);
+            selectSingleNodeRef.current(null);
           }
         },
         onModelSelectionChange: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) =>
@@ -558,14 +733,18 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         },
         onOpenConnectionMenu: (sourcePortId: string, rect?: DOMRect | null) =>
           openConnectionMenuFromPortRef.current(nodeDef.id, sourcePortId, rect),
-        onSelectNode: onSelectNodeRef.current,
+        onSelectNode: selectSingleNodeRef.current,
       };
 
       return {
         id: nodeDef.id,
         type: getNodeTypeFromKind(nodeDef.kind),
         position: nodeDef.position,
-        selected: selectedNodeId === nodeDef.id,
+        selected: selectedNodeIdsSet.has(nodeDef.id),
+        style: nodeDef.metadata?.role === 'frame' && nodeDef.size
+          ? { width: nodeDef.size.w, height: nodeDef.size.h }
+          : undefined,
+        zIndex: nodeDef.metadata?.role === 'frame' ? -1 : undefined,
         data: nodeData,
         className: nodeDef.metadata?.generatedWorkflowImportId ? 'wzrd-generated-node' : undefined,
         draggable: true,
@@ -581,10 +760,12 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     setNodes((previousNodes) => reconcileReactFlowNodes(previousNodes, computeNodes));
   }, [
     getNodeTypeFromKind,
+    hydratedProjectId,
     incomingEdgesByTargetNode,
     nodeDefinitions,
     nodeDefinitionsById,
-    selectedNodeId,
+    projectId,
+    selectedNodeIdsSet,
     setNodes,
   ]);
 
@@ -600,6 +781,10 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   );
 
   useEffect(() => {
+    if (projectId && hydratedProjectId !== projectId) {
+      return;
+    }
+
     const computeEdges: Edge[] = edgeDefinitions.flatMap((edgeDef) => {
       if (!nodeIds.has(edgeDef.source.nodeId) || !nodeIds.has(edgeDef.target.nodeId)) {
         return [];
@@ -641,13 +826,35 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     });
 
     setEdges((previousEdges) => reconcileReactFlowEdges(previousEdges, computeEdges));
-  }, [edgeDefinitions, nodeIds, openActionMenuForEdge, setEdges]);
+  }, [edgeDefinitions, hydratedProjectId, nodeIds, openActionMenuForEdge, projectId, setEdges]);
 
   useEffect(() => {
-    if (projectId) {
-      void loadGraph(projectId);
+    let cancelled = false;
+
+    if (!projectId) {
+      setHydratedProjectId(null);
+      return;
     }
-  }, [loadGraph, projectId]);
+
+    setHydratedProjectId(null);
+    setNodes([]);
+    setEdges([]);
+
+    void (async () => {
+      await loadGraph(projectId);
+      if (cancelled) {
+        return;
+      }
+
+      const restoredViewport = graphViewStateToViewport(useComputeFlowStore.getState().viewState);
+      await setViewport(restoredViewport, { duration: 0 });
+      setHydratedProjectId(projectId);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadGraph, projectId, setEdges, setNodes, setViewport]);
 
   const fitInFlightRef = useRef(false);
   useEffect(() => {
@@ -668,6 +875,19 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     return () => window.removeEventListener('fitViewToWorkflow', handleFitViewEvent);
   }, [fitView]);
 
+  const handleMoveEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+      const currentViewState = useComputeFlowStore.getState().viewState;
+      if (!hasViewportChanged(currentViewState, viewport)) {
+        return;
+      }
+
+      setViewState(viewportToGraphViewState(viewport));
+      scheduleSaveRef.current();
+    },
+    [setViewState, scheduleSaveRef]
+  );
+
   // PR-2: flush queued edges once React Flow has measured the new nodes.
   useEffect(() => {
     if (nodesInitialized && pendingEdgesCount > 0) {
@@ -675,8 +895,11 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     }
   }, [nodesInitialized, pendingEdgesCount, flushPendingEdges]);
 
-  const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
-  const selectedCount = selectedNodes.length;
+  const selectedFlowNodesById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node])),
+    [nodes]
+  );
+  const selectedCount = selectedNodeIds.length;
   const selectedImageEditNode = useMemo(
     () => (selectedNodeId ? nodeDefinitionsById.get(selectedNodeId) : null),
     [nodeDefinitionsById, selectedNodeId]
@@ -849,33 +1072,129 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     selectedImageEditNode,
   ]);
 
+  const duplicateSelectedNodes = useCallback(() => {
+    const duplicatedIds: string[] = [];
+
+    selectedNodeIds.forEach((id) => {
+      const definition = nodeDefinitionsById.get(id);
+      if (!definition || definition.metadata?.role === 'frame') {
+        return;
+      }
+
+      const duplicated = handleDuplicateNode(definition);
+      duplicatedIds.push(duplicated.id);
+    });
+
+    if (duplicatedIds.length > 0) {
+      selectNodes(duplicatedIds, duplicatedIds[duplicatedIds.length - 1]);
+    }
+  }, [handleDuplicateNode, nodeDefinitionsById, selectNodes, selectedNodeIds]);
+
+  const deleteSelectedNodes = useCallback(() => {
+    if (selectedNodeIds.length === 0) {
+      return;
+    }
+
+    selectedNodeIds.forEach((id) => removeNode(id));
+    scheduleSave();
+    clearSelection();
+  }, [clearSelection, removeNode, scheduleSave, selectedNodeIds]);
+
+  const groupSelectedNodes = useCallback(() => {
+    const frameSources = selectedNodeIds
+      .map((id): SelectionFrameSource | null => {
+        const definition = nodeDefinitionsById.get(id);
+        if (!definition || definition.metadata?.role === 'frame') {
+          return null;
+        }
+
+        const flowNode = selectedFlowNodesById.get(id);
+        const measured = (flowNode as { measured?: { width?: number; height?: number } } | undefined)?.measured;
+        return {
+          ...definition,
+          measuredWidth: flowNode?.width ?? measured?.width,
+          measuredHeight: flowNode?.height ?? measured?.height,
+        };
+      })
+      .filter((node): node is SelectionFrameSource => node !== null);
+
+    const frameNode = buildFrameNodeForSelection(
+      uuidv4(),
+      frameSources,
+      `Group ${Math.max(1, frameSources.length)}`
+    );
+
+    if (!frameNode) {
+      toast.error('Select at least two nodes to create a frame.');
+      return;
+    }
+
+    addNode(frameNode);
+    scheduleSave();
+    selectSingleNode(frameNode.id);
+    toast.success('Frame created.');
+  }, [
+    addNode,
+    nodeDefinitionsById,
+    scheduleSave,
+    selectSingleNode,
+    selectedFlowNodesById,
+    selectedNodeIds,
+  ]);
+
+  const nudgeSelectedNodes = useCallback(
+    (delta: { x: number; y: number }) => {
+      if (selectedNodeIds.length === 0) {
+        return;
+      }
+
+      const updates = selectedNodeIds.flatMap((id) => {
+        const definition = nodeDefinitionsById.get(id);
+        if (!definition) {
+          return [];
+        }
+
+        return [{
+          id,
+          updates: {
+            position: {
+              x: definition.position.x + delta.x,
+              y: definition.position.y + delta.y,
+            },
+          },
+        }];
+      });
+
+      if (updates.length === 0) {
+        return;
+      }
+
+      updateGraphAtomic(updates, [], 'Nudged selected nodes');
+      scheduleSave();
+    },
+    [nodeDefinitionsById, scheduleSave, selectedNodeIds, updateGraphAtomic]
+  );
+
   useStudioKeyboardShortcuts({
     onAddTextNode: () => {
       const node = addNodeOfType('text', getCanvasCenterPosition());
-      onSelectNode(node.id);
+      selectSingleNode(node.id);
     },
     onAddImageNode: () => {
       const node = addNodeOfType('image', getCanvasCenterPosition());
-      onSelectNode(node.id);
+      selectSingleNode(node.id);
     },
     onAddVideoNode: () => {
       const node = addNodeOfType('video', getCanvasCenterPosition());
-      onSelectNode(node.id);
+      selectSingleNode(node.id);
     },
-    onDelete: (nodeIds) => {
-      nodeIds.forEach((id) => removeNode(id));
-      scheduleSave();
-      if (nodeIds.includes(selectedNodeId || '')) {
-        onSelectNode(null);
-      }
-    },
-    onDuplicate: (nodeIds) => {
-      const nodesToDuplicate = nodeDefinitions.filter((node) => nodeIds.includes(node.id));
-      nodesToDuplicate.forEach((node) => {
-        handleDuplicateNode(node);
-      });
-    },
-    selectedNodeIds: selectedNodes.map((node) => node.id),
+    onDelete: deleteSelectedNodes,
+    onDuplicate: duplicateSelectedNodes,
+    onGroup: groupSelectedNodes,
+    onSelectAll: () => selectNodes(nodeDefinitions.map((node) => node.id), selectedNodeId),
+    onClearSelection: clearSelection,
+    onNudgeSelected: nudgeSelectedNodes,
+    selectedNodeIds,
   });
 
   const isValidConnection = useCallback(
@@ -973,7 +1292,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         } as const;
         const node = insertActionOnEdge(activeEdgeInsertion.edgeId, actionByType[type], position);
         if (node) {
-          onSelectNode(node.id);
+          selectSingleNode(node.id);
         }
         requestAnimationFrame(() => {
           setShowNodeSelector(false);
@@ -987,7 +1306,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         : addNodeOfType(type, position);
 
       if (node) {
-        onSelectNode(node.id);
+        selectSingleNode(node.id);
       }
 
       requestAnimationFrame(() => {
@@ -1003,7 +1322,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       createConnectedNode,
       insertActionOnEdge,
       nodeSelectorFlowPosition,
-      onSelectNode,
+      selectSingleNode,
     ]
   );
 
@@ -1023,7 +1342,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           : addActionNode(actionId, position);
 
       if (node) {
-        onSelectNode(node.id);
+        selectSingleNode(node.id);
       }
 
       requestAnimationFrame(() => {
@@ -1039,7 +1358,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       createConnectedActionNode,
       insertActionOnEdge,
       nodeSelectorFlowPosition,
-      onSelectNode,
+      selectSingleNode,
     ]
   );
 
@@ -1066,14 +1385,69 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
 
   const handlePaneClick = useCallback(() => {
     setShowNodeSelector(false);
-    onSelectNode(null);
-  }, [onSelectNode]);
+    setContextMenu(null);
+    clearSelection();
+  }, [clearSelection]);
 
   const handleNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      onSelectNode(node.id);
+    (event: React.MouseEvent, node: Node) => {
+      setContextMenu(null);
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        toggleNodeSelection(node.id);
+        return;
+      }
+
+      selectSingleNode(node.id);
     },
-    [onSelectNode]
+    [selectSingleNode, toggleNodeSelection]
+  );
+
+  const openNodeSelectorAtContextMenu = useCallback(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    setNodeSelectorFlowPosition(contextMenu.flowPosition);
+    setNodeSelectorScreenPosition({ x: contextMenu.x, y: contextMenu.y });
+    setShowNodeSelector(true);
+    setActiveConnection(null);
+    setActiveEdgeInsertion(null);
+  }, [contextMenu]);
+
+  const handlePaneContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      setShowNodeSelector(false);
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        flowPosition: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+      });
+    },
+    [screenToFlowPosition]
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]')) {
+        return;
+      }
+
+      event.preventDefault();
+      if (!selectedNodeIdsSet.has(node.id)) {
+        selectSingleNode(node.id);
+      }
+
+      setShowNodeSelector(false);
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        flowPosition: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+        targetNodeId: node.id,
+      });
+    },
+    [screenToFlowPosition, selectSingleNode, selectedNodeIdsSet]
   );
 
   useEffect(() => {
@@ -1082,19 +1456,29 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         setShowNodeSelector(false);
         setActiveConnection(null);
         setActiveEdgeInsertion(null);
+        setContextMenu(null);
         cancelClickConnection();
       }
 
-      if (((event.metaKey || event.ctrlKey) && event.key === '0') || event.key === 'f' || event.key === 'F') {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTyping =
+        activeElement?.tagName === 'INPUT' ||
+        activeElement?.tagName === 'TEXTAREA' ||
+        activeElement?.isContentEditable;
+      if (isTyping || event.metaKey || event.ctrlKey) {
+        return;
+      }
+
+      if (event.key === 'f' || event.key === 'F') {
         event.preventDefault();
         fitView({ padding: 0.2, duration: 300 });
       }
 
-      if ((event.key === 'g' || event.key === 'G') && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (event.key === 'g' || event.key === 'G') {
         setShowGrid((current) => !current);
       }
 
-      if ((event.key === 'c' || event.key === 'C') && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (event.key === 'c' || event.key === 'C') {
         toggleMode();
       }
 
@@ -1119,25 +1503,14 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   // is handled by ReactFlow's onInit; AI workflows fit via the
   // single-flighted 'fitViewToWorkflow' event.
 
-  useEffect(() => {
-    return () => {
-      if (cursorThrottleRef.current !== null) {
-        window.clearTimeout(cursorThrottleRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    void updateSelection(selectedNodeId ?? null);
-  }, [selectedNodeId, updateSelection]);
+  const initialViewport = useMemo(() => graphViewStateToViewport(viewState), [viewState]);
+  const isGraphHydrating = Boolean(projectId && hydratedProjectId !== projectId);
 
   return (
     <div
       ref={canvasContainerRef}
       className="relative h-full w-full overflow-hidden bg-[#0A0A0A]"
       data-walkthrough="canvas"
-      onPointerMove={handleCanvasPointerMove}
-      onPointerLeave={handleCanvasPointerLeave}
     >
       <div
         className="pointer-events-none absolute inset-0"
@@ -1149,12 +1522,33 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,165,116,0.08),transparent_42%),radial-gradient(circle_at_72%_18%,rgba(249,115,22,0.08),transparent_22%),radial-gradient(circle_at_bottom,rgba(0,0,0,0.46),transparent_48%)]" />
 
-      <FloraCollaboratorCursors
-        users={onlineUsers}
+      <StudioPresenceLayer
+        projectId={projectId}
         currentUserId={user?.id}
+        selectedNodeId={selectedNodeId}
+        containerRef={canvasContainerRef}
       />
 
+      {isStudioRenderPerfEnabled() ? <StudioRenderPerfOverlay nodeCount={nodeDefinitions.length} /> : null}
+
       <ConnectionErrorTooltip rejection={rejection} />
+
+      {contextMenu ? (
+        <CanvasContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          selectedCount={selectedCount}
+          onClose={() => setContextMenu(null)}
+          onOpenNodeSelector={openNodeSelectorAtContextMenu}
+          onAddNode={(type) => {
+            const node = addNodeOfType(type, contextMenu.flowPosition);
+            selectSingleNode(node.id);
+          }}
+          onDuplicateSelected={duplicateSelectedNodes}
+          onGroupSelected={groupSelectedNodes}
+          onDeleteSelected={deleteSelectedNodes}
+        />
+      ) : null}
 
       <AnimatePresence>
         {showNodeSelector ? (
@@ -1200,6 +1594,8 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={handlePaneClick}
+          onPaneContextMenu={handlePaneContextMenu}
+          onNodeContextMenu={handleNodeContextMenu}
           onDoubleClick={handleCanvasDoubleClick}
           onSelectionChange={({ nodes: selectionNodes }) => {
             // Stabilize selection: only emit when the user actually picked
@@ -1207,9 +1603,9 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
             // during node insertion / data updates, which previously caused
             // the right rail and node selection ring to flicker between
             // Image and ImageEdit on every store tick.
-            const nextId = selectionNodes[0]?.id ?? null;
-            if (nextId !== null && nextId !== selectedNodeId) {
-              onSelectNode(nextId);
+            const nextIds = selectionNodes.map((node) => node.id);
+            if (nextIds.length > 0 && !areStringArraysEqual(nextIds, selectedNodeIds)) {
+              selectNodes(nextIds, nextIds[nextIds.length - 1]);
             }
           }}
           nodeTypes={nodeTypes}
@@ -1219,14 +1615,12 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           connectionRadius={30}
           isValidConnection={isValidConnection}
           defaultEdgeOptions={defaultEdgeOptions}
+          defaultViewport={initialViewport}
+          onMoveEnd={handleMoveEnd}
+          onlyRenderVisibleElements
           nodesDraggable
           nodesConnectable
           elementsSelectable
-          onInit={(instance) => {
-            if (nodeDefinitions.length > 0) {
-              instance.fitView({ padding: 0.2, duration: 0 });
-            }
-          }}
           minZoom={0.1}
           maxZoom={2}
           deleteKeyCode={null}
@@ -1242,12 +1636,12 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         </ReactFlow>
       </StudioErrorBoundary>
 
-      {nodeDefinitions.length === 0 ? (
+      {!isGraphHydrating && nodeDefinitions.length === 0 ? (
         <div className="pointer-events-none absolute inset-0">
           <EmptyCanvasState
             onAddBlock={(type) => {
               const node = addNodeOfType(type, getCanvasCenterPosition());
-              onSelectNode(node.id);
+              selectSingleNode(node.id);
             }}
             onStartFloraExample={handleStartFloraExample}
           />
@@ -1270,22 +1664,8 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         onZoomIn={() => zoomIn()}
         onZoomOut={() => zoomOut()}
         selectedCount={selectedCount}
-        onDeleteSelected={() => {
-          selectedNodes.forEach((node) => removeNode(node.id));
-          scheduleSave();
-          if (selectedCount > 0) {
-            onSelectNode(null);
-          }
-        }}
-        onDuplicateSelected={() => {
-          selectedNodes.forEach((node) => {
-            const definition = nodeDefinitionsById.get(node.id);
-            if (definition) {
-              const duplicated = handleDuplicateNode(definition);
-              onSelectNode(duplicated.id);
-            }
-          });
-        }}
+        onDeleteSelected={deleteSelectedNodes}
+        onDuplicateSelected={duplicateSelectedNodes}
         isExecuting={execution.isRunning}
         executionProgress={execution}
         onExecute={projectId ? () => executeGraphStreaming(projectId) : undefined}

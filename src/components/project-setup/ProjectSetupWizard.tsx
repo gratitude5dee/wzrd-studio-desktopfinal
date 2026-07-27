@@ -1,14 +1,24 @@
-
+import { useMemo } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { ProjectProvider } from './ProjectContext';
 import ProjectSetupHeader from './ProjectSetupHeader';
 import TabNavigation from './TabNavigation';
 import TabContent from './TabContent';
 import NavigationFooter from './NavigationFooter';
 import { ProjectSetupVoiceBridge } from './ProjectSetupVoiceBridge';
+import { getProjectSetupInitialProjectId } from './projectSetupHydration';
 
 const ProjectSetupWizard = () => {
+  const params = useParams<{ projectId?: string }>();
+  const [searchParams] = useSearchParams();
+  const searchString = searchParams.toString();
+  const initialProjectId = useMemo(
+    () => params.projectId || getProjectSetupInitialProjectId(`?${searchString}`),
+    [params.projectId, searchString]
+  );
+
   return (
-    <ProjectProvider>
+    <ProjectProvider initialProjectId={initialProjectId}>
       <ProjectSetupVoiceBridge />
       <div className="min-h-screen flex flex-col bg-[#0A0A0F]">
         {/* Ambient background effects */}

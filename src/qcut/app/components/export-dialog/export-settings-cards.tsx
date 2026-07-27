@@ -17,6 +17,8 @@ import {
 	type ExportPreset,
 } from "@qcut-app/types/export";
 
+type EngineSelection = "auto" | "standard" | "ffmpeg" | "cli";
+
 // ---------------------------------------------------------------------------
 // Shared collapsible row wrapper
 // ---------------------------------------------------------------------------
@@ -99,10 +101,10 @@ export interface QualityCardProps {
 }
 
 export interface EngineCardProps {
-	engineType: "standard" | "ffmpeg" | "cli";
+	engineType: EngineSelection;
 	ffmpegAvailable: boolean;
 	isElectron: boolean;
-	onEngineTypeChange: (type: "standard" | "ffmpeg" | "cli") => void;
+	onEngineTypeChange: (type: EngineSelection) => void;
 	isExporting: boolean;
 }
 
@@ -308,6 +310,7 @@ export function QualityCard({
 // ---------------------------------------------------------------------------
 
 const ENGINE_LABELS: Record<string, string> = {
+	auto: "Auto",
 	standard: "Standard",
 	ffmpeg: "FFmpeg WASM",
 	cli: "Native CLI",
@@ -334,11 +337,25 @@ export function EngineCard({
 			<RadioGroup
 				value={engineType}
 				onValueChange={(value) => {
-					onEngineTypeChange(value as "standard" | "ffmpeg" | "cli");
+					onEngineTypeChange(value as EngineSelection);
 					setOpen(false);
 				}}
 				disabled={isExporting}
 			>
+				<div className="flex items-start space-x-2 py-1">
+					<RadioGroupItem value="auto" id="auto" className="mt-0.5" />
+					<Label
+						htmlFor="auto"
+						className="text-sm cursor-pointer flex-1 min-w-0"
+					>
+						<div className="flex items-center gap-1">
+							<span>Auto</span>
+							<span className="text-xs text-muted-foreground">
+								Recommended
+							</span>
+						</div>
+					</Label>
+				</div>
 				<div className="flex items-start space-x-2 py-1">
 					<RadioGroupItem value="standard" id="standard" className="mt-0.5" />
 					<Label

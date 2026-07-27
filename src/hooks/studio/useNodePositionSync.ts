@@ -36,6 +36,14 @@ interface NodePositionSyncResult {
   isSavePending: boolean;
 }
 
+export function filterUserNodeChanges(changes: any[]): any[] {
+  return changes.filter((change) => (
+    change.type === 'position' ||
+    change.type === 'select' ||
+    change.type === 'dimensions'
+  ));
+}
+
 export function useNodePositionSync({
   useComputeFlow,
   onUpdateBlockPosition,
@@ -130,8 +138,7 @@ export function useNodePositionSync({
    * This is a pure function that returns filtered changes.
    */
   const filterNodeChanges = useCallback((changes: any[]): any[] => {
-    // Currently we allow all changes through; position persistence happens on drag stop.
-    return changes;
+    return filterUserNodeChanges(changes);
   }, []);
 
   return {

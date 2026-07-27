@@ -21,6 +21,7 @@ import { getShotImageCredits, getShotVideoCredits } from '@/lib/constants/credit
 import { useProjectSettingsStore } from '@/store/projectSettingsStore';
 import { ConfirmGenerateDialog } from '@/components/ui/ConfirmGenerateDialog';
 import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
+import { buildStoryboardProgressSummary } from '@/lib/storyboard/generationStatus';
 
 interface ShotConnection {
   id: string;
@@ -43,6 +44,7 @@ interface ShotsRowProps {
   projectId: string;
   onSceneDelete?: (sceneId: string) => void;
   isSelected?: boolean;
+  availableCredits?: number | null;
 }
 
 const buildShotFromPartial = (
@@ -61,9 +63,13 @@ const buildShotFromPartial = (
   image_url: partial.image_url ?? null,
   image_asset_id: partial.image_asset_id ?? null,
   image_status: partial.image_status ?? 'completed',
+  image_generation_error: partial.image_generation_error ?? null,
+  image_generation_attempts: partial.image_generation_attempts ?? 0,
   video_url: partial.video_url ?? null,
   video_asset_id: partial.video_asset_id ?? null,
   video_status: partial.video_status ?? 'pending',
+  video_generation_error: partial.video_generation_error ?? null,
+  video_generation_attempts: partial.video_generation_attempts ?? 0,
   luma_generation_id: partial.luma_generation_id ?? null,
   audio_url: partial.audio_url ?? null,
   audio_status: partial.audio_status ?? 'pending',
@@ -82,7 +88,12 @@ const placeholderCopy: Record<ShotStreamStatus, string> = {
   ready: 'Shot ready'
 };
 
-const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected = false }: ShotsRowProps) => {
+const rowRenderHintStyle: React.CSSProperties = {
+  contentVisibility: 'auto',
+  containIntrinsicSize: '560px'
+};
+
+const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected = false, availableCredits }: ShotsRowProps) => {
   const { settings: projectSettings } = useProjectSettingsStore();
   const { selectedTargets, expandedShotId, setExpandedShotId, selectTarget } = useVoiceSelection();
   const selectedImageModel = projectSettings?.baseImageModel;
@@ -185,6 +196,24 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
 
   const hasShots = shots.length > 0;
   const hasPlaceholders = streamingEnabled && streamingPlaceholders.length > 0;
+  const sceneGenerationCounts = useMemo(() => buildStoryboardProgressSummary(shots), [shots]);
+  const pendingSceneGenerationCount = nextPhase === 'images'
+    ? sceneGenerationCounts.missingImages
+    : sceneGenerationCounts.missingVideos;
+  const estimatedSceneCredits = nextPhase === 'images'
+    ? getShotImageCredits(selectedImageModel) * pendingSceneGenerationCount
+    : getShotVideoCredits(selectedVideoModel) * pendingSceneGenerationCount;
+  const sceneProgressLabel = !hasShots
+    ? 'No shots'
+    : sceneGenerationCounts.needsAttention > 0
+      ? `${sceneGenerationCounts.needsAttention} need attention`
+      : sceneGenerationCounts.activeOutputs > 0 || isAutoGenerating
+        ? `${sceneGenerationCounts.completedOutputs}/${sceneGenerationCounts.totalOutputs} outputs ready`
+        : sceneGenerationCounts.progressPercent === 100
+          ? 'Scene ready'
+          : nextPhase === 'images'
+            ? `${sceneGenerationCounts.missingImages} image${sceneGenerationCounts.missingImages === 1 ? '' : 's'} left`
+            : `${sceneGenerationCounts.missingVideos} video${sceneGenerationCounts.missingVideos === 1 ? '' : 's'} left`;
 
   const startShotGeneration = useCallback(() => {
     if (!streamingEnabled) return;
@@ -463,8 +492,12 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
                         ...shot,
                         image_url: updatedShot.image_url ?? shot.image_url,
                         image_status: updatedShot.image_status ?? shot.image_status,
+                        image_generation_error: updatedShot.image_generation_error ?? shot.image_generation_error,
+                        image_generation_attempts: updatedShot.image_generation_attempts ?? shot.image_generation_attempts,
                         video_url: updatedShot.video_url ?? shot.video_url,
                         video_status: updatedShot.video_status ?? shot.video_status,
+                        video_generation_error: updatedShot.video_generation_error ?? shot.video_generation_error,
+                        video_generation_attempts: updatedShot.video_generation_attempts ?? shot.video_generation_attempts,
                         audio_url: updatedShot.audio_url ?? shot.audio_url,
                         audio_status: updatedShot.audio_status ?? shot.audio_status,
                         failure_reason: updatedShot.failure_reason ?? shot.failure_reason,
@@ -499,6 +532,7 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
+      style={rowRenderHintStyle}
       className={cn(
         'relative group mb-8 p-6 rounded-[24px] backdrop-blur-xl transition-all duration-300',
         'bg-[rgba(17,17,17,0.88)]',
@@ -512,8 +546,9 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
         ]
       )}
     >
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="sticky top-0 z-20 -mx-2 mb-5 rounded-2xl border border-white/[0.06] bg-[#111111]/95 px-2 py-3 backdrop-blur-xl shadow-[0_10px_28px_rgba(0,0,0,0.28)]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="relative">
             <motion.div
               whileHover={{ scale: 1.05 }}
@@ -570,7 +605,7 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-3">
+        <div className="flex flex-col items-start gap-3 sm:items-end">
           <div className="flex flex-wrap items-center justify-end gap-3">
             {streamingEnabled && (
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
@@ -647,12 +682,12 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
                       ) : nextPhase === 'images' ? (
                         <>
                           <Image className="relative z-10 h-4 w-4" />
-                          <span className="relative z-10 ml-2">Generate Images ({getShotImageCredits(selectedImageModel) * shots.length} credits)</span>
+                          <span className="relative z-10 ml-2">Generate Images ({estimatedSceneCredits} credits)</span>
                         </>
                       ) : (
                         <>
                           <Film className="relative z-10 h-4 w-4" />
-                          <span className="relative z-10 ml-2">Generate Videos ({getShotVideoCredits(selectedVideoModel) * shots.length} credits)</span>
+                          <span className="relative z-10 ml-2">Generate Videos ({estimatedSceneCredits} credits)</span>
                         </>
                       )}
                     </Button>
@@ -727,6 +762,32 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
               progress={progress}
             />
           )}
+        </div>
+      </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+          <div className="h-2 overflow-hidden rounded-full bg-zinc-900/90">
+            <motion.div
+              className={cn(
+                'h-full rounded-full',
+                sceneGenerationCounts.needsAttention > 0
+                  ? 'bg-gradient-to-r from-red-500 to-amber-400'
+                  : 'bg-gradient-to-r from-[#555555] via-[#d4a574] to-emerald-400'
+              )}
+              initial={false}
+              animate={{ width: `${sceneGenerationCounts.progressPercent}%` }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 md:justify-end">
+            <span className="font-medium text-zinc-200">{sceneProgressLabel}</span>
+            <span>{sceneGenerationCounts.progressPercent}%</span>
+            {hasShots && (
+              <span>
+                {sceneGenerationCounts.completedImages}/{sceneGenerationCounts.totalShots} images ·{' '}
+                {sceneGenerationCounts.completedVideos}/{sceneGenerationCounts.totalShots} videos
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -885,15 +946,17 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
         onOpenChange={setShowConfirmGenerate}
         onConfirm={() => {
           setShowConfirmGenerate(false);
-          startAutoGenerate();
+          startAutoGenerate({
+            imageModelId: selectedImageModel,
+            videoModelId: selectedVideoModel,
+            availableCredits,
+            imageCreditCost: getShotImageCredits(selectedImageModel),
+            videoCreditCost: getShotVideoCredits(selectedVideoModel),
+          });
         }}
         title="Confirm Auto-Generate"
-        description="Are you sure you wish to proceed with auto generate?"
-        estimatedCredits={
-          nextPhase === 'images'
-            ? getShotImageCredits(selectedImageModel) * shots.length
-            : getShotVideoCredits(selectedVideoModel) * shots.length
-        }
+        description={`This will process ${pendingSceneGenerationCount} incomplete shot(s) and skip completed outputs.`}
+        estimatedCredits={estimatedSceneCredits}
       />
     </motion.div>
   );

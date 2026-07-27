@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PresenceUser } from '@/hooks/usePresence';
 
@@ -18,7 +19,7 @@ const getCursorColor = (seed: string) => {
   return FLORA_COLORS[hash % FLORA_COLORS.length];
 };
 
-const FloraCursor = ({
+const FloraCursor = memo(function FloraCursor({
   x,
   y,
   username,
@@ -28,7 +29,8 @@ const FloraCursor = ({
   y?: number;
   username: string;
   color: string;
-}) => (
+}) {
+  return (
   <motion.div
     className="pointer-events-none absolute z-[70]"
     style={{
@@ -68,21 +70,26 @@ const FloraCursor = ({
       {username}
     </div>
   </motion.div>
-);
+  );
+});
 
-export function FloraCollaboratorCursors({
+export const FloraCollaboratorCursors = memo(function FloraCollaboratorCursors({
   users,
   currentUserId,
 }: FloraCollaboratorCursorsProps) {
-  const collaborators = Object.values(users)
-    .filter((user) => user.userId !== currentUserId && user.cursor)
-    .map((user) => ({
-      id: user.userId,
-      username: user.username || 'Anonymous',
-      x: user.cursor?.x ?? 0,
-      y: user.cursor?.y ?? 0,
-      color: user.color || getCursorColor(user.userId),
-    }));
+  const collaborators = useMemo(
+    () =>
+      Object.values(users)
+        .filter((user) => user.userId !== currentUserId && user.cursor)
+        .map((user) => ({
+          id: user.userId,
+          username: user.username || 'Anonymous',
+          x: user.cursor?.x ?? 0,
+          y: user.cursor?.y ?? 0,
+          color: user.color || getCursorColor(user.userId),
+        })),
+    [currentUserId, users]
+  );
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -99,4 +106,4 @@ export function FloraCollaboratorCursors({
       </AnimatePresence>
     </div>
   );
-}
+});

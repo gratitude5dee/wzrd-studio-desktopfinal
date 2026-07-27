@@ -50,6 +50,8 @@ type GroupSummary = {
   state: PostzPost["state"];
   content: string;
   channel_ids: string[];
+  release_url: string | null;
+  error: string | null;
 };
 
 function groupPosts(posts: PostzPost[]): GroupSummary[] {
@@ -70,6 +72,8 @@ function groupPosts(posts: PostzPost[]): GroupSummary[] {
       state: first.state,
       content: first.content,
       channel_ids: sorted.map((p) => p.channel_id),
+      release_url: sorted.find((p) => p.release_url)?.release_url ?? null,
+      error: sorted.find((p) => p.error)?.error ?? null,
     });
   }
 
@@ -124,6 +128,12 @@ function DraggableGroupCard({
       <div className="mt-0.5 line-clamp-2 text-xs text-zinc-200">
         {group.content?.trim() ? group.content : "(empty)"}
       </div>
+      {group.state === "PUBLISHED" && group.release_url && (
+        <div className="mt-1 truncate text-[11px] text-emerald-200">Live: {group.release_url}</div>
+      )}
+      {group.state === "ERROR" && group.error && (
+        <div className="mt-1 line-clamp-1 text-[11px] text-red-200">{group.error.replace(/^\[(retryable|terminal)\]\s*/, "")}</div>
+      )}
       <div className="mt-1 flex items-center gap-1">
         {visibleChannels.map((channel) => (
           <span

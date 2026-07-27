@@ -8197,6 +8197,8 @@ export type Database = {
           evaluation_summary: Json | null
           failure_reason: string | null
           id: string
+          image_generation_attempts: number
+          image_generation_error: string | null
           image_asset_id: string | null
           image_progress: number | null
           image_status: string | null
@@ -8212,6 +8214,8 @@ export type Database = {
           sound_effects: string | null
           updated_at: string | null
           video_asset_id: string | null
+          video_generation_attempts: number
+          video_generation_error: string | null
           video_status: string | null
           video_url: string | null
           visual_prompt: string | null
@@ -8224,6 +8228,8 @@ export type Database = {
           evaluation_summary?: Json | null
           failure_reason?: string | null
           id?: string
+          image_generation_attempts?: number
+          image_generation_error?: string | null
           image_asset_id?: string | null
           image_progress?: number | null
           image_status?: string | null
@@ -8239,6 +8245,8 @@ export type Database = {
           sound_effects?: string | null
           updated_at?: string | null
           video_asset_id?: string | null
+          video_generation_attempts?: number
+          video_generation_error?: string | null
           video_status?: string | null
           video_url?: string | null
           visual_prompt?: string | null
@@ -8251,6 +8259,8 @@ export type Database = {
           evaluation_summary?: Json | null
           failure_reason?: string | null
           id?: string
+          image_generation_attempts?: number
+          image_generation_error?: string | null
           image_asset_id?: string | null
           image_progress?: number | null
           image_status?: string | null
@@ -8266,6 +8276,8 @@ export type Database = {
           sound_effects?: string | null
           updated_at?: string | null
           video_asset_id?: string | null
+          video_generation_attempts?: number
+          video_generation_error?: string | null
           video_status?: string | null
           video_url?: string | null
           visual_prompt?: string | null

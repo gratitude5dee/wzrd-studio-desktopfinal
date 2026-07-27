@@ -1,18 +1,25 @@
-import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import { Check, Loader2, Mic, MicOff, PhoneOff, Volume2, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { VoiceActionConfirmation } from '@/voice/actions/registry';
 import type { VoiceSessionStatus } from '@/voice/realtime/useWzrdRealtimeSession';
 
 interface VoiceActionButtonProps {
   status: VoiceSessionStatus;
   errorMessage?: string | null;
+  pendingConfirmation?: VoiceActionConfirmation | null;
+  lastTranscript?: string | null;
+  lastActionMessage?: string | null;
+  lastTraceId?: string | null;
   disabled?: boolean;
   onPressStart: () => void | Promise<void>;
   onPressEnd: () => void | Promise<void>;
   onDisconnect: () => void;
+  onConfirm?: () => void | Promise<void>;
+  onCancel?: () => void;
 }
 
 const STATUS_LABELS: Record<VoiceSessionStatus, string> = {
@@ -32,16 +39,23 @@ const TAP_THRESHOLD = 200;
 export function VoiceActionButton({
   status,
   errorMessage,
+  pendingConfirmation,
+  lastTranscript,
+  lastActionMessage,
+  lastTraceId,
   disabled,
   onPressStart,
   onPressEnd,
   onDisconnect,
+  onConfirm,
+  onCancel,
 }: VoiceActionButtonProps) {
   const [pressed, setPressed] = useState(false);
   const pressStartTime = useRef(0);
   const pressMode = useRef<'pointer' | 'keyboard'>('pointer');
 
   const isActive = status !== 'idle' && status !== 'error';
+  const hasDockCopy = status !== 'idle' || errorMessage || pendingConfirmation || lastTranscript || lastActionMessage;
 
   const start = useCallback((mode: 'pointer' | 'keyboard' = 'pointer') => {
     if (disabled || pressed) return;
@@ -111,7 +125,7 @@ export function VoiceActionButton({
   return (
     <div
       data-testid="voice-action-button-container"
-      className="pointer-events-none fixed bottom-20 right-4 z-[80] flex flex-row-reverse items-center gap-2 md:bottom-4"
+      className="pointer-events-none fixed bottom-20 right-4 z-[80] flex flex-row-reverse items-end gap-3 md:bottom-12"
     >
       <Button
         type="button"
@@ -138,10 +152,61 @@ export function VoiceActionButton({
         )}
       </Button>
 
-      {(status !== 'idle' || errorMessage) && (
-        <div className="pointer-events-none max-w-[240px] rounded-md border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-zinc-100 shadow-xl backdrop-blur">
-          <div className="font-medium">{STATUS_LABELS[status]}</div>
-          {errorMessage ? <div className="mt-1 text-zinc-400">{errorMessage}</div> : null}
+      {hasDockCopy && (
+        <div
+          data-testid="voice-command-dock"
+          className={cn(
+            'pointer-events-auto w-[min(22rem,calc(100vw-5.5rem))] rounded-xl border border-white/10 bg-zinc-950/[0.92] px-3 py-3 text-xs text-zinc-100 shadow-2xl shadow-black/50 backdrop-blur-xl',
+            pendingConfirmation && 'border-orange-400/40 shadow-orange-500/10',
+          )}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-semibold">{STATUS_LABELS[status]}</div>
+            {lastTraceId ? (
+              <div className="max-w-[8rem] truncate rounded-full border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-500">
+                {lastTraceId}
+              </div>
+            ) : null}
+          </div>
+
+          {pendingConfirmation ? (
+            <div className="mt-2 rounded-lg border border-orange-400/20 bg-orange-500/10 p-2">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">
+                Confirmation Required
+              </div>
+              <p className="mt-1 text-zinc-100">{pendingConfirmation.message}</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onConfirm?.()}
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-orange-500 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-black transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {lastActionMessage && !pendingConfirmation ? (
+            <div className="mt-2 text-zinc-300">{lastActionMessage}</div>
+          ) : null}
+
+          {lastTranscript ? (
+            <div className="mt-2 border-t border-white/10 pt-2 text-zinc-500">
+              <span className="text-zinc-400">Heard:</span> {lastTranscript}
+            </div>
+          ) : null}
+
+          {errorMessage ? <div className="mt-2 text-red-200">{errorMessage}</div> : null}
         </div>
       )}
     </div>

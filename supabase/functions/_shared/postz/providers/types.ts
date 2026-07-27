@@ -75,6 +75,7 @@ export type OAuthTarget = {
 export interface PostzProvider {
   identifier: string;
   name: string;
+  implemented?: boolean;
   capabilities: ProviderCapabilities;
 
   /** Environment variable names required for this provider to be usable. */
@@ -116,4 +117,6 @@ export type ProviderSummary = {
   identifier: string;
   name: string;
   configured: boolean;
+  implemented: boolean;
+  connectable: boolean;
 };

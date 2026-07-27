@@ -25,6 +25,7 @@ import {
   shouldSkipCreditBilling,
 } from "../_shared/credits.ts";
 import { resolveImageGenerationPlan } from "../_shared/image-fallback.ts";
+import { resolveBuiltInStyleReferenceUrl } from "../_shared/style-packs.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
@@ -79,6 +80,10 @@ function getImageSizeFromAspectRatio(aspectRatio: string): string {
   }
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -113,7 +118,7 @@ serve(async (req) => {
     const body = await req.json();
     shotId = body.shot_id;
     const requestId = typeof body.request_id === 'string' ? body.request_id : crypto.randomUUID();
-    const styleReferenceOverride = body.style_reference_url;
+    const styleReferenceOverride = normalizeOptionalString(body.style_reference_url);
     const requestedImageModel = typeof body.image_model === 'string' ? body.image_model : null;
     
     if (!shotId) {
@@ -130,7 +135,7 @@ serve(async (req) => {
     console.log(`[generate-shot-image][Shot ${shotId}] Fetching shot data...`);
     const { data: shot, error: shotError } = await supabase
       .from("shots")
-      .select("id, project_id, scene_id, visual_prompt, image_status")
+      .select("id, project_id, scene_id, visual_prompt, image_status, image_generation_attempts")
       .eq("id", shotId)
       .single();
 
@@ -158,6 +163,8 @@ serve(async (req) => {
       .update({ 
         image_status: "generating",
         image_progress: 0,
+        image_generation_attempts: Number(shot.image_generation_attempts || 0) + 1,
+        image_generation_error: null,
         failure_reason: null // Clear any previous failure reason
       })
       .eq("id", shotId);
@@ -170,7 +177,7 @@ serve(async (req) => {
     console.log(`[generate-shot-image][Shot ${shotId}] Fetching project data for aspect ratio...`);
     const { data: project, error: projectError } = await supabase
       .from("projects")
-      .select("aspect_ratio, style_reference_asset_id")
+      .select("aspect_ratio, video_style, style_reference_asset_id")
       .eq("id", shot.project_id)
       .single();
 
@@ -182,6 +189,27 @@ serve(async (req) => {
     const imageSize = getImageSizeFromAspectRatio(aspectRatio);
     const falImageSize = convertImageSizeToFalFormat(imageSize);
     console.log(`[generate-shot-image][Shot ${shotId}] Using aspect ratio: ${aspectRatio}, FAL image size:`, falImageSize);
+
+    let styleReferenceUrl: string | undefined = styleReferenceOverride;
+    if (!styleReferenceUrl && project?.style_reference_asset_id) {
+      const { data: mediaItem, error: mediaError } = await supabase
+        .from("media_items")
+        .select("url, storage_bucket, storage_path")
+        .eq("id", project.style_reference_asset_id)
+        .single();
+
+      if (!mediaError && mediaItem) {
+        styleReferenceUrl =
+          normalizeOptionalString(mediaItem.url) ||
+          (mediaItem.storage_bucket && mediaItem.storage_path
+            ? `${supabaseUrl}/storage/v1/object/public/${mediaItem.storage_bucket}/${mediaItem.storage_path}`
+            : undefined);
+      }
+    }
+
+    if (!styleReferenceUrl) {
+      styleReferenceUrl = resolveBuiltInStyleReferenceUrl(project?.video_style) ?? undefined;
+    }
 
     const { data: projectSettings } = await supabase
       .from('project_settings')
@@ -212,7 +240,12 @@ serve(async (req) => {
         jobType: 'image',
         modelId: selectedImageModel,
         status: 'running',
-        config: { shot_id: shotId, aspect_ratio: aspectRatio, image_size: imageSize },
+        config: {
+          shot_id: shotId,
+          aspect_ratio: aspectRatio,
+          image_size: imageSize,
+          style_reference_url: styleReferenceUrl ?? null,
+        },
       });
 
       const gmiCreditCost = getCreditCostForModel(selectedImageModel, 'image');
@@ -339,7 +372,12 @@ serve(async (req) => {
         const promptVersionId = await createPromptVersion(supabase, {
           projectId: shot.project_id, stage: 'shot_image', authorType: 'system',
           text: shot.visual_prompt, sourceEntityType: 'shot', sourceEntityId: shotId,
-          metadata: { model_id: usedModelId, storage_path: uploadData?.path ?? fileName, public_url: publicUrl },
+          metadata: {
+            model_id: usedModelId,
+            storage_path: uploadData?.path ?? fileName,
+            public_url: publicUrl,
+            style_reference_url: styleReferenceUrl ?? null,
+          },
         });
 
         const imageAssetId = await createProjectAsset(supabase, {
@@ -350,7 +388,13 @@ serve(async (req) => {
         });
 
         await supabase.from("shots").update({
-          image_url: publicUrl, image_asset_id: imageAssetId, image_status: "completed", image_progress: 100,
+          image_url: publicUrl,
+          image_asset_id: imageAssetId,
+          image_status: "completed",
+          image_progress: 100,
+          image_generation_error: null,
+          failure_reason: null,
+          style_reference_used: !!styleReferenceUrl,
         }).eq("id", shotId);
 
         await createAssetLineage(supabase, {
@@ -442,23 +486,6 @@ serve(async (req) => {
     });
 
     console.log(`[generate-shot-image][Shot ${shotId}] Starting image generation with streaming.`);
-
-    let styleReferenceUrl: string | undefined = styleReferenceOverride || undefined;
-    if (!styleReferenceUrl && project?.style_reference_asset_id) {
-      const { data: mediaItem, error: mediaError } = await supabase
-        .from("media_items")
-        .select("url, storage_bucket, storage_path")
-        .eq("id", project.style_reference_asset_id)
-        .single();
-
-      if (!mediaError && mediaItem) {
-        styleReferenceUrl =
-          mediaItem.url ||
-          (mediaItem.storage_bucket && mediaItem.storage_path
-            ? `${supabaseUrl}/storage/v1/object/public/${mediaItem.storage_bucket}/${mediaItem.storage_path}`
-            : undefined);
-      }
-    }
 
     // Deterministic fallback decision (never hard-fail when prompt exists)
     let fallbackDecision: ReturnType<typeof resolveImageGenerationPlan> | null = null;
@@ -609,7 +636,9 @@ serve(async (req) => {
           image_url: publicUrl,
           image_asset_id: imageAssetId,
           image_status: "completed",
-          image_progress: 100
+          image_progress: 100,
+          image_generation_error: null,
+          failure_reason: null
         })
         .eq("id", shotId);
 
@@ -689,6 +718,7 @@ serve(async (req) => {
         .update({ 
           image_status: "failed",
           image_progress: 0,
+          image_generation_error: errorMsg,
           failure_reason: errorMsg
         })
         .eq("id", shotId);
@@ -734,6 +764,7 @@ serve(async (req) => {
           .update({
             image_status: "failed",
             image_progress: 0,
+            image_generation_error: "Insufficient credits",
             failure_reason: "Insufficient credits",
           })
           .eq("id", shotId);

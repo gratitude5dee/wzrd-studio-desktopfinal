@@ -2,12 +2,16 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL } from '@/integrations/supabase/config';
 
-export async function downloadFile(url: string) {
+export async function downloadFile(url: string, filename = 'download') {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    
+    const searchParams = new URLSearchParams({
+      url,
+      filename,
+    });
+
     const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/download?url=${encodeURIComponent(url)}`,
+      `${SUPABASE_URL}/functions/v1/download?${searchParams.toString()}`,
       {
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
@@ -25,7 +29,7 @@ export async function downloadFile(url: string) {
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = 'download'; // You can set a custom filename here
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(downloadUrl);

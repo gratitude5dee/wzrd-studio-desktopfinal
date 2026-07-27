@@ -1,5 +1,10 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import {
+  EDITOR_ISOLATION_HEADERS,
+  EDITOR_ISOLATION_ROUTE_SOURCES,
+} from "./src/next/editorIsolationHeaders";
+import { buildWzrdclawDashboardRewrites } from "./src/next/wzrdclawRewrites";
 
 const legacyViteEnvKeys = [
   "GATSBY_TLDRAW_LICENSE_KEY",
@@ -30,8 +35,10 @@ const legacyViteEnvKeys = [
   "VITE_USE_MOCK_ASSETS",
   "VITE_USE_NEXTJS_ROUTING",
   "VITE_USE_PERF_SHELL",
+  "VITE_WZRDCLAW_DASHBOARD_ENABLED",
   "VITE_WZRD_REALTIME_MODEL",
   "VITE_WZRD_REALTIME_VOICE",
+  "NEXT_PUBLIC_WZRDCLAW_DASHBOARD_ENABLED",
 ] as const;
 
 function publicFallbackFor(key: string): string {
@@ -51,21 +58,13 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   async headers() {
-    const isolationHeaders = [
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-      { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-    ];
-
-    return [
-      {
-        source: "/projects/:projectId/editor",
-        headers: isolationHeaders,
-      },
-      {
-        source: "/projects/:projectId/editor/:path*",
-        headers: isolationHeaders,
-      },
-    ];
+    return EDITOR_ISOLATION_ROUTE_SOURCES.map((source) => ({
+      source,
+      headers: [...EDITOR_ISOLATION_HEADERS],
+    }));
+  },
+  async rewrites() {
+    return buildWzrdclawDashboardRewrites();
   },
   webpack(config, { dev, webpack }) {
     config.resolve.alias = {

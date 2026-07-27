@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { VoiceActionButton } from './VoiceActionButton';
 
@@ -64,6 +65,41 @@ describe('VoiceActionButton', () => {
     expect(screen.getByText('Microphone permission denied')).toBeInTheDocument();
   });
 
+  it('shows pending confirmations with explicit confirm and cancel controls', async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+
+    render(
+      <VoiceActionButton
+        status="confirming"
+        pendingConfirmation={{
+          actionName: 'kanvas_generate',
+          risk: 'generation',
+          message: 'This will spend credits. Should I continue?',
+          input: { studio: 'image' },
+          traceId: 'voice_kanvas_generate_test',
+        }}
+        lastTranscript="Generate the neon scene"
+        onPressStart={vi.fn()}
+        onPressEnd={vi.fn()}
+        onDisconnect={noop}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+
+    expect(screen.getByTestId('voice-command-dock')).toBeInTheDocument();
+    expect(screen.getByText('Confirmation Required')).toBeInTheDocument();
+    expect(screen.getByText('This will spend credits. Should I continue?')).toBeInTheDocument();
+    expect(screen.getByText(/Generate the neon scene/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('anchors the control bottom-right and opens status to the left', () => {
     render(
       <VoiceActionButton
@@ -79,6 +115,6 @@ describe('VoiceActionButton', () => {
     expect(container).not.toHaveClass('left-4');
     expect(container).toHaveClass('flex-row-reverse');
     expect(container).toHaveClass('bottom-20');
-    expect(container).toHaveClass('md:bottom-4');
+    expect(container).toHaveClass('md:bottom-12');
   });
 });

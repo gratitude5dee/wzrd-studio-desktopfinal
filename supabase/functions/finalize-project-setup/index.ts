@@ -40,6 +40,8 @@ interface SettingsPayload {
   baseImageModel: string;
   baseVideoModel: string;
   styleReferenceAssetId?: string | null;
+  styleReferenceUrl?: string | null;
+  stylePromptFragment?: string | null;
 }
 
 interface CastPayload {
@@ -72,6 +74,16 @@ function resolveStorylineModel(modelId: unknown): string {
 
 // Helper function to introduce delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function appendStylePrompt(prompt: string, stylePromptFragment?: string | null): string {
+  const stylePrompt = normalizeOptionalString(stylePromptFragment);
+  if (!stylePrompt) return prompt;
+  return `${prompt}\n\nStyle direction: ${stylePrompt}`;
+}
 
 // Helper function to call Groq API
 async function callGroqAI(
@@ -167,19 +179,24 @@ async function processSingleShot(
     
     // Clean up responses
     const cleanedVisualPrompt = visualPrompt.trim().replace(/^"|"$/g, '');
+    const styledVisualPrompt = appendStylePrompt(
+      cleanedVisualPrompt,
+      projectData?._settings?.stylePromptFragment
+    );
     const cleanedDialogue = dialogue.trim().replace(/^"|"$/g, '');
     const cleanedSoundEffects = soundEffects.trim().replace(/^"|"$/g, '');
     
-    console.log(`[Shot ${shot.id}] Generated content - Visual: ${cleanedVisualPrompt.substring(0, 50)}..., Dialogue: ${cleanedDialogue.substring(0, 30)}..., SFX: ${cleanedSoundEffects.substring(0, 30)}...`);
+    console.log(`[Shot ${shot.id}] Generated content - Visual: ${styledVisualPrompt.substring(0, 50)}..., Dialogue: ${cleanedDialogue.substring(0, 30)}..., SFX: ${cleanedSoundEffects.substring(0, 30)}...`);
     
     // Update shot with ALL generated content
     const { error: updateErr } = await supabaseClient
       .from('shots')
       .update({ 
-        visual_prompt: cleanedVisualPrompt,
+        visual_prompt: styledVisualPrompt,
         dialogue: cleanedDialogue,
         sound_effects: cleanedSoundEffects,
-        image_status: 'prompt_ready'
+        image_status: 'prompt_ready',
+        image_generation_error: null
       })
       .eq('id', shot.id);
     
@@ -209,6 +226,7 @@ async function processSingleShot(
     await supabaseClient.from('shots')
       .update({ 
         image_status: 'failed', 
+        image_generation_error: error.message,
         failure_reason: error.message 
       })
       .eq('id', shot.id);
@@ -290,6 +308,7 @@ async function processSingleScene(
         shot_type: shotType,
         prompt_idea: idea,
         image_status: 'pending',
+        image_generation_error: null,
       });
     }
 
@@ -438,10 +457,13 @@ async function processProjectSetup(
       `[Background Processing ${project_id}] Using settings image=${baseImageModel || 'default'} video=${baseVideoModel || 'default'} storyline=${storylineTextModel}`
     );
 
-    const styleReferenceUrl = await getStyleReferenceUrl(
+    const styleReferenceAssetUrl = await getStyleReferenceUrl(
       supabaseClient,
       clientPayload?.settings?.styleReferenceAssetId || projectData.style_reference_asset_id || null
     );
+    const styleReferenceUrl =
+      styleReferenceAssetUrl ||
+      normalizeOptionalString(clientPayload?.settings?.styleReferenceUrl);
 
     // Fetch characters (cast) from database for prompt enrichment
     const { data: charactersData } = await supabaseClient

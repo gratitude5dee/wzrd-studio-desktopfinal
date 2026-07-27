@@ -12,12 +12,9 @@ import {
   Node,
   NodeTypes,
   Panel,
-  useReactFlow,
   ReactFlowProvider,
-  Position,
-  OnMove,
   BackgroundVariant
-} from 'reactflow';
+} from '@xyflow/react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { GlassButton } from '@/components/ui/glass-button';
 import { PortalHeader } from '@/components/ui/portal-header';
@@ -39,7 +36,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ConceptNode } from './ConceptNode';
 import { ConnectionNode } from './ConnectionNode';
 import { KnowledgeCluster } from './KnowledgeCluster';
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 
 // Node types for the knowledge canvas
 const nodeTypes: NodeTypes = {
@@ -48,8 +45,10 @@ const nodeTypes: NodeTypes = {
   cluster: KnowledgeCluster,
 };
 
+type KnowledgeFlowNode = Node<Record<string, unknown>>;
+
 // Initial knowledge graph data
-const initialNodes: Node[] = [
+const initialNodes: KnowledgeFlowNode[] = [
   {
     id: '1',
     type: 'concept',
@@ -130,23 +129,32 @@ interface KnowledgeCanvasProps {
   className?: string;
 }
 
+const getNodeStringData = (node: KnowledgeFlowNode, key: string): string => {
+  const value = node.data[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const getNodeNumberData = (node: KnowledgeFlowNode, key: string): number => {
+  const value = node.data[key];
+  return typeof value === 'number' ? value : 0;
+};
+
 const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedNode, setSelectedNode] = useState<KnowledgeFlowNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isSemanticMode, setIsSemanticMode] = useState(false);
   const [showClusters, setShowClusters] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project } = useReactFlow();
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((event: React.MouseEvent, node: KnowledgeFlowNode) => {
     setSelectedNode(node);
   }, []);
 
@@ -161,7 +169,7 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
       // Medium level - show core concepts and clusters
       return nodes.filter(node => 
         node.type === 'cluster' || 
-        (node.type === 'concept' && node.data.category === 'core')
+        (node.type === 'concept' && getNodeStringData(node, 'category') === 'core')
       );
     }
     return nodes; // Full detail view
@@ -169,14 +177,16 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
 
   const filteredNodes = useMemo(() => {
     if (!searchQuery) return visibleNodes;
-    return visibleNodes.filter(node =>
-      node.data.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.data.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const normalizedSearch = searchQuery.toLowerCase();
+    return visibleNodes.filter((node) => {
+      const label = getNodeStringData(node, 'label').toLowerCase();
+      const description = getNodeStringData(node, 'description').toLowerCase();
+      return label.includes(normalizedSearch) || description.includes(normalizedSearch);
+    });
   }, [visibleNodes, searchQuery]);
 
   const addConceptNode = useCallback(() => {
-    const newNode: Node = {
+    const newNode: KnowledgeFlowNode = {
       id: `concept-${Date.now()}`,
       type: 'concept',
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
@@ -287,7 +297,7 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
           />
           <MiniMap 
             nodeColor={(node) => {
-              switch (node.data.category) {
+              switch (getNodeStringData(node, 'category')) {
                 case 'core': return 'hsl(var(--cosmic-stellar))';
                 case 'technique': return 'hsl(var(--cosmic-plasma))';
                 case 'creative': return 'hsl(var(--cosmic-quantum))';
@@ -334,7 +344,7 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
             <GlassCard variant="stellar" depth="deep" glow="medium" className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold glow-text-primary">{selectedNode.data.label}</h3>
+                  <h3 className="text-lg font-semibold glow-text-primary">{getNodeStringData(selectedNode, 'label')}</h3>
                   <GlassButton 
                     variant="ghost" 
                     size="sm"
@@ -345,15 +355,15 @@ const KnowledgeCanvasContent: React.FC<KnowledgeCanvasProps> = ({ className }) =
                 </div>
                 
                 <p className="text-sm text-muted-foreground">
-                  {selectedNode.data.description}
+                  {getNodeStringData(selectedNode, 'description')}
                 </p>
                 
                 <div className="flex flex-wrap gap-2">
                   <span className="px-2 py-1 text-xs rounded-full bg-cosmic-stellar/20 text-cosmic-stellar border border-cosmic-stellar/30">
-                    {selectedNode.data.category}
+                    {getNodeStringData(selectedNode, 'category')}
                   </span>
                   <span className="px-2 py-1 text-xs rounded-full bg-cosmic-plasma/20 text-cosmic-plasma border border-cosmic-plasma/30">
-                    {selectedNode.data.connections} connections
+                    {getNodeNumberData(selectedNode, 'connections')} connections
                   </span>
                 </div>
                 

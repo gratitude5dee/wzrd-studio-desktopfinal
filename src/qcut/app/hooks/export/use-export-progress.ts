@@ -20,6 +20,10 @@ import { useElectron } from "@qcut-app/hooks/useElectron";
 import { debugLog, debugError, debugWarn } from "@qcut-app/lib/debug/debug-config";
 import { lockForExport, unlockFromExport } from "@qcut-app/lib/media/blob-manager";
 import { saveExportedVideo } from "@qcut-app/lib/export/export-output";
+import { registerProjectExport } from "@qcut-app/lib/export/project-export-registration";
+import { useProjectStore } from "@qcut-app/stores/project-store";
+import { useMediaStore } from "@qcut-app/stores/media/media-store";
+import { getWzrdProjectContext } from "@/qcut/bridge/wzrd-project-context";
 
 export function useExportProgress() {
 	const { progress, updateProgress, setError, resetExport, addToHistory } =
@@ -27,6 +31,7 @@ export function useExportProgress() {
 
 	const { tracks } = useTimelineStore();
 	const { mediaItems } = useAsyncMediaItems();
+	const { activeProject } = useProjectStore();
 	const { isElectron } = useElectron();
 
 	const currentEngineRef = useRef<ExportEngine | null>(null);
@@ -235,6 +240,72 @@ export function useExportProgress() {
 			const saveResult = await saveExportedVideo(blob, exportSettings.filename);
 			if (!saveResult.success) {
 				debugWarn("[ExportPanel] Save issue:", saveResult.error);
+			}
+
+			const qcutProjectId = activeProject?.id;
+			const wzrdContext = qcutProjectId
+				? getWzrdProjectContext(qcutProjectId)
+				: null;
+			if (qcutProjectId && wzrdContext?.wzrdProjectId) {
+				try {
+					updateProgress({
+						progress: 100,
+						status: "Registering export in project assets...",
+						isExporting: true,
+					});
+
+					const registration = await registerProjectExport({
+						projectId: wzrdContext.wzrdProjectId,
+						qcutProjectId,
+						blob,
+						filename: exportSettings.filename,
+						format: exportSettings.format,
+						engineType: selectedEngineType || "auto",
+						durationSeconds: totalDuration,
+						settings: {
+							quality: exportSettings.quality,
+							format: exportSettings.format,
+							width: exportSettings.resolution.width,
+							height: exportSettings.resolution.height,
+							includeAudio: exportSettings.includeAudio,
+							audioCodec: exportSettings.audioCodec,
+							audioBitrate: exportSettings.audioBitrate,
+						},
+					});
+
+					const mediaStore = useMediaStore.getState();
+					const alreadyVisible = mediaStore.mediaItems.some(
+						(item) => item.id === registration.assetId
+					);
+					if (!alreadyVisible) {
+						await mediaStore.addMediaItem(qcutProjectId, {
+							id: registration.assetId,
+							name: exportSettings.filename,
+							type: "video",
+							file: new File([], exportSettings.filename, {
+								type: blob.type || "video/mp4",
+							}),
+							url: registration.publicUrl,
+							originalUrl: registration.publicUrl,
+							duration: totalDuration,
+							metadata: {
+								source: "qcut-export",
+								assetId: registration.assetId,
+								exportJobId: registration.exportJobId,
+								storageBucket: registration.storageBucket,
+								storagePath: registration.storagePath,
+							},
+						});
+					}
+				} catch (registrationError) {
+					debugWarn("[ExportPanel] Project asset registration failed:", registrationError);
+					toast.warning("Export saved locally, but project asset registration failed", {
+						description:
+							registrationError instanceof Error
+								? registrationError.message
+								: "Please try saving it to project assets again.",
+					});
+				}
 			}
 
 			// Show success message

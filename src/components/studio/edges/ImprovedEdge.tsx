@@ -109,20 +109,11 @@ export const ImprovedEdge = memo(({
           </feMerge>
         </filter>
 
-        {/* Flow animation gradient */}
-        {statusStyles.animate && (
-          <linearGradient id={flowAnimationId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="transparent">
-              <animate attributeName="offset" values="-0.3;1" dur="1.5s" repeatCount="indefinite" />
-            </stop>
-            <stop offset="15%" stopColor="white" stopOpacity="0.8">
-              <animate attributeName="offset" values="-0.15;1.15" dur="1.5s" repeatCount="indefinite" />
-            </stop>
-            <stop offset="30%" stopColor="transparent">
-              <animate attributeName="offset" values="0;1.3" dur="1.5s" repeatCount="indefinite" />
-            </stop>
-          </linearGradient>
-        )}
+        <linearGradient id={flowAnimationId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="transparent" />
+          <stop offset="50%" stopColor="white" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="transparent" />
+        </linearGradient>
       </defs>
 
       {/* Outer glow layer */}
@@ -177,6 +168,8 @@ export const ImprovedEdge = memo(({
           stroke={`url(#${flowAnimationId})`}
           fill="none"
           strokeLinecap="round"
+          strokeDasharray="8 8"
+          className="animate-[studio-flow_1.2s_linear_infinite]"
           style={{
             mixBlendMode: 'overlay',
             pointerEvents: 'none'

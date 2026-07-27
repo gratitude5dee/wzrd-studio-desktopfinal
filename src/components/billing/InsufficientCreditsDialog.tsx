@@ -46,12 +46,12 @@ export const InsufficientCreditsDialog = () => {
 
   const goBuyPack = () => {
     setOpen(false);
-    navigate(`${appRoutes.settings.billing}?topup=1${required ? `&required=${required}` : ''}${available ? `&available=${available}` : ''}`);
+    navigate(`${appRoutes.systemBilling}?topup=1${required ? `&required=${required}` : ''}${available ? `&available=${available}` : ''}`);
   };
 
   const goUpgradePro = () => {
     setOpen(false);
-    navigate(`${appRoutes.settings.billing}#plans`);
+    navigate(`${appRoutes.systemBilling}#plans`);
   };
 
   return (

@@ -174,8 +174,11 @@ function LensWheelInner<T extends string>(
           onPointerCancel={onPointerUp}
         >
           <ul
-            className="absolute inset-x-0 flex flex-col items-center transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
-            style={{ transform: `translateY(${CELL_HEIGHT}px)` }}
+            className="absolute inset-x-0 flex flex-col items-center transition-transform duration-200 motion-reduce:transition-none"
+            style={{
+              transform: `translateY(${CELL_HEIGHT}px)`,
+              transitionTimingFunction: 'cubic-bezier(0.32,0.72,0,1)',
+            }}
           >
             {[-1, 0, 1].map((offset) => {
               const idx = peekIndex(offset);

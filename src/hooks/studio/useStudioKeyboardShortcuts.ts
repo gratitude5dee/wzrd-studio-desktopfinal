@@ -19,6 +19,9 @@ export interface StudioKeyboardShortcutsOptions {
   onPaste?: () => void;
   onCut?: () => void;
   onSearch?: () => void;
+  onSelectAll?: () => void;
+  onClearSelection?: () => void;
+  onNudgeSelected?: (delta: { x: number; y: number }) => void;
   selectedNodeIds?: string[];
   isEnabled?: boolean;
 }
@@ -36,6 +39,9 @@ export const useStudioKeyboardShortcuts = ({
   onPaste,
   onCut,
   onSearch,
+  onSelectAll,
+  onClearSelection,
+  onNudgeSelected,
   selectedNodeIds = [],
   isEnabled = true,
 }: StudioKeyboardShortcutsOptions = {}) => {
@@ -77,14 +83,22 @@ export const useStudioKeyboardShortcuts = ({
     // Selection
     if (cmdOrCtrl && event.key === 'a' && !isInputField) {
       event.preventDefault();
-      const allNodes = getNodes();
-      setNodes(allNodes.map(node => ({ ...node, selected: true })));
+      if (onSelectAll) {
+        onSelectAll();
+      } else {
+        const allNodes = getNodes();
+        setNodes(allNodes.map(node => ({ ...node, selected: true })));
+      }
       return;
     }
 
     if (event.key === 'Escape') {
       event.preventDefault();
-      setNodes(getNodes().map(node => ({ ...node, selected: false })));
+      if (onClearSelection) {
+        onClearSelection();
+      } else {
+        setNodes(getNodes().map(node => ({ ...node, selected: false })));
+      }
       return;
     }
 
@@ -119,7 +133,7 @@ export const useStudioKeyboardShortcuts = ({
     }
 
     // Duplicate
-    if (cmdOrCtrl && event.key === 'd') {
+    if (cmdOrCtrl && event.key === 'd' && !isInputField) {
       event.preventDefault();
       if (selectedNodeIds.length > 0) {
         onDuplicate?.(selectedNodeIds);
@@ -128,7 +142,7 @@ export const useStudioKeyboardShortcuts = ({
     }
 
     // Group
-    if (cmdOrCtrl && event.key === 'g') {
+    if (cmdOrCtrl && event.key === 'g' && !isInputField) {
       event.preventDefault();
       if (selectedNodeIds.length > 1) {
         onGroup?.(selectedNodeIds);
@@ -182,25 +196,29 @@ export const useStudioKeyboardShortcuts = ({
     if (!isInputField && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       const moveDistance = event.shiftKey ? 10 : 1;
-      const nodes = getNodes();
-      
-      setNodes(nodes.map(node => {
-        if (!node.selected) return node;
-        
-        let dx = 0, dy = 0;
-        if (event.key === 'ArrowLeft') dx = -moveDistance;
-        if (event.key === 'ArrowRight') dx = moveDistance;
-        if (event.key === 'ArrowUp') dy = -moveDistance;
-        if (event.key === 'ArrowDown') dy = moveDistance;
-        
-        return {
-          ...node,
-          position: {
-            x: node.position.x + dx,
-            y: node.position.y + dy,
-          },
-        };
-      }));
+
+      let dx = 0, dy = 0;
+      if (event.key === 'ArrowLeft') dx = -moveDistance;
+      if (event.key === 'ArrowRight') dx = moveDistance;
+      if (event.key === 'ArrowUp') dy = -moveDistance;
+      if (event.key === 'ArrowDown') dy = moveDistance;
+
+      if (onNudgeSelected) {
+        onNudgeSelected({ x: dx, y: dy });
+      } else {
+        const nodes = getNodes();
+        setNodes(nodes.map(node => {
+          if (!node.selected) return node;
+
+          return {
+            ...node,
+            position: {
+              x: node.position.x + dx,
+              y: node.position.y + dy,
+            },
+          };
+        }));
+      }
       return;
     }
   }, [
@@ -218,6 +236,9 @@ export const useStudioKeyboardShortcuts = ({
     onPaste,
     onCut,
     onSearch,
+    onSelectAll,
+    onClearSelection,
+    onNudgeSelected,
     fitView,
     zoomTo,
     getNodes,

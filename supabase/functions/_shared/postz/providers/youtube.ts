@@ -1,6 +1,8 @@
 import type {
   AuthTokenDetails,
+  ChannelRow,
   OAuthTarget,
+  PostDetails,
   PostResponse,
   PostzProvider,
   ProviderCapabilities,
@@ -74,6 +76,7 @@ async function fetchYouTubeChannels(accessToken: string, ids?: string[]) {
 const youtubeProvider: PostzProvider = {
   identifier: "youtube",
   name: "YouTube",
+  implemented: true,
   capabilities: CAPABILITIES,
   requiredEnvVars: ["POSTZ_YOUTUBE_CLIENT_ID", "POSTZ_YOUTUBE_CLIENT_SECRET"],
 
@@ -197,8 +200,80 @@ const youtubeProvider: PostzProvider = {
     };
   },
 
-  async post(): Promise<PostResponse[]> {
-    throw new Error("YouTube publishing not implemented yet");
+  async post(_channel: ChannelRow, accessToken: string, posts: PostDetails[]): Promise<PostResponse[]> {
+    const responses: PostResponse[] = [];
+
+    for (const post of posts) {
+      const settings = (post.settings ?? {}) as Record<string, any>;
+      const video = post.media?.find((item) => item.type === "video");
+      if (!video?.url) throw new Error("YouTube publishing requires a video URL");
+
+      const videoRes = await fetch(video.url);
+      if (!videoRes.ok) {
+        throw new Error(`Unable to fetch YouTube media (${videoRes.status})`);
+      }
+      const videoBytes = await videoRes.arrayBuffer();
+      const contentType = videoRes.headers.get("content-type") ?? "video/mp4";
+
+      const metadata = {
+        snippet: {
+          title: String(settings.title ?? post.settings?.title ?? "Untitled WZRD video").slice(0, 100),
+          description: post.message ?? "",
+          tags: Array.isArray(settings.tags) ? settings.tags : undefined,
+        },
+        status: {
+          privacyStatus: String(settings.privacyStatus ?? settings.type ?? "private"),
+          selfDeclaredMadeForKids: Boolean(settings.selfDeclaredMadeForKids ?? false),
+        },
+      };
+
+      const initRes = await fetch(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": contentType,
+            "X-Upload-Content-Length": String(videoBytes.byteLength),
+          },
+          body: JSON.stringify(metadata),
+        },
+      );
+
+      if (!initRes.ok) {
+        throw new Error(`YouTube upload session failed (${initRes.status}): ${await initRes.text()}`);
+      }
+
+      const uploadUrl = initRes.headers.get("location");
+      if (!uploadUrl) throw new Error("YouTube upload session missing Location header");
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(videoBytes.byteLength),
+        },
+        body: videoBytes,
+      });
+
+      const uploadJson = await uploadRes.json().catch(() => ({}));
+      if (!uploadRes.ok) {
+        throw new Error(`YouTube upload failed (${uploadRes.status}): ${JSON.stringify(uploadJson)}`);
+      }
+
+      const videoId = String(uploadJson.id ?? "");
+      if (!videoId) throw new Error(`YouTube upload response missing id: ${JSON.stringify(uploadJson)}`);
+
+      responses.push({
+        id: post.id,
+        postId: videoId,
+        releaseURL: `https://youtu.be/${videoId}`,
+        status: "published",
+      });
+    }
+
+    return responses;
   },
 
   async listTargets(accessToken: string): Promise<OAuthTarget[]> {

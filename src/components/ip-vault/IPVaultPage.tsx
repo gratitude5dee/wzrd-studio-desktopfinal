@@ -1,23 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft,
-  ChevronRight,
   Loader2,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import AppShell from '@/components/layout/AppShell';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { Sidebar } from '@/components/home/Sidebar';
-import { MobileSidebarDrawer } from '@/components/home/MobileSidebarDrawer';
-import { MobileHeader } from '@/components/home/MobileHeader';
-import { useSidebar } from '@/contexts/SidebarContext';
-import { useIsMobile } from '@/hooks/use-mobile';
 import wzrdLogo from '@/assets/wzrd-logo.png';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
@@ -36,9 +30,6 @@ import { IPVaultVoiceBridge } from './IPVaultVoiceBridge';
 
 export function IPVaultPage() {
   const navigate = useNavigate();
-  const { isCollapsed, setIsCollapsed } = useSidebar();
-  const isMobile = useIsMobile();
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const storyWallet = useStoryProtocolClient();
   const [items, setItems] = useState<IPVaultItem[]>([]);
@@ -188,85 +179,47 @@ export function IPVaultPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex w-full">
-      {/* Desktop Sidebar */}
-      <div className="hidden md:block">
-        <Sidebar activeView="ip-vault" onViewChange={() => {}} />
-      </div>
+    <AppShell
+      activeView="ip-vault"
+      className="bg-background"
+      contentAs="div"
+      contentClassName="pb-20 md:pb-0"
+    >
+      {/* Desktop top bar with back chevron + logo */}
+      <header className={cn(
+        "border-b border-orange-100 dark:border-[rgba(249,115,22,0.1)]",
+        "bg-white/90 dark:bg-[#0a0a0f]/90 backdrop-blur-xl",
+        "hidden md:block"
+      )}>
+        <div className="h-16 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(appRoutes.home)}
+              className={cn(
+                "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
+                "text-zinc-500 dark:text-zinc-400 hover:text-orange-500",
+                "hover:bg-zinc-100 dark:hover:bg-white/[0.06]"
+              )}
+              aria-label="Back to Home"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
 
-      {/* Mobile Sidebar Drawer */}
-      <MobileSidebarDrawer
-        isOpen={isMobileSidebarOpen}
-        onClose={() => setIsMobileSidebarOpen(false)}
-        activeView="ip-vault"
-        onViewChange={() => {}}
-      />
-
-      {/* Main Content */}
-      <motion.div
-        className="flex-1 pb-20 md:pb-0 min-h-screen"
-        animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 0 : 256) }}
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        initial={false}
-      >
-        {/* Mobile Header */}
-        <MobileHeader onMenuClick={() => setIsMobileSidebarOpen(true)} />
-
-        {/* Desktop top bar with back chevron + logo */}
-        <header className={cn(
-          "border-b border-orange-100 dark:border-[rgba(249,115,22,0.1)]",
-          "bg-white/90 dark:bg-[#0a0a0f]/90 backdrop-blur-xl",
-          "hidden md:block"
-        )}>
-          <div className="h-16 flex items-center justify-between px-6">
-            <div className="flex items-center gap-3">
-              <AnimatePresence>
-                {isCollapsed && (
-                  <motion.button
-                    initial={{ opacity: 0, x: -10, scale: 0.8 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: -10, scale: 0.8 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={() => setIsCollapsed(false)}
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200",
-                      "bg-zinc-100 dark:bg-white/[0.06] border border-zinc-200 dark:border-white/[0.1]",
-                      "hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_0_12px_rgba(249,115,22,0.15)]",
-                      "text-zinc-500 dark:text-zinc-400 hover:text-orange-500"
-                    )}
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </motion.button>
-                )}
-              </AnimatePresence>
-
-              <button
-                onClick={() => navigate(appRoutes.home)}
-                className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
-                  "text-zinc-500 dark:text-zinc-400 hover:text-orange-500",
-                  "hover:bg-zinc-100 dark:hover:bg-white/[0.06]"
-                )}
-                aria-label="Back to Home"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
-              <img
-                src={staticAssetUrl(wzrdLogo)}
-                alt="WZRD STUDIO Logo"
-                className="h-20 object-contain"
-              />
-              <span className="text-xs text-primary bg-primary/15 px-2 py-0.5 rounded-full border border-primary/25 font-medium">
-                ALPHA
-              </span>
-              <div className="h-5 w-px bg-[rgba(249,115,22,0.1)]" />
-              <span className="text-lg font-semibold text-foreground">IP Vault</span>
-            </div>
-
-            <ThemeToggle />
+            <img
+              src={staticAssetUrl(wzrdLogo)}
+              alt="WZRD STUDIO Logo"
+              className="h-20 object-contain"
+            />
+            <span className="text-xs text-primary bg-primary/15 px-2 py-0.5 rounded-full border border-primary/25 font-medium">
+              ALPHA
+            </span>
+            <div className="h-5 w-px bg-[rgba(249,115,22,0.1)]" />
+            <span className="text-lg font-semibold text-foreground">IP Vault</span>
           </div>
-        </header>
+
+          <ThemeToggle />
+        </div>
+      </header>
 
         {/* Page content */}
         <div className="bg-[#08080b] text-white min-h-[calc(100vh-64px)]" data-testid="ip-vault-page">
@@ -347,7 +300,6 @@ export function IPVaultPage() {
             />
           </main>
         </div>
-      </motion.div>
-    </div>
+    </AppShell>
   );
 }

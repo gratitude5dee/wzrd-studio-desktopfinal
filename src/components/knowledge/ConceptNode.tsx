@@ -1,9 +1,9 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
-import { GlassCard } from '@/components/ui/glass-card';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { GlassCard, type GlassCardProps } from '@/components/ui/glass-card';
 import { Brain, Zap, Star, Orbit } from 'lucide-react';
 
-interface ConceptNodeData {
+interface ConceptNodeData extends Record<string, unknown> {
   label: string;
   description: string;
   category: 'core' | 'technique' | 'creative' | 'new';
@@ -11,7 +11,9 @@ interface ConceptNodeData {
   strength: number;
 }
 
-export const ConceptNode = memo<NodeProps<ConceptNodeData>>(({ data, selected }) => {
+type ConceptFlowNode = Node<ConceptNodeData>;
+
+export const ConceptNode = memo<NodeProps<ConceptFlowNode>>(({ data, selected }) => {
   const getCategoryIcon = () => {
     switch (data.category) {
       case 'core': return <Brain className="w-4 h-4" />;
@@ -30,9 +32,18 @@ export const ConceptNode = memo<NodeProps<ConceptNodeData>>(({ data, selected })
     }
   };
 
+  const getCategoryVariant = (): GlassCardProps['variant'] => {
+    switch (data.category) {
+      case 'core': return 'stellar';
+      case 'technique': return 'cosmic';
+      case 'creative': return 'quantum';
+      default: return 'nebula';
+    }
+  };
+
   return (
     <GlassCard 
-      variant={getCategoryColor() as any}
+      variant={getCategoryVariant()}
       depth="medium"
       glow={selected ? "intense" : "subtle"}
       interactive="none"

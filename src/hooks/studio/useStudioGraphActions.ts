@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 
@@ -337,6 +337,30 @@ export function useStudioGraphActions(projectId?: string) {
     [nodeDefinitions]
   );
 
+  const flushPendingSave = useCallback(() => {
+    if (!projectId || saveTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    void saveGraph(projectId);
+  }, [projectId, saveGraph]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPendingSave();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      flushPendingSave();
+    };
+  }, [flushPendingSave]);
+
   const scheduleSave = useCallback(() => {
     if (!projectId) {
       return;
@@ -349,7 +373,7 @@ export function useStudioGraphActions(projectId?: string) {
     saveTimeoutRef.current = window.setTimeout(() => {
       void saveGraph(projectId);
       saveTimeoutRef.current = null;
-    }, 350);
+    }, 800);
   }, [projectId, saveGraph]);
 
   const buildNode = useCallback(

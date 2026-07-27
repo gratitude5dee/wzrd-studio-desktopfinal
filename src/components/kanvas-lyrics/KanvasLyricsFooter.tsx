@@ -1,4 +1,10 @@
 import { Check, AudioLines, Type, Scissors, Save } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import {
+  APP_SIDEBAR_COLLAPSED_WIDTH,
+  APP_SIDEBAR_EXPANDED_WIDTH,
+  useSidebar,
+} from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 import type { WizardStep } from './types';
 
@@ -29,9 +35,19 @@ export function KanvasLyricsFooter({
 }: KanvasLyricsFooterProps) {
   // Save is enabled once audio is confirmed and lyrics exist
   const saveEnabled = audioConfirmed && wordCount > 0 && !saving;
+  const { isCollapsed, offset } = useSidebar();
+  const sidebarOffset =
+    typeof offset === 'number'
+      ? offset
+      : isCollapsed
+        ? APP_SIDEBAR_COLLAPSED_WIDTH
+        : APP_SIDEBAR_EXPANDED_WIDTH;
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0D1017]/95 backdrop-blur-xl">
+    <footer
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0D1017]/95 backdrop-blur-xl transition-[left] duration-300 ease-out md:left-[var(--app-sidebar-offset)]"
+      style={{ '--app-sidebar-offset': `${sidebarOffset}px` } as CSSProperties}
+    >
       <div className="mx-auto flex h-20 max-w-[1500px] items-center justify-between gap-6 px-5">
         {/* Stepper */}
         <ol className="flex items-center gap-2">

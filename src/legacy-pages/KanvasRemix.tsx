@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Check,
   ChevronDown,
   ChevronLeft,
   Clapperboard,
@@ -10,7 +9,6 @@ import {
   Film,
   Filter,
   Grid2X2,
-  GripVertical,
   HelpCircle,
   Import,
   Info,
@@ -20,7 +18,6 @@ import {
   Play,
   Repeat2,
   Shuffle,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,6 +45,7 @@ import {
 } from '@/lib/remix-utils';
 import { LyricRemixComposition } from '@/components/remix/LyricRemixComposition';
 import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
+import AppShell from '@/components/layout/AppShell';
 import { ExportModal } from '@/features/remix/ExportModal';
 
 type RatioFilter = 'all' | AspectRatio;
@@ -308,26 +306,36 @@ const KanvasRemix = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-black text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-black text-white"
+        contentAs="div"
+        contentClassName="flex min-h-screen flex-col"
+      >
         <KanvasLyricsHeader />
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!template) {
     return (
-      <div className="min-h-screen flex flex-col bg-black text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-black text-white"
+        contentAs="div"
+        contentClassName="flex min-h-screen flex-col"
+      >
         <KanvasLyricsHeader />
         <div className="px-6 py-10">
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-2 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => navigate(appRoutes.kanvasLyrics)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label="Back to templates"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -350,7 +358,7 @@ const KanvasRemix = () => {
             </div>
           </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
@@ -360,9 +368,14 @@ const KanvasRemix = () => {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-black text-white">
+    <AppShell
+      activeView="kanvas"
+      className="bg-black text-white"
+      contentAs="div"
+      contentClassName="flex min-h-screen flex-col"
+    >
       <KanvasLyricsHeader />
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[380px_1fr]">
+      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[380px_1fr]">
         {/* ── Left rail ── */}
         <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A] lg:sticky lg:top-0 lg:h-screen lg:overflow-hidden">
           <div className="px-6 pt-4">
@@ -801,7 +814,7 @@ const KanvasRemix = () => {
       >
         <HelpCircle className="h-5 w-5" />
       </button>
-    </div>
+    </AppShell>
   );
 };
 

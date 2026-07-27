@@ -12,7 +12,14 @@ Deno.serve(async (req) => {
     // Authenticate the request
     await authenticateRequest(req.headers);
 
-    const url = new URL(req.url).searchParams.get('url');
+    const searchParams = new URL(req.url).searchParams;
+    const url = searchParams.get('url');
+    const requestedFilename = searchParams.get('filename') || 'download';
+    const safeFilename = requestedFilename
+      .replace(/[/\\?%*:|"<>]/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || 'download';
     
     if (!url) {
       return errorResponse('URL parameter is required', 400);
@@ -37,7 +44,7 @@ Deno.serve(async (req) => {
       headers: {
         ...corsHeaders,
         'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="download"`,
+        'Content-Disposition': `attachment; filename="${safeFilename}"`,
       },
     });
 

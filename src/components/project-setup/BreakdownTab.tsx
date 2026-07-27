@@ -298,24 +298,27 @@ const BreakdownTab = ({ projectData, updateProjectData }: BreakdownTabProps) => 
     <div className="min-h-full p-6">
       <h1 className="text-2xl font-bold mb-8">Breakdown</h1>
       
-      {/* Show Generating state */}
+      {/* Show Generating state without blocking existing scene editing */}
       {isGenerating && (
-        <div className="flex flex-col items-center justify-center min-h-[200px] text-center text-zinc-400">
-          <Loader2 className="h-8 w-8 animate-spin mb-4" />
-          <p>Generating storyline and scenes...</p>
-          <p className="text-sm text-zinc-500">This may take a moment.</p>
-        </div>
+        <Alert className="mb-6 border-zinc-800 bg-zinc-950/80 text-white">
+          <div className="flex items-start">
+            <Loader2 className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 animate-spin text-blue-400" />
+            <AlertDescription className="text-zinc-300">
+              Generating storyline and scenes. Existing breakdown items remain editable while new results arrive.
+            </AlertDescription>
+          </div>
+        </Alert>
       )}
       
       {/* Show Loading state (after generation, before data arrives) */}
-      {!isGenerating && isLoading && (
+      {isLoading && (
         <div className="flex justify-center items-center min-h-[200px]">
           <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
         </div>
       )}
       
       {/* Show Content or Empty/Alert state */}
-      {!isGenerating && !isLoading && (
+      {!isLoading && (
         <>
           {showNoScenesAlert && fetchedScenes.length === 0 && (
             <Alert className="mb-6 bg-[#080D20] border-none text-white">

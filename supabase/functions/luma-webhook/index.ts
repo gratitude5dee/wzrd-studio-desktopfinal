@@ -98,6 +98,7 @@ serve(async (req) => {
           .from("shots")
           .update({ 
             image_status: "failed",
+            image_generation_error: updateData.failure_reason,
             failure_reason: updateData.failure_reason
           })
           .eq("id", generation.shot_id);
@@ -106,6 +107,22 @@ serve(async (req) => {
           console.error(`[Luma Webhook][Shot ${shotId}] Error updating shot status to failed: ${shotUpdateError.message}`);
         } else {
           console.log(`[Luma Webhook][Shot ${shotId}] Shot status updated to failed.`);
+        }
+      } else if (generation.api_provider === "luma_video") {
+        console.log(`[Luma Webhook][Shot ${shotId}] Updating video status to 'failed' due to Luma failure.`);
+        const { error: shotUpdateError } = await supabase
+          .from("shots")
+          .update({
+            video_status: "failed",
+            video_generation_error: updateData.failure_reason,
+            failure_reason: updateData.failure_reason
+          })
+          .eq("id", generation.shot_id);
+
+        if (shotUpdateError) {
+          console.error(`[Luma Webhook][Shot ${shotId}] Error updating video status to failed: ${shotUpdateError.message}`);
+        } else {
+          console.log(`[Luma Webhook][Shot ${shotId}] Video status updated to failed.`);
         }
       }
     }
@@ -146,6 +163,7 @@ serve(async (req) => {
             .update({ 
               image_url: imageUrl,
               image_status: "completed",
+              image_generation_error: null,
               failure_reason: null // Clear any failure reason on success
             })
             .eq("id", generation.shot_id);
@@ -168,6 +186,7 @@ serve(async (req) => {
           .from("shots")
           .update({ 
             image_status: "failed",
+            image_generation_error: updateData.failure_reason,
             failure_reason: updateData.failure_reason
           })
           .eq("id", generation.shot_id);
@@ -205,8 +224,22 @@ serve(async (req) => {
         } else {
           console.log(`[Luma Webhook][Shot ${shotId}] Video media asset created with ID: ${mediaAsset.id}`);
           updateData.result_media_asset_id = mediaAsset.id;
-          
-          // Note: You could update the shot with the video URL here if needed
+
+          const { error: shotUpdateError } = await supabase
+            .from("shots")
+            .update({
+              video_url: videoUrl,
+              video_status: "completed",
+              video_generation_error: null,
+              failure_reason: null
+            })
+            .eq("id", generation.shot_id);
+
+          if (shotUpdateError) {
+            console.error(`[Luma Webhook][Shot ${shotId}] Error updating shot with video URL: ${shotUpdateError.message}`);
+          } else {
+            console.log(`[Luma Webhook][Shot ${shotId}] Shot updated with video URL.`);
+          }
         }
       }
     }

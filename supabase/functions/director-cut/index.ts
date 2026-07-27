@@ -29,8 +29,74 @@ interface TimelineAssetRow {
   metadata: Record<string, unknown> | null;
 }
 
+interface DirectorCutFinalAssetRow {
+  id: string;
+  file_url: string | null;
+  file_size?: number | null;
+  duration_ms?: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at?: string | null;
+}
+
+interface DirectorCutExportJobRow {
+  id: string;
+  status: string;
+  progress: number | null;
+  output_url: string | null;
+  error_message: string | null;
+  provider: string | null;
+  provider_status: string | null;
+  provider_job_id: string | null;
+  fallback_used: boolean | null;
+  provider_payload: Record<string, unknown> | null;
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+interface DirectorCutHistoryItemResponse {
+  id: string;
+  jobId: string | null;
+  status: string;
+  progress: number;
+  outputUrl: string | null;
+  error: string | null;
+  provider: string | null;
+  providerStatus: string | null;
+  providerJobId: string | null;
+  fallbackUsed: boolean;
+  providerPayload: Record<string, unknown> | null;
+  finalAssetId: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+interface SupabaseQueryError {
+  message: string;
+}
+
+interface SupabaseQueryResult<T = unknown> {
+  data: T | null;
+  error: SupabaseQueryError | null;
+}
+
+interface SupabaseQueryBuilder<T = unknown> extends PromiseLike<SupabaseQueryResult<T>> {
+  select(columns?: string): SupabaseQueryBuilder<T>;
+  eq(column: string, value: unknown): SupabaseQueryBuilder<T>;
+  order(column: string, options?: Record<string, unknown>): SupabaseQueryBuilder<T>;
+  limit(count: number): SupabaseQueryBuilder<T>;
+  insert(values: unknown): SupabaseQueryBuilder<T>;
+  single(): Promise<SupabaseQueryResult<unknown>>;
+}
+
+interface SupabaseAdminLike {
+  from(table: string): SupabaseQueryBuilder;
+}
+
 interface RequestBody {
-  action: 'sync' | 'create' | 'retry' | 'status';
+  action: 'sync' | 'create' | 'retry' | 'status' | 'history' | 'send_to_editor';
   projectId?: string;
   jobId?: string;
   settings?: ExportSettings;
@@ -86,6 +152,11 @@ const mapTimelineAssetsToExportAssets = (assets: TimelineAssetRow[]): ExportAsse
       };
     });
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const asString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value : null;
 
 const assertProjectAccess = async (supabaseAdmin: any, userId: string, projectId: string) => {
   const { data: project, error: projectError } = await supabaseAdmin
@@ -255,6 +326,188 @@ const preflightFailureResponse = (summary: DirectorCutSummary) =>
     }
   );
 
+const normalizeHistoryJob = (
+  job: DirectorCutExportJobRow,
+  assetByJobId: Map<string, DirectorCutFinalAssetRow>
+): DirectorCutHistoryItemResponse => {
+  const payload = asRecord(job.provider_payload);
+  const asset = assetByJobId.get(job.id);
+  return {
+    id: job.id,
+    jobId: job.id,
+    status: job.status,
+    progress: job.progress ?? 0,
+    outputUrl: job.output_url ?? asset?.file_url ?? null,
+    error: job.error_message ?? null,
+    provider: job.provider ?? null,
+    providerStatus: job.provider_status ?? null,
+    providerJobId: job.provider_job_id ?? null,
+    fallbackUsed: job.fallback_used ?? false,
+    providerPayload: job.provider_payload ?? null,
+    finalAssetId: asset?.id ?? null,
+    createdAt: job.created_at ?? null,
+    startedAt: job.started_at ?? null,
+    completedAt: job.completed_at ?? asset?.created_at ?? null,
+  };
+};
+
+const loadDirectorCutHistory = async (supabaseAdmin: SupabaseAdminLike, userId: string, projectId: string) => {
+  await assertProjectAccess(supabaseAdmin, userId, projectId);
+
+  const { data: finalAssets, error: finalAssetsError } = await supabaseAdmin
+    .from('final_project_assets')
+    .select('id, file_url, file_size, duration_ms, metadata, created_at, updated_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .eq('asset_type', 'video')
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  if (finalAssetsError) {
+    throw new Error(`Failed to load Director's Cut assets: ${finalAssetsError.message}`);
+  }
+
+  const directorAssets = ((finalAssets || []) as DirectorCutFinalAssetRow[]).filter((asset) => {
+    const metadata = asRecord(asset.metadata);
+    return metadata.source === 'director_cut' && typeof asset.file_url === 'string' && asset.file_url.length > 0;
+  });
+  const assetByJobId = new Map<string, DirectorCutFinalAssetRow>();
+  for (const asset of directorAssets) {
+    const exportJobId = asString(asRecord(asset.metadata).export_job_id);
+    if (exportJobId) assetByJobId.set(exportJobId, asset);
+  }
+
+  const { data: jobs, error: jobsError } = await supabaseAdmin
+    .from('export_jobs')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  if (jobsError) {
+    throw new Error(`Failed to load Director's Cut history: ${jobsError.message}`);
+  }
+
+  const seenAssetIds = new Set<string>();
+  const items: DirectorCutHistoryItemResponse[] = ((jobs || []) as DirectorCutExportJobRow[])
+    .filter((job) => asRecord(job.provider_payload).source === 'director_cut' || assetByJobId.has(job.id))
+    .map((job) => {
+      const asset = assetByJobId.get(job.id);
+      if (asset?.id) seenAssetIds.add(asset.id);
+      return normalizeHistoryJob(job, assetByJobId);
+    });
+
+  for (const asset of directorAssets) {
+    if (seenAssetIds.has(asset.id)) continue;
+    const metadata = asRecord(asset.metadata);
+    items.push({
+      id: `asset:${asset.id}`,
+      jobId: asString(metadata.export_job_id),
+      status: 'completed',
+      progress: 100,
+      outputUrl: asset.file_url,
+      error: null,
+      provider: asString(metadata.provider) ?? 'director_cut',
+      providerStatus: 'completed',
+      providerJobId: null,
+      fallbackUsed: Boolean(metadata.fallback_used),
+      providerPayload: {
+        source: 'director_cut',
+        stage: 'completed',
+        partialSuccess: Boolean(metadata.partial_success),
+      },
+      finalAssetId: asset.id,
+      createdAt: asset.created_at ?? null,
+      startedAt: null,
+      completedAt: asset.created_at ?? null,
+    });
+  }
+
+  items.sort((a, b) => {
+    const left = Date.parse(a.completedAt ?? a.startedAt ?? a.createdAt ?? '') || 0;
+    const right = Date.parse(b.completedAt ?? b.startedAt ?? b.createdAt ?? '') || 0;
+    return right - left;
+  });
+
+  return items.slice(0, 12);
+};
+
+const ensureDirectorCutFinalAsset = async (
+  supabaseAdmin: SupabaseAdminLike,
+  userId: string,
+  projectId: string,
+  jobId: string
+) => {
+  await assertProjectAccess(supabaseAdmin, userId, projectId);
+
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('export_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .single();
+
+  if (jobError || !job) {
+    throw new Error('Director\'s Cut render not found');
+  }
+
+  const exportJob = job as DirectorCutExportJobRow;
+
+  if (exportJob.status !== 'completed' || !exportJob.output_url) {
+    throw new Error('Director\'s Cut render is not ready to send to the editor');
+  }
+
+  const { data: existingAssets, error: existingError } = await supabaseAdmin
+    .from('final_project_assets')
+    .select('id, file_url, metadata, created_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .eq('asset_type', 'video');
+
+  if (existingError) {
+    throw new Error(`Failed to check editor assets: ${existingError.message}`);
+  }
+
+  const existing = ((existingAssets || []) as DirectorCutFinalAssetRow[]).find((asset) => {
+    const metadata = asRecord(asset.metadata);
+    return metadata.source === 'director_cut' && (metadata.export_job_id === jobId || asset.file_url === exportJob.output_url);
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  const payload = asRecord(exportJob.provider_payload);
+  const { data: asset, error: insertError } = await supabaseAdmin
+    .from('final_project_assets')
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      asset_type: 'video',
+      file_url: exportJob.output_url,
+      storage_bucket: EXPORT_BUCKET,
+      metadata: {
+        export_job_id: jobId,
+        source: 'director_cut',
+        name: 'Director\'s Cut',
+        provider: exportJob.provider,
+        provider_status: exportJob.provider_status,
+        fallback_used: exportJob.fallback_used ?? false,
+        partial_success: Boolean(payload.partialSuccess),
+      },
+    })
+    .select('id, file_url, metadata, created_at')
+    .single();
+
+  if (insertError || !asset) {
+    throw new Error(`Failed to send Director's Cut to editor: ${insertError?.message}`);
+  }
+
+  return asset;
+};
+
 const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId: string) => {
   await assertProjectAccess(supabaseAdmin, userId, projectId);
 
@@ -419,7 +672,7 @@ const runDirectorCutJob = async (
         provider: 'fal_remote',
         provider_status: 'processing',
         progress: 10,
-        provider_payload: { stage: 'submitting_to_provider' },
+        provider_payload: { stage: 'submitting_to_provider', source: 'director_cut' },
       })
       .eq('id', jobId);
 
@@ -437,6 +690,7 @@ const runDirectorCutJob = async (
     const completedPayload: Record<string, unknown> = {
       ...(result.providerPayload ?? {}),
       stage: 'completed',
+      source: 'director_cut',
     };
     if (shotFailures.length > 0) {
       completedPayload.shotFailures = shotFailures;
@@ -482,10 +736,11 @@ const runDirectorCutJob = async (
       ? {
           ...error.providerPayload,
           stage: 'failed',
+          source: 'director_cut',
           shotFailures: error.shotFailures,
           failedShotCount: error.shotFailures.length,
         }
-      : { stage: 'failed', error: message };
+      : { stage: 'failed', source: 'director_cut', error: message };
     safeLog('error', 'director-cut.processing.failed', { error, jobId, projectId, providerPayload });
     await supabaseAdmin
       .from('export_jobs')
@@ -584,6 +839,27 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'history') {
+      const history = await loadDirectorCutHistory(supabaseAdmin, user.id, projectId);
+      return new Response(JSON.stringify({ success: true, history }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'send_to_editor') {
+      if (!jobId) {
+        return new Response(JSON.stringify({ error: 'jobId is required for send_to_editor' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const asset = await ensureDirectorCutFinalAsset(supabaseAdmin, user.id, projectId, jobId);
+      return new Response(JSON.stringify({ success: true, asset }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'sync') {
       const summary = await syncTimelineAssets(supabaseAdmin, user.id, projectId);
       return new Response(JSON.stringify({ success: true, summary }), {
@@ -640,7 +916,7 @@ serve(async (req) => {
           provider: 'fal_remote',
           provider_status: 'queued',
           fallback_used: false,
-          provider_payload: { stage: 'syncing_assets' },
+          provider_payload: { stage: 'syncing_assets', source: 'director_cut' },
         })
         .select()
         .single();

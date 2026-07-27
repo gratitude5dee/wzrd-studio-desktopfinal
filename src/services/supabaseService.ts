@@ -819,6 +819,8 @@ export interface Character {
   name: string;
   description?: string;
   image_url?: string;
+  image_status?: 'pending' | 'generating' | 'completed' | 'failed';
+  image_generation_error?: string | null;
   identity_profile?: CharacterIdentityProfile | null;
   anchor_asset_ids?: string[];
   consistency_summary?: EvaluationSummary | null;
@@ -1039,9 +1041,13 @@ export interface Shot {
   image_url?: string;
   image_asset_id?: string | null;
   image_status?: string;
+  image_generation_error?: string | null;
+  image_generation_attempts?: number | null;
   video_url?: string;
   video_asset_id?: string | null;
   video_status?: string;
+  video_generation_error?: string | null;
+  video_generation_attempts?: number | null;
   luma_generation_id?: string;
   audio_url?: string;
   audio_status?: string;

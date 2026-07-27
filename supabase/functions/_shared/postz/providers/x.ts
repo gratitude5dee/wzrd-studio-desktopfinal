@@ -1,4 +1,4 @@
-import type { AuthTokenDetails, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
+import type { AuthTokenDetails, ChannelRow, PostDetails, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -99,6 +99,149 @@ async function signOAuth1(input: {
   );
 }
 
+async function fetchJsonWithOAuth(input: {
+  method: string;
+  url: string;
+  consumerKey: string;
+  consumerSecret: string;
+  token: string;
+  tokenSecret: string;
+  body?: unknown;
+}) {
+  const auth = await signOAuth1({
+    method: input.method,
+    url: input.url,
+    consumerKey: input.consumerKey,
+    consumerSecret: input.consumerSecret,
+    token: input.token,
+    tokenSecret: input.tokenSecret,
+  });
+
+  const res = await fetch(input.url, {
+    method: input.method,
+    headers: {
+      Authorization: auth,
+      ...(input.body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: input.body ? JSON.stringify(input.body) : undefined,
+  });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!res.ok) {
+    throw new Error(`X request failed (${res.status}): ${JSON.stringify(json)}`);
+  }
+
+  return json;
+}
+
+async function uploadMedia(input: {
+  media: NonNullable<PostDetails["media"]>[number];
+  consumerKey: string;
+  consumerSecret: string;
+  token: string;
+  tokenSecret: string;
+}): Promise<string> {
+  const mediaRes = await fetch(input.media.url);
+  if (!mediaRes.ok) {
+    throw new Error(`Unable to fetch media for X (${mediaRes.status})`);
+  }
+
+  const bytes = new Uint8Array(await mediaRes.arrayBuffer());
+  const mediaType = mediaRes.headers.get("content-type") ?? (input.media.type === "video" ? "video/mp4" : "image/jpeg");
+
+  const initUrl = new URL("https://upload.twitter.com/1.1/media/upload.json");
+  initUrl.searchParams.set("command", "INIT");
+  initUrl.searchParams.set("total_bytes", String(bytes.byteLength));
+  initUrl.searchParams.set("media_type", mediaType);
+  if (input.media.type === "video") initUrl.searchParams.set("media_category", "tweet_video");
+
+  const initJson = await fetchJsonWithOAuth({
+    method: "POST",
+    url: initUrl.toString(),
+    consumerKey: input.consumerKey,
+    consumerSecret: input.consumerSecret,
+    token: input.token,
+    tokenSecret: input.tokenSecret,
+  });
+
+  const mediaId = String(initJson.media_id_string ?? initJson.media_id ?? "");
+  if (!mediaId) throw new Error(`X INIT missing media id: ${JSON.stringify(initJson)}`);
+
+  const chunkSize = 4 * 1024 * 1024;
+  for (let offset = 0, segment = 0; offset < bytes.byteLength; offset += chunkSize, segment += 1) {
+    const appendUrl = new URL("https://upload.twitter.com/1.1/media/upload.json");
+    appendUrl.searchParams.set("command", "APPEND");
+    appendUrl.searchParams.set("media_id", mediaId);
+    appendUrl.searchParams.set("segment_index", String(segment));
+
+    const auth = await signOAuth1({
+      method: "POST",
+      url: appendUrl.toString(),
+      consumerKey: input.consumerKey,
+      consumerSecret: input.consumerSecret,
+      token: input.token,
+      tokenSecret: input.tokenSecret,
+    });
+
+    const form = new FormData();
+    form.set("media", new Blob([bytes.slice(offset, Math.min(offset + chunkSize, bytes.byteLength))], { type: mediaType }));
+
+    const appendRes = await fetch(appendUrl.toString(), {
+      method: "POST",
+      headers: { Authorization: auth },
+      body: form,
+    });
+
+    if (!appendRes.ok) {
+      throw new Error(`X APPEND failed (${appendRes.status}): ${await appendRes.text()}`);
+    }
+  }
+
+  const finalizeUrl = new URL("https://upload.twitter.com/1.1/media/upload.json");
+  finalizeUrl.searchParams.set("command", "FINALIZE");
+  finalizeUrl.searchParams.set("media_id", mediaId);
+
+  const finalizeJson = await fetchJsonWithOAuth({
+    method: "POST",
+    url: finalizeUrl.toString(),
+    consumerKey: input.consumerKey,
+    consumerSecret: input.consumerSecret,
+    token: input.token,
+    tokenSecret: input.tokenSecret,
+  });
+
+  let processing = finalizeJson.processing_info;
+  for (let i = 0; processing && i < 20; i += 1) {
+    const state = String(processing.state ?? "");
+    if (state === "succeeded") break;
+    if (state === "failed") throw new Error(`X media processing failed: ${JSON.stringify(processing)}`);
+    const delaySeconds = Number(processing.check_after_secs ?? 2);
+    await new Promise((resolve) => setTimeout(resolve, Math.max(1, delaySeconds) * 1000));
+
+    const statusUrl = new URL("https://upload.twitter.com/1.1/media/upload.json");
+    statusUrl.searchParams.set("command", "STATUS");
+    statusUrl.searchParams.set("media_id", mediaId);
+    const statusJson = await fetchJsonWithOAuth({
+      method: "GET",
+      url: statusUrl.toString(),
+      consumerKey: input.consumerKey,
+      consumerSecret: input.consumerSecret,
+      token: input.token,
+      tokenSecret: input.tokenSecret,
+    });
+    processing = statusJson.processing_info;
+  }
+
+  return mediaId;
+}
+
 function parseFormEncoded(body: string): Record<string, string> {
   const params = new URLSearchParams(body);
   const out: Record<string, string> = {};
@@ -124,6 +267,7 @@ const CAPABILITIES: ProviderCapabilities = {
 const xProvider: PostzProvider = {
   identifier: "x",
   name: "X",
+  implemented: true,
   capabilities: CAPABILITIES,
   requiredEnvVars: ["POSTZ_X_API_KEY", "POSTZ_X_API_SECRET"],
 
@@ -267,8 +411,52 @@ const xProvider: PostzProvider = {
     };
   },
 
-  async post(): Promise<PostResponse[]> {
-    throw new Error("X publishing not implemented yet");
+  async post(channel: ChannelRow, accessToken: string, posts: PostDetails[]): Promise<PostResponse[]> {
+    const consumerKey = requiredEnv("POSTZ_X_API_KEY");
+    const consumerSecret = requiredEnv("POSTZ_X_API_SECRET");
+    const [token, tokenSecret] = accessToken.split(":");
+    if (!token || !tokenSecret) {
+      throw new Error("Invalid X access token format");
+    }
+
+    const responses: PostResponse[] = [];
+    let replyTo: string | undefined;
+
+    for (const post of posts) {
+      const mediaIds: string[] = [];
+      for (const media of post.media ?? []) {
+        mediaIds.push(await uploadMedia({ media, consumerKey, consumerSecret, token, tokenSecret }));
+      }
+
+      const body: any = {
+        text: post.message,
+      };
+      if (mediaIds.length > 0) body.media = { media_ids: mediaIds };
+      if (replyTo) body.reply = { in_reply_to_tweet_id: replyTo };
+
+      const json = await fetchJsonWithOAuth({
+        method: "POST",
+        url: "https://api.twitter.com/2/tweets",
+        consumerKey,
+        consumerSecret,
+        token,
+        tokenSecret,
+        body,
+      });
+
+      const tweetId = String(json?.data?.id ?? "");
+      if (!tweetId) throw new Error(`X tweet response missing id: ${JSON.stringify(json)}`);
+      replyTo = tweetId;
+
+      responses.push({
+        id: post.id,
+        postId: tweetId,
+        releaseURL: channel.username ? `https://x.com/${channel.username}/status/${tweetId}` : `https://x.com/i/web/status/${tweetId}`,
+        status: "published",
+      });
+    }
+
+    return responses;
   },
 };
 

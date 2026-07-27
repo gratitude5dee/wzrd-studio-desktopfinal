@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { openExternalUrl } from "@/lib/desktop";
+import { getDesktopDeepLink, openExternalUrl } from "@/lib/desktop";
 import { usePostzOauthProviders, useStartPostzOauth } from "@/hooks/usePostz";
 import { POSTZ_PROVIDER_META, providerLabel } from "@/components/postz/postzMeta";
 
@@ -21,6 +21,12 @@ function ProviderRow({
 }) {
   const meta = POSTZ_PROVIDER_META[provider.identifier] ?? null;
   const label = meta?.label ?? provider.name ?? providerLabel(provider.identifier);
+  const connectable = provider.connectable ?? (provider.configured && provider.implemented);
+  const statusCopy = !provider.implemented
+    ? "Coming soon"
+    : !provider.configured
+      ? "Admin setup required"
+      : "Ready";
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
@@ -37,21 +43,28 @@ function ProviderRow({
             {provider.identifier}
           </Badge>
         </div>
-        {!provider.configured && <div className="mt-0.5 text-xs text-zinc-500">Not configured</div>}
+        <div className="mt-0.5 text-xs text-zinc-500">{statusCopy}</div>
       </div>
 
       <Button
         type="button"
         size="sm"
         className="bg-orange-500 text-white hover:bg-orange-500/90"
-        disabled={!provider.configured || connecting}
+        disabled={!connectable || connecting}
         onClick={() => onConnect(provider.identifier)}
       >
         {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        Connect
+        {provider.implemented ? "Connect" : "Soon"}
       </Button>
     </div>
   );
+}
+
+function getAppReturnUrl(): string | null {
+  const desktopUrl = getDesktopDeepLink("/postz/connected");
+  if (desktopUrl) return desktopUrl;
+  if (typeof window === "undefined") return null;
+  return `${window.location.origin}/postz/connected`;
 }
 
 export function AddChannelDialog({
@@ -69,7 +82,7 @@ export function AddChannelDialog({
 
   const handleConnect = async (identifier: string) => {
     try {
-      const result = await startOauth.mutateAsync(identifier);
+      const result = await startOauth.mutateAsync({ provider: identifier, app_return_url: getAppReturnUrl() });
       const ok = await openExternalUrl(result.url);
       if (!ok) {
         toast.error("Unable to open browser", { description: "Copy the URL from the logs and open it manually." });
@@ -91,7 +104,7 @@ export function AddChannelDialog({
         <DialogHeader>
           <DialogTitle>Add channel</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Connect a social account via OAuth. Providers marked “Not configured” need Supabase secrets before they can be used.
+            Connect a social account via OAuth. Admin setup means the provider needs Supabase Function secrets before users can connect.
           </DialogDescription>
         </DialogHeader>
 
@@ -115,7 +128,10 @@ export function AddChannelDialog({
                   key={provider.identifier}
                   provider={provider}
                   onConnect={handleConnect}
-                  connecting={isStarting && startOauth.variables === provider.identifier}
+                  connecting={isStarting && (
+                    startOauth.variables === provider.identifier ||
+                    (typeof startOauth.variables === "object" && startOauth.variables?.provider === provider.identifier)
+                  )}
                 />
               ))
             )}

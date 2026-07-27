@@ -126,7 +126,8 @@ export async function saveStorylineData(
                   shot_number: index + 1,
                   shot_type: getShotTypeFromIdea(shotIdea),
                   prompt_idea: shotIdea,
-                  image_status: 'pending'
+                  image_status: 'pending',
+                  image_generation_error: null
                 });
               } else {
                 // New enhanced structure with full metadata
@@ -140,7 +141,8 @@ export async function saveStorylineData(
                   camera_movement: shotIdea.camera_movement,
                   duration_seconds: shotIdea.duration_seconds,
                   composition_notes: shotIdea.composition_notes,
-                  image_status: 'prompt_ready' // Mark as ready since we have the visual prompt
+                  image_status: 'prompt_ready', // Mark as ready since we have the visual prompt
+                  image_generation_error: null
                 });
               }
             });
@@ -152,7 +154,8 @@ export async function saveStorylineData(
               shot_number: 1,
               shot_type: 'medium',
               prompt_idea: `Scene ${scene.scene_number}: ${scene.description?.substring(0, 80) || scene.title || 'Initial shot'}`,
-              image_status: 'pending'
+              image_status: 'pending',
+              image_generation_error: null
             });
           }
         });
@@ -286,7 +289,7 @@ export async function triggerCharacterImageGeneration(
         // Set status to generating before invoking
         await supabaseClient
           .from('characters')
-          .update({ image_status: 'generating' })
+          .update({ image_status: 'generating', image_generation_error: null })
           .eq('id', char.id);
         
         // Invoke function (fire-and-forget)

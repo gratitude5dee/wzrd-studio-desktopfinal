@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Plus, Sparkles, Loader2, Shirt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import CharacterCard from './CharacterCard';
 import type { Character } from './types';
+import { runCharacterImageGenerationQueue } from './characterGenerationQueue';
 
 interface SceneAppearance {
   sceneId: string;
@@ -26,7 +27,9 @@ interface CastTabProps {
   styleReferenceUrl?: string;
   onAddCharacter: (name: string, description: string) => void;
   onDeleteCharacter: (id: string) => void;
-  onGenerateAllImages?: () => void;
+  onGenerateAllImages?: () => Promise<void> | void;
+  onGenerateCharacterImage?: (character: Character) => Promise<boolean | void> | boolean | void;
+  onCharacterGenerationTimeout?: (character: Character, message: string) => Promise<void> | void;
 }
 
 export function CastTab({
@@ -36,12 +39,15 @@ export function CastTab({
   onAddCharacter,
   onDeleteCharacter,
   onGenerateAllImages,
+  onGenerateCharacterImage,
+  onCharacterGenerationTimeout,
 }: CastTabProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [wardrobeCharId, setWardrobeCharId] = useState<string | null>(null);
   const [appearances, setAppearances] = useState<Record<string, SceneAppearance[]>>({});
+  const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
 
   const handleAdd = useCallback(() => {
     if (!newName.trim()) return;
@@ -53,6 +59,29 @@ export function CastTab({
 
   const wardrobeChar = characters.find((c) => c.id === wardrobeCharId);
   const charAppearances = wardrobeCharId ? (appearances[wardrobeCharId] ?? []) : [];
+  const charactersNeedingImages = useMemo(
+    () =>
+      characters.filter(
+        (character) => character.image_status !== 'generating' && (!character.image_url || character.image_status === 'failed')
+      ),
+    [characters]
+  );
+
+  const handleGenerateAllImages = useCallback(async () => {
+    if (onGenerateAllImages) {
+      await onGenerateAllImages();
+      return;
+    }
+
+    if (!onGenerateCharacterImage || charactersNeedingImages.length === 0) return;
+
+    setIsGeneratingAllImages(true);
+    try {
+      await runCharacterImageGenerationQueue(charactersNeedingImages, onGenerateCharacterImage);
+    } finally {
+      setIsGeneratingAllImages(false);
+    }
+  }, [charactersNeedingImages, onGenerateAllImages, onGenerateCharacterImage]);
 
   const handleUpdateAppearance = useCallback(
     (sceneId: string, field: keyof SceneAppearance, value: string) => {
@@ -96,15 +125,20 @@ export function CastTab({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {characters.length > 0 && onGenerateAllImages && (
+          {characters.length > 0 && (onGenerateAllImages || onGenerateCharacterImage) && (
             <Button
               variant="outline"
               size="sm"
               className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-              onClick={onGenerateAllImages}
+              onClick={handleGenerateAllImages}
+              disabled={isGeneratingAllImages || (!onGenerateAllImages && charactersNeedingImages.length === 0)}
             >
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Generate All
+              {isGeneratingAllImages ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {isGeneratingAllImages ? 'Generating...' : 'Generate All'}
             </Button>
           )}
           <Button
@@ -137,6 +171,8 @@ export function CastTab({
                     character={char}
                     onDelete={onDeleteCharacter}
                     styleReferenceUrl={styleReferenceUrl}
+                    onGenerate={onGenerateCharacterImage}
+                    onGenerationTimeout={onCharacterGenerationTimeout}
                   />
                   {/* Wardrobe button */}
                   <button

@@ -38,7 +38,7 @@ export function ChannelRail({
               {channels.length}
             </Badge>
           </div>
-          <p className="mt-1 text-xs text-zinc-500">Connected accounts (Phase 3 adds real OAuth).</p>
+          <p className="mt-1 text-xs text-zinc-500">Connected accounts for scheduled publishing.</p>
         </div>
         <Button
           type="button"
@@ -59,7 +59,7 @@ export function ChannelRail({
       ) : channels.length === 0 ? (
         <div className="rounded-lg border border-dashed border-white/10 bg-black/10 p-4">
           <p className="text-sm font-medium text-zinc-200">No channels yet.</p>
-          <p className="mt-1 text-xs text-zinc-500">Create demo channels to try the calendar + composer before OAuth ships.</p>
+          <p className="mt-1 text-xs text-zinc-500">Connect a channel to publish, or create demo channels to explore without posting.</p>
           {onSeedDemo && (
             <Button
               type="button"

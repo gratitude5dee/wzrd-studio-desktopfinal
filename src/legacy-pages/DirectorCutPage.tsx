@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Circle, Copy, Film, Loader2, Play, RefreshCw, Scissors, TriangleAlert, Video } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Copy, Download, Film, History, Loader2, Play, RefreshCw, Scissors, Send, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import AppHeader from '@/components/AppHeader';
 import { supabaseService } from '@/services/supabaseService';
 import { useAppStore } from '@/store/appStore';
-import { useDirectorCut, STAGE_LABELS, type DirectorCutJobState, type DirectorCutStage } from '@/hooks/useDirectorCut';
+import { useDirectorCut, STAGE_LABELS, type DirectorCutJobState, type DirectorCutRenderHistoryItem, type DirectorCutStage } from '@/hooks/useDirectorCut';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
 import { DIRECTORS_CUT_CREDITS } from '@/lib/constants/credits';
 import { LocalAssemblyPanel } from '@/features/local-media/LocalAssemblyPanel';
+import { downloadFile } from '@/utils/downloadFile';
 
 const StatCard = ({
   label,
@@ -123,6 +124,51 @@ const buildDirectorCutDebugDetails = (job: DirectorCutJobState) =>
     2
   );
 
+const formatRenderTimestamp = (value?: string | null) => {
+  if (!value) return 'Not finished yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not finished yet';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const sanitizeFilenamePart = (value: string | null | undefined) =>
+  (value || 'director-cut')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'director-cut';
+
+const buildDirectorCutFilename = (projectTitle: string | null, jobId: string | null | undefined) => {
+  const suffix = jobId ? `-${jobId.slice(0, 8)}` : '';
+  return `${sanitizeFilenamePart(projectTitle)}-directors-cut${suffix}.mp4`;
+};
+
+const getDirectorCutEtaText = (job: DirectorCutJobState | null) => {
+  if (!job || job.status !== 'processing') return null;
+  if (job.progress >= 90 || job.stage === 'uploading_final_video') {
+    return 'Finalizing the MP4 and preparing playback.';
+  }
+  if (job.stage === 'provider_processing' || job.stage === 'fallback_processing') {
+    return 'ETA: usually 2-5 minutes, depending on shot count and provider queue.';
+  }
+  if (job.stage === 'downloading_assets') {
+    return 'Collecting rendered media and checking the final file.';
+  }
+  return 'Preparing the render job.';
+};
+
+type SendTarget = {
+  id: string;
+  jobId: string | null;
+  finalAssetId?: string | null;
+  outputUrl?: string | null;
+};
+
 const DirectorCutPage = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
@@ -139,9 +185,16 @@ const DirectorCutPage = () => {
     isSyncing,
     isStarting,
     isPolling,
+    history,
+    isLoadingHistory,
+    isSendingToEditor,
     syncAssets,
     startDirectorCut,
+    loadHistory,
+    sendToEditor,
   } = useDirectorCut(projectId);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) {
@@ -164,10 +217,12 @@ const DirectorCutPage = () => {
   useEffect(() => {
     if (!projectId) return;
     syncAssets().catch(() => undefined);
-  }, [projectId, syncAssets]);
+    loadHistory().catch(() => undefined);
+  }, [loadHistory, projectId, syncAssets]);
 
   const progressValue = job?.progress ?? 0;
   const isWorking = isSyncing || isStarting || isPolling || job?.status === 'processing';
+  const etaText = getDirectorCutEtaText(job);
   const providerReason =
     job?.fallbackError ||
     job?.falError ||
@@ -188,6 +243,44 @@ const DirectorCutPage = () => {
     } catch (copyError) {
       const message = copyError instanceof Error ? copyError.message : 'Failed to copy debug details';
       toast.error(message);
+    }
+  };
+
+  const handleDownload = async (id: string, url: string | null | undefined, jobId?: string | null) => {
+    if (!url) {
+      toast.error('No final video URL is available yet');
+      return;
+    }
+
+    setDownloadingId(id);
+    try {
+      await downloadFile(url, buildDirectorCutFilename(projectMeta.title, jobId));
+      toast.success("Director's Cut download started");
+    } catch (downloadError) {
+      const message = downloadError instanceof Error ? downloadError.message : 'Failed to download final video';
+      toast.error(message);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleSendToEditor = async (target: SendTarget) => {
+    if (!projectId) return;
+    if (!target.outputUrl && !target.finalAssetId) {
+      toast.error('No completed video is available to send to the editor');
+      return;
+    }
+
+    setSendingId(target.id);
+    try {
+      if (target.jobId) {
+        const asset = await sendToEditor(target.jobId);
+        if (!asset) return;
+      }
+      toast.success("Director's Cut is available in the editor media bin");
+      navigate(appRoutes.projects.editor(projectId));
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -303,6 +396,9 @@ const DirectorCutPage = () => {
                   <StageIndicator currentStage={job.stage} />
                 </div>
               )}
+              {etaText && (
+                <p className="text-xs text-cyan-200/70">{etaText}</p>
+              )}
               {(!job || job.status !== 'processing') && (
                 <p className="text-xs text-zinc-500">
                   Pipeline: sync assets → submit to provider → process → upload → done
@@ -416,6 +512,7 @@ const DirectorCutPage = () => {
                     {job.providerStatus ? ` (${job.providerStatus})` : ''}
                     {job.fallbackUsed ? ' · Fallback active' : ''}
                   </p>
+                  {etaText && <p className="mt-1 text-xs text-cyan-200/60">{etaText}</p>}
                 </div>
               </div>
             </div>
@@ -433,11 +530,30 @@ const DirectorCutPage = () => {
                 className="w-full rounded-xl border border-orange-300/30 bg-black"
               />
               <div className="mt-4 flex flex-wrap gap-3">
-                <Button className="bg-orange-500 text-white hover:bg-orange-400" asChild>
-                  <a href={job.outputUrl} target="_blank" rel="noreferrer">
-                    <Video className="mr-2 h-4 w-4" />
-                    Download Final Video
-                  </a>
+                <Button
+                  className="bg-orange-500 text-white hover:bg-orange-400"
+                  onClick={() => void handleDownload(job.jobId, job.outputUrl, job.jobId)}
+                  disabled={downloadingId === job.jobId}
+                >
+                  {downloadingId === job.jobId ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  Download Final Video
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-orange-300/40 text-orange-100 hover:bg-orange-500/20"
+                  onClick={() => void handleSendToEditor({ id: job.jobId, jobId: job.jobId, outputUrl: job.outputUrl })}
+                  disabled={isSendingToEditor || sendingId === job.jobId}
+                >
+                  {sendingId === job.jobId ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Send to Editor
                 </Button>
               </div>
             </div>
@@ -467,6 +583,166 @@ const DirectorCutPage = () => {
               </div>
             </div>
           )}
+
+          <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                  <History className="h-4 w-4 text-cyan-300" />
+                  Render History
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Previous Director&apos;s Cut renders stay playable here and available to the editor.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-zinc-700 text-zinc-100"
+                onClick={() => void loadHistory()}
+                disabled={isLoadingHistory}
+              >
+                {isLoadingHistory ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                )}
+                Refresh
+              </Button>
+            </div>
+
+            {isLoadingHistory && history.length === 0 ? (
+              <div className="mt-4 space-y-3">
+                {[0, 1].map((idx) => (
+                  <div key={idx} className="h-24 animate-pulse rounded-xl bg-zinc-800/70" />
+                ))}
+              </div>
+            ) : history.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-dashed border-zinc-700 p-6 text-sm text-zinc-500">
+                Finished renders will appear here after the first Director&apos;s Cut completes.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {history.map((render: DirectorCutRenderHistoryItem) => {
+                  const isCompleted = render.status === 'completed' && !!render.outputUrl;
+                  const timestamp = formatRenderTimestamp(render.completedAt ?? render.startedAt ?? render.createdAt);
+                  const rowId = render.id;
+                  const canSend = Boolean(isCompleted && (render.jobId || render.finalAssetId));
+
+                  return (
+                    <div
+                      key={render.id}
+                      className="grid gap-4 rounded-xl border border-zinc-800 bg-zinc-950/55 p-4 md:grid-cols-[180px_1fr]"
+                    >
+                      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-black">
+                        {isCompleted ? (
+                          <video
+                            src={render.outputUrl ?? undefined}
+                            controls
+                            preload="metadata"
+                            className="aspect-video w-full bg-black object-contain"
+                          />
+                        ) : (
+                          <div className="flex aspect-video items-center justify-center text-xs text-zinc-500">
+                            {render.status === 'failed' ? 'Render failed' : 'Processing'}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-100">
+                              Director&apos;s Cut {render.jobId ? render.jobId.slice(0, 8) : render.finalAssetId?.slice(0, 8)}
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {timestamp}
+                              {' · '}
+                              {render.provider || 'director_cut'}
+                              {render.fallbackUsed ? ' · fallback used' : ''}
+                            </p>
+                          </div>
+                          <span
+                            className={cn(
+                              'rounded-full border px-2 py-0.5 text-xs capitalize',
+                              render.status === 'completed'
+                                ? 'border-orange-400/30 bg-orange-500/10 text-orange-200'
+                                : render.status === 'failed'
+                                  ? 'border-rose-400/30 bg-rose-500/10 text-rose-200'
+                                  : 'border-cyan-400/30 bg-cyan-500/10 text-cyan-200'
+                            )}
+                          >
+                            {render.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                          <span>{STAGE_LABELS[render.stage] ?? render.stage}</span>
+                          <span>Progress {render.progress}%</span>
+                          {render.partialSuccess && <span>{render.shotFailures.length} skipped shot(s)</span>}
+                        </div>
+
+                        {render.error && (
+                          <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100/80">
+                            {render.error}
+                          </p>
+                        )}
+
+                        {render.shotFailures.length > 0 && (
+                          <ul className="mt-3 space-y-1 text-xs text-amber-100/70">
+                            {render.shotFailures.slice(0, 3).map((failure) => (
+                              <li key={`${render.id}-${failure.assetId}-${failure.orderIndex}`}>
+                                Shot #{failure.orderIndex + 1}: {failure.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {isCompleted && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-orange-500 text-white hover:bg-orange-400"
+                              onClick={() => void handleDownload(rowId, render.outputUrl, render.jobId)}
+                              disabled={downloadingId === rowId}
+                            >
+                              {downloadingId === rowId ? (
+                                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Download className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              Download
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 text-zinc-100 hover:bg-zinc-800"
+                              onClick={() =>
+                                void handleSendToEditor({
+                                  id: rowId,
+                                  jobId: render.jobId,
+                                  finalAssetId: render.finalAssetId,
+                                  outputUrl: render.outputUrl,
+                                })
+                              }
+                              disabled={!canSend || isSendingToEditor || sendingId === rowId}
+                            >
+                              {sendingId === rowId ? (
+                                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Send className="mr-2 h-3.5 w-3.5" />
+                              )}
+                              Send to Editor
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

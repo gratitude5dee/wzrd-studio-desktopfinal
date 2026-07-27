@@ -6,15 +6,29 @@ import {
   processWithAdaptiveConcurrency,
 } from '@/utils/processWithAdaptiveConcurrency';
 import { extractInsufficientCreditsError, routeToBillingTopUp } from '@/lib/billing-errors';
+import {
+  buildStoryboardInsufficientCreditsMessage,
+  determineStoryboardGenerationPhase,
+  estimateStoryboardBatchCredits,
+  getStoryboardShotsToProcess,
+  hasEnoughStoryboardCredits,
+  type StoryboardGenerationPhase,
+} from '@/lib/storyboard/generationStatus';
 
 type GenerationPhase = 'idle' | 'images' | 'videos' | 'complete';
 
 interface ShotData {
   id: string;
+  shot_number?: number | null;
   image_url: string | null;
   image_status: string;
+  image_generation_error?: string | null;
+  image_generation_attempts?: number | null;
   video_url: string | null;
   video_status: string;
+  video_generation_error?: string | null;
+  video_generation_attempts?: number | null;
+  failure_reason?: string | null;
   visual_prompt?: string;
 }
 
@@ -28,6 +42,14 @@ interface AutoGenerateState {
     concurrency: number;
   };
   errors: Array<{ shotId: string; error: string }>;
+}
+
+interface StartAutoGenerateOptions {
+  imageModelId?: string | null;
+  videoModelId?: string | null;
+  availableCredits?: number | null;
+  imageCreditCost?: number;
+  videoCreditCost?: number;
 }
 
 const isRetryableError = (error: unknown) => {
@@ -71,7 +93,7 @@ export function useAutoGenerate(sceneId: string) {
     try {
       const { data, error } = await supabase
         .from('shots')
-        .select('id, image_url, image_status, video_url, video_status, visual_prompt')
+        .select('id, shot_number, image_url, image_status, image_generation_error, image_generation_attempts, video_url, video_status, video_generation_error, video_generation_attempts, failure_reason, visual_prompt')
         .eq('scene_id', sceneId)
         .order('shot_number');
 
@@ -85,38 +107,50 @@ export function useAutoGenerate(sceneId: string) {
     }
   }, [sceneId]);
 
-  const determinePhase = useCallback((shotsData: ShotData[]): 'images' | 'videos' => {
-    if (shotsData.length === 0) return 'images';
-    const allHaveImages = shotsData.every((shot) => shot.image_status === 'completed' && shot.image_url);
-    return allHaveImages ? 'videos' : 'images';
+  const markShotsQueued = useCallback(async (phase: StoryboardGenerationPhase, shotsData: ShotData[]) => {
+    const ids = shotsData.map((shot) => shot.id);
+    if (ids.length === 0) return;
+
+    const updates =
+      phase === 'images'
+        ? {
+            image_status: 'queued',
+            image_generation_error: null,
+            failure_reason: null,
+          }
+        : {
+            video_status: 'queued',
+            video_generation_error: null,
+            failure_reason: null,
+          };
+
+    const { error } = await supabase.from('shots').update(updates).in('id', ids);
+    if (error) {
+      console.warn('Failed to mark scene shots queued:', error);
+    }
   }, []);
 
-  const getShotsToProcess = useCallback(
-    (phase: 'images' | 'videos', shotsData: ShotData[]): ShotData[] => {
-      if (phase === 'images') {
-        return shotsData.filter((shot) => shot.image_status !== 'completed' || !shot.image_url);
-      }
-
-      return shotsData.filter(
-        (shot) =>
-          shot.image_status === 'completed' &&
-          !!shot.image_url &&
-          shot.video_status !== 'completed'
-      );
-    },
-    []
-  );
-
-  const generateImage = useCallback(async (shot: ShotData) => {
+  const generateImage = useCallback(async (shot: ShotData, modelId?: string | null) => {
     if (!shot.visual_prompt) {
       const { error: promptError } = await supabase.functions.invoke('generate-visual-prompt', {
         body: { shot_id: shot.id },
       });
-      if (promptError) throw new Error(promptError.message || 'Failed to generate visual prompt');
+      if (promptError) {
+        const message = promptError.message || 'Failed to generate visual prompt';
+        await supabase
+          .from('shots')
+          .update({
+            image_status: 'failed',
+            image_generation_error: message,
+            failure_reason: message,
+          })
+          .eq('id', shot.id);
+        throw new Error(message);
+      }
     }
 
     const { error } = await supabase.functions.invoke('generate-shot-image', {
-      body: { shot_id: shot.id },
+      body: { shot_id: shot.id, image_model: modelId || undefined },
     });
     if (error) {
       const insufficient = await extractInsufficientCreditsError(error);
@@ -132,12 +166,13 @@ export function useAutoGenerate(sceneId: string) {
     }
   }, []);
 
-  const generateVideo = useCallback(async (shot: ShotData) => {
+  const generateVideo = useCallback(async (shot: ShotData, modelId?: string | null) => {
     const { error } = await supabase.functions.invoke('generate-video-from-image', {
       body: {
         shot_id: shot.id,
         image_url: shot.image_url,
         prompt: shot.visual_prompt,
+        model_id: modelId || undefined,
         duration: 6,
         resolution: '1920x1080',
         fps: 25,
@@ -175,7 +210,7 @@ export function useAutoGenerate(sceneId: string) {
     toast.info('Scene auto-generate cancelled');
   }, []);
 
-  const startAutoGenerate = useCallback(async () => {
+  const startAutoGenerate = useCallback(async (options?: StartAutoGenerateOptions) => {
     if (isRunningRef.current) {
       toast.info('Generation already in progress');
       return;
@@ -187,8 +222,8 @@ export function useAutoGenerate(sceneId: string) {
       return;
     }
 
-    const phase = determinePhase(shotsData);
-    const shotsToProcess = getShotsToProcess(phase, shotsData);
+    const phase = determineStoryboardGenerationPhase(shotsData);
+    const shotsToProcess = getStoryboardShotsToProcess(phase, shotsData) as ShotData[];
 
     if (shotsToProcess.length === 0) {
       if (phase === 'images') {
@@ -209,11 +244,28 @@ export function useAutoGenerate(sceneId: string) {
       return;
     }
 
-    const initialConcurrency = phase === 'images' ? 4 : 2;
+    const requiredCredits = estimateStoryboardBatchCredits(phase, shotsToProcess.length, {
+      image: options?.imageCreditCost ?? 0,
+      video: options?.videoCreditCost ?? 0,
+    });
+    if (!hasEnoughStoryboardCredits(options?.availableCredits, requiredCredits)) {
+      const message = buildStoryboardInsufficientCreditsMessage(requiredCredits, options?.availableCredits);
+      routeToBillingTopUp({
+        code: 'insufficient_credits',
+        required: requiredCredits,
+        available: options?.availableCredits ?? 0,
+        top_up_url: '/settings/billing',
+      });
+      toast.error(message);
+      return;
+    }
+
+    const initialConcurrency = phase === 'images' ? 4 : 3;
     const abortController = new AbortController();
     abortRef.current = abortController;
     isRunningRef.current = true;
     rateLimitNotifiedRef.current = false;
+    await markShotsQueued(phase, shotsToProcess);
 
     setState({
       phase,
@@ -269,9 +321,9 @@ export function useAutoGenerate(sceneId: string) {
         }));
 
         if (phase === 'images') {
-          await generateImage(shot);
+          await generateImage(shot, options?.imageModelId);
         } else {
-          await generateVideo(shot);
+          await generateVideo(shot, options?.videoModelId);
         }
 
         return shot.id;
@@ -315,14 +367,14 @@ export function useAutoGenerate(sceneId: string) {
     toast.success(
       `${phase === 'images' ? 'Images' : 'Videos'} generated successfully (${successCount}/${shotsToProcess.length})`
     );
-  }, [determinePhase, fetchShots, generateImage, generateVideo, getShotsToProcess]);
+  }, [fetchShots, generateImage, generateVideo, markShotsQueued]);
 
   return {
     state,
     shots,
     startAutoGenerate,
     cancelAutoGenerate,
-    nextPhase: shots.length > 0 ? determinePhase(shots) : 'images',
+    nextPhase: shots.length > 0 ? determineStoryboardGenerationPhase(shots) : 'images',
     isProcessing: isRunningRef.current || (state.phase !== 'idle' && state.phase !== 'complete'),
     fetchShots,
   };

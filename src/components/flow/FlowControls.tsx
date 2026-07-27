@@ -1,5 +1,5 @@
 
-import { Panel } from 'reactflow';
+import { Panel } from '@xyflow/react';
 import { Button } from '../ui/button';
 import { Save, Upload } from 'lucide-react';
 

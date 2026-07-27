@@ -14,6 +14,34 @@ export type KanvasMode =
 export type KanvasMediaType = "image" | "video";
 export type KanvasJobStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
 export type KanvasAssetType = "image" | "video" | "audio";
+export type KanvasStudioMediaKind = KanvasAssetType;
+
+export interface KanvasStudioMeta {
+  key: KanvasStudio;
+  label: string;
+  headline: string;
+  description: string;
+  icon: string;
+  mediaKinds: KanvasStudioMediaKind[];
+  queryValue: KanvasStudio;
+  supportsGeneration: boolean;
+  routeOverride?: string;
+}
+
+export type NormalizedKanvasMediaKind = KanvasMediaType | "unknown";
+export type NormalizedKanvasMediaSource = "asset" | "job" | "static" | "unknown";
+export type NormalizedKanvasMediaStatus = "ready" | "missing" | "error" | "loading";
+
+export interface NormalizedKanvasMedia {
+  kind: NormalizedKanvasMediaKind;
+  primaryUrl: string | null;
+  previewUrl: string | null;
+  thumbnailUrl: string | null;
+  posterUrl: string | null;
+  alt: string;
+  sourceType: NormalizedKanvasMediaSource;
+  status: NormalizedKanvasMediaStatus;
+}
 
 export interface KanvasControlOption {
   label: string;

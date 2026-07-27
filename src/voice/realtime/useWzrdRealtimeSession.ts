@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { VoiceActionRegistry } from '../actions/registry';
+import type { VoiceActionConfirmation, VoiceActionName, VoiceActionRegistry } from '../actions/registry';
 import { getVoiceInstructions, getVoiceToolDefinitions } from '../agent';
 import { fetchRealtimeClientSecret } from './realtimeClientSecret';
 import { WebRTCTransport, type RealtimeEvent } from './webrtcTransport';
@@ -87,9 +87,14 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const connectingRef = useRef<Promise<WebRTCTransport | undefined> | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<VoiceActionConfirmation | null>(null);
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [lastActionMessage, setLastActionMessage] = useState<string | null>(null);
+  const [lastTraceId, setLastTraceId] = useState<string | null>(null);
   const processedToolCallsRef = useRef<Set<string>>(new Set());
   const responseActiveRef = useRef(false);
   const outputAudioActiveRef = useRef(false);
+  const pendingConfirmationRef = useRef<VoiceActionConfirmation | null>(null);
 
   // Stable ref to registry so data channel handler always has the latest
   const registryRef = useRef(registry);
@@ -102,9 +107,47 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       transportRef.current?.close();
     } catch { /* ignore */ }
     transportRef.current = null;
+    pendingConfirmationRef.current = null;
     setStatus('idle');
     setErrorMessage(null);
+    setPendingConfirmation(null);
   }, []);
+
+  const setConfirmationState = useCallback((confirmation: VoiceActionConfirmation | null) => {
+    pendingConfirmationRef.current = confirmation;
+    setPendingConfirmation(confirmation);
+    if (confirmation) {
+      setStatus('confirming');
+      setLastActionMessage(confirmation.message);
+      setLastTraceId(confirmation.traceId ?? null);
+    }
+  }, []);
+
+  const executeVoiceAction = useCallback(
+    async (
+      actionName: string,
+      input: Record<string, unknown> = {},
+      confirmed?: boolean,
+    ) => {
+      const result = await registryRef.current.execute(
+        actionName as VoiceActionName,
+        input,
+        { confirmed: confirmed ?? undefined },
+      );
+
+      setLastActionMessage(result.message);
+      setLastTraceId(result.traceId ?? null);
+
+      if (!result.ok && result.status === 'needs_confirmation' && result.confirmation) {
+        setConfirmationState(result.confirmation);
+      } else if (confirmed || result.ok) {
+        setConfirmationState(null);
+      }
+
+      return result;
+    },
+    [setConfirmationState],
+  );
 
   const connect = useCallback(async () => {
     if (transportRef.current) return transportRef.current;
@@ -114,7 +157,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     try {
       const sessionInfo = await fetchRealtimeClientSecret();
       const apiKey = sessionInfo.clientSecret;
-      const model = sessionInfo.model ?? import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview';
+      const model = sessionInfo.model ?? import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime-2';
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'marin';
 
       const transport = new WebRTCTransport();
@@ -139,11 +182,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
             const actionName = args.name as string;
             const input = (args.input as Record<string, unknown>) ?? {};
             const confirmed = args.confirmed as boolean | undefined;
-            result = await registryRef.current.execute(
-              actionName as Parameters<typeof registryRef.current.execute>[0],
-              input,
-              { confirmed: confirmed ?? undefined },
-            );
+            result = await executeVoiceAction(actionName, input, confirmed);
           } else {
             result = { ok: false, status: 'invalid_input', message: `Unknown tool: ${call.name}` };
           }
@@ -186,6 +225,14 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         outputAudioActiveRef.current = true;
       });
       transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
+      transport.on('response.output_audio_transcript.done', (event) => {
+        const transcript = typeof event.transcript === 'string' ? event.transcript.trim() : '';
+        if (transcript) setLastTranscript(transcript);
+      });
+      transport.on('conversation.item.input_audio_transcription.completed', (event) => {
+        const transcript = typeof event.transcript === 'string' ? event.transcript.trim() : '';
+        if (transcript) setLastTranscript(transcript);
+      });
       transport.on('response.audio.done', () => {
         outputAudioActiveRef.current = false;
       });
@@ -206,7 +253,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
           })();
           return;
         }
-        setStatus('connected');
+        setStatus(pendingConfirmationRef.current ? 'confirming' : 'connected');
       });
 
 
@@ -248,13 +295,19 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         apiKey,
         model,
         sessionConfig: {
-          modalities: ['text', 'audio'],
-          voice,
+          type: 'realtime',
+          model,
+          output_modalities: ['text', 'audio'],
           instructions: getVoiceInstructions(),
           tools: getVoiceToolDefinitions(registryRef.current),
           tool_choice: 'auto',
-          turn_detection: null,
-          input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
+          audio: {
+            input: {
+              turn_detection: null,
+              transcription: { model: 'gpt-4o-mini-transcribe' },
+            },
+            output: { voice },
+          },
         },
       });
 
@@ -267,7 +320,44 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       setErrorMessage(msg);
       throw error;
     }
-  }, []);
+  }, [executeVoiceAction]);
+
+  const confirmPendingAction = useCallback(async () => {
+    const confirmation = pendingConfirmationRef.current;
+    if (!confirmation) return;
+    setStatus('thinking');
+    const result = await executeVoiceAction(
+      confirmation.actionName,
+      (confirmation.input as Record<string, unknown>) ?? {},
+      true,
+    );
+    setLastActionMessage(result.message);
+    setConfirmationState(null);
+
+    const transport = transportRef.current;
+    if (transport?.status === 'connected') {
+      transport.sendOutOfBandAudio(
+        result.ok ? `Confirmed. ${result.message}` : `I could not complete that. ${result.message}`,
+        { topic: 'voice_confirmation', traceId: result.traceId ?? confirmation.traceId },
+      );
+    }
+  }, [executeVoiceAction, setConfirmationState]);
+
+  const cancelPendingAction = useCallback(() => {
+    const confirmation = pendingConfirmationRef.current;
+    setConfirmationState(null);
+    setLastActionMessage('Action cancelled.');
+    const transport = transportRef.current;
+    if (confirmation && transport?.status === 'connected') {
+      transport.sendOutOfBandAudio('Cancelled.', {
+        topic: 'voice_confirmation_cancelled',
+        traceId: confirmation.traceId,
+      });
+    }
+    if (transportRef.current) {
+      setStatus('connected');
+    }
+  }, [setConfirmationState]);
 
   const pushToTalkStart = useCallback(async () => {
     let transport = transportRef.current;
@@ -339,10 +429,16 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   return {
     status,
     errorMessage,
+    pendingConfirmation,
+    lastTranscript,
+    lastActionMessage,
+    lastTraceId,
     isSessionActive,
     connect,
     disconnect,
     pushToTalkStart,
     pushToTalkStop,
+    confirmPendingAction,
+    cancelPendingAction,
   };
 }

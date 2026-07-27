@@ -49,15 +49,12 @@ const NavigationFooter = () => {
         nextTab = visibleTabs[currentTabIndex + 1];
       }
     } else if (isLastTab) {
-      // If on the last tab, finalize and navigate immediately
+      // If on the last tab, finalize and navigate once the background job starts.
       if (projectId) {
-        // Start background processing (don't await)
-        finalizeProjectSetup().catch(err => {
-          console.error('Background finalization error:', err);
-        });
-        
-        // Navigate immediately
-        navigate(appRoutes.projects.timeline(projectId));
+        const ready = await finalizeProjectSetup();
+        if (ready) {
+          navigate(appRoutes.projects.studio(projectId));
+        }
       }
       return;
     } else {
@@ -88,7 +85,7 @@ const NavigationFooter = () => {
     if (isFinalizing) return "Preparing Timeline...";
     if (isGenerating) return "Generating...";
     if (isCreating) return "Saving...";
-    if (isLastTab) return "Go to Timeline";
+    if (isLastTab) return "Go to Studio";
     return "Next";
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, AlertCircle, Film, Sparkles, CircleStop, Scissors } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, Film, Sparkles, CircleStop, Scissors, AlertTriangle, RefreshCw } from 'lucide-react';
 import { ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppHeader from '@/components/AppHeader';
@@ -29,11 +29,13 @@ import { useRegisterVoiceActions } from '@/voice/VoiceAgentProvider';
 import type { VoiceActionRegistration, VoiceActionResult } from '@/voice/actions/registry';
 import { scrollVoiceTargetIntoView, useVoiceSelection } from '@/voice/VoiceSelectionContext';
 import useSaveToProjectAssets from '@/hooks/useSaveToProjectAssets';
+import { useCredits } from '@/hooks/useCredits';
 import {
   NANO_BANANA_FAST_EDIT_ALIAS,
   resolveFrontendModelAlias,
   type StructuredImageEditPrompt,
 } from '@/lib/modelAliases';
+import { buildStoryboardProgressSummary } from '@/lib/storyboard/generationStatus';
 
 function completed(message: string, data?: unknown): VoiceActionResult {
   return { ok: true, status: 'completed', message, data };
@@ -54,6 +56,7 @@ const StoryboardPage = () => {
   const isMobile = useIsMobile();
   const { selectedTargets, selectTarget, setExpandedShotId } = useVoiceSelection();
   const { saveAsset } = useSaveToProjectAssets(projectId);
+  const { availableCredits } = useCredits();
   
   const [scenes, setScenes] = useState<SceneDetails[]>([]);
   const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
@@ -69,11 +72,15 @@ const StoryboardPage = () => {
   const { settings: projectSettings, fetchSettings: fetchProjectSettings } = useProjectSettingsStore();
   const selectedImageModel = projectSettings?.baseImageModel;
   const selectedVideoModel = projectSettings?.baseVideoModel;
+  const projectImageCreditCost = getShotImageCredits(selectedImageModel);
+  const projectVideoCreditCost = getShotVideoCredits(selectedVideoModel);
 
   // Project-level auto-generate for all shots across all scenes
   const {
     state: projectAutoGenState,
+    allShots,
     generationCounts,
+    failures: projectGenerationFailures,
     startAutoGenerate: startProjectAutoGenerate,
     cancelAutoGenerate: cancelProjectAutoGenerate,
     nextPhase: projectNextPhase,
@@ -86,6 +93,38 @@ const StoryboardPage = () => {
       ? generationCounts.missingImages
       : generationCounts.missingVideos
     : projectAutoGenState.progress.total || estimatedProjectShotCount;
+  const estimatedProjectCredits = projectNextPhase === 'images'
+    ? projectImageCreditCost * pendingProjectGenerationCount
+    : projectVideoCreditCost * pendingProjectGenerationCount;
+  const projectGenerationProgress = useMemo(
+    () => buildStoryboardProgressSummary(allShots),
+    [allShots]
+  );
+  const projectProgressLabel = projectGenerationProgress.needsAttention > 0
+    ? `${projectGenerationProgress.needsAttention} need attention`
+    : isProjectAutoGenerating
+      ? `${projectGenerationProgress.completedOutputs}/${projectGenerationProgress.totalOutputs} outputs ready`
+      : projectGenerationProgress.progressPercent === 100
+        ? 'Storyboard ready'
+        : projectNextPhase === 'images'
+          ? `${generationCounts.missingImages} image${generationCounts.missingImages === 1 ? '' : 's'} left`
+          : `${generationCounts.missingVideos} video${generationCounts.missingVideos === 1 ? '' : 's'} left`;
+  const startProjectGenerationBatch = useCallback(() => {
+    return startProjectAutoGenerate({
+      imageModelId: selectedImageModel,
+      videoModelId: selectedVideoModel,
+      availableCredits,
+      imageCreditCost: projectImageCreditCost,
+      videoCreditCost: projectVideoCreditCost,
+    });
+  }, [
+    availableCredits,
+    projectImageCreditCost,
+    projectVideoCreditCost,
+    selectedImageModel,
+    selectedVideoModel,
+    startProjectAutoGenerate,
+  ]);
   
   // Validate that we have a projectId and fetch project settings
   useEffect(() => {
@@ -593,7 +632,7 @@ const StoryboardPage = () => {
               nextPhase: projectNextPhase,
             });
           }
-          await startProjectAutoGenerate({ imageModelId: selectedImageModel, videoModelId: selectedVideoModel });
+          await startProjectGenerationBatch();
           return completed('Generating all missing shot images.', {
             projectId,
             pendingProjectGenerationCount,
@@ -714,7 +753,7 @@ const StoryboardPage = () => {
       selectedScene,
       selectedTargets.shot,
       selectedVideoModel,
-      startProjectAutoGenerate,
+      startProjectGenerationBatch,
     ],
   );
 
@@ -877,13 +916,13 @@ const StoryboardPage = () => {
                     ) : projectNextPhase === 'images' ? (
                       <>
                         <Sparkles className="h-4 w-4" />
-                        <span className="ml-2 hidden sm:inline">Generate Missing Images ({getShotImageCredits(selectedImageModel) * pendingProjectGenerationCount} credits)</span>
+                        <span className="ml-2 hidden sm:inline">Generate Missing Images ({estimatedProjectCredits} credits)</span>
                         <span className="ml-2 sm:hidden">Images</span>
                       </>
                     ) : (
                       <>
                         <Film className="h-4 w-4" />
-                        <span className="ml-2 hidden sm:inline">Generate Missing Videos ({getShotVideoCredits(selectedVideoModel) * pendingProjectGenerationCount} credits)</span>
+                        <span className="ml-2 hidden sm:inline">Generate Missing Videos ({estimatedProjectCredits} credits)</span>
                         <span className="ml-2 sm:hidden">Videos</span>
                       </>
                     )}
@@ -901,6 +940,79 @@ const StoryboardPage = () => {
               </Tooltip>
             )}
           </div>
+        </div>
+      )}
+      {projectGenerationProgress.totalShots > 0 && (
+        <div className="mb-4 rounded-lg border border-white/[0.07] bg-[#111111]/80 px-3 py-2 shadow-[0_6px_24px_rgba(0,0,0,0.24)]">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-medium text-zinc-100">{projectProgressLabel}</span>
+            <span className="text-zinc-400">
+              {projectGenerationProgress.completedImages}/{projectGenerationProgress.totalShots} images ·{' '}
+              {projectGenerationProgress.completedVideos}/{projectGenerationProgress.totalShots} videos ·{' '}
+              {projectGenerationProgress.progressPercent}%
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-zinc-900">
+            <motion.div
+              className={cn(
+                'h-full rounded-full',
+                projectGenerationProgress.needsAttention > 0
+                  ? 'bg-gradient-to-r from-red-500 to-amber-400'
+                  : 'bg-gradient-to-r from-[#555555] via-[#d4a574] to-emerald-400'
+              )}
+              initial={false}
+              animate={{ width: `${projectGenerationProgress.progressPercent}%` }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            />
+          </div>
+        </div>
+      )}
+      {projectGenerationFailures.length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-500/20 bg-red-950/20 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-300" />
+              <div>
+                <p className="text-sm font-medium text-red-100">Needs attention</p>
+                <p className="text-xs text-red-200/70">
+                  {projectGenerationFailures.length} failed generation{projectGenerationFailures.length === 1 ? '' : 's'} need a retry.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={startProjectGenerationBatch}
+              disabled={isProjectAutoGenerating || pendingProjectGenerationCount === 0}
+              className="border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-500/20"
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Regenerate
+            </Button>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {projectGenerationFailures.slice(0, 6).map((failure) => (
+              <div
+                key={`${failure.shotId}-${failure.media}`}
+                className="rounded-md border border-red-400/10 bg-black/20 px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-red-200/80">
+                    {failure.media} - Shot {failure.shotNumber ?? 'unknown'}
+                  </span>
+                  <span className="text-[11px] text-red-200/60">
+                    {failure.attempts} attempt{failure.attempts === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-red-100/80">{failure.error}</p>
+              </div>
+            ))}
+          </div>
+          {projectGenerationFailures.length > 6 && (
+            <p className="mt-2 text-xs text-red-200/60">
+              +{projectGenerationFailures.length - 6} more failed shots
+            </p>
+          )}
         </div>
       )}
       {scenes.length === 0 ? (
@@ -942,6 +1054,7 @@ const StoryboardPage = () => {
                 projectId={projectId}
                 onSceneDelete={handleDeleteScene}
                 isSelected={selectedScene?.id === scene.id}
+                availableCredits={availableCredits}
               />
             </motion.div>
           ))}
@@ -1032,15 +1145,11 @@ const StoryboardPage = () => {
         onOpenChange={setShowProjectConfirmGenerate}
         onConfirm={() => {
           setShowProjectConfirmGenerate(false);
-          startProjectAutoGenerate({ imageModelId: selectedImageModel, videoModelId: selectedVideoModel });
+          startProjectGenerationBatch();
         }}
         title={projectNextPhase === 'images' ? 'Generate Missing Images' : 'Generate Missing Videos'}
         description={`This will process ${pendingProjectGenerationCount} incomplete shot(s) and skip completed outputs.`}
-        estimatedCredits={
-          projectNextPhase === 'images'
-            ? getShotImageCredits(selectedImageModel) * pendingProjectGenerationCount
-            : getShotVideoCredits(selectedVideoModel) * pendingProjectGenerationCount
-        }
+        estimatedCredits={estimatedProjectCredits}
       />
 
       <ConfirmGenerateDialog

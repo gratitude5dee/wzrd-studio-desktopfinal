@@ -49,9 +49,8 @@ export const CustomConnectionLine = ({
         d={edgePath}
         strokeDasharray="6 6"
         opacity={0.48}
-      >
-        <animate attributeName="stroke-dashoffset" values="0;-12" dur="0.8s" repeatCount="indefinite" />
-      </path>
+        className="animate-[studio-flow_0.8s_linear_infinite]"
+      />
       <circle cx={fromX} cy={fromY} r={2.1} fill="#4a4a4a" opacity={0.7} />
       <circle cx={toX} cy={toY} r={2.1} fill="#4a4a4a" opacity={0.7} />
     </g>

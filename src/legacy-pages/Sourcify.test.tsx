@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +41,14 @@ vi.mock("@/components/home/Sidebar", () => ({
 
 vi.mock("@/components/home/MobileBottomNav", () => ({
   MobileBottomNav: () => <nav data-testid="mobile-bottom-nav" />,
+}));
+
+vi.mock("@/components/layout/AppShell", () => ({
+  default: ({ activeView, children }: { activeView: string; children: ReactNode }) => (
+    <div data-testid="app-shell" data-active-view={activeView}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("@/contexts/SidebarContext", () => ({

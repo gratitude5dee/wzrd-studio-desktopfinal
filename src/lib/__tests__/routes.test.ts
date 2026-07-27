@@ -6,6 +6,8 @@ import {
   getCanonicalProjectRoute,
   getProjectViewFromPath,
   getRouteEntry,
+  getSystemSectionFromLocation,
+  getSystemSectionPath,
   isDeferredRoute,
   isRegisteredRoute,
   resolvePostLoginPath,
@@ -14,6 +16,16 @@ import {
 
 describe('routes contract', () => {
   it('builds canonical project routes', () => {
+    expect(appRoutes.dashboard).toBe('/dashboard');
+    expect(appRoutes.dashboardToolkits).toBe('/dashboard/toolkits');
+    expect(appRoutes.dashboardSettings).toBe('/dashboard/settings');
+    expect(appRoutes.systemAppearance).toBe('/system/appearance');
+    expect(appRoutes.systemModels).toBe('/system/models');
+    expect(appRoutes.systemBilling).toBe('/system/billing');
+    expect(appRoutes.systemBillingDocs).toBe('/system/billing/docs');
+    expect(appRoutes.systemIntegrations).toBe('/system/integrations');
+    expect(appRoutes.systemApiKeys).toBe('/system/api-keys');
+    expect(appRoutes.projects.setup('abc')).toBe('/project-setup?projectId=abc');
     expect(getCanonicalProjectRoute('studio', 'abc')).toBe('/projects/abc/studio');
     expect(getCanonicalProjectRoute('timeline', 'abc')).toBe('/projects/abc/timeline');
     expect(getCanonicalProjectRoute('editor', 'abc')).toBe('/projects/abc/editor');
@@ -46,11 +58,36 @@ describe('routes contract', () => {
 
   it('registers canonical, legacy, and deferred routes in the manifest', () => {
     expect(isRegisteredRoute('/projects/project-1/timeline')).toBe(true);
+    expect(isRegisteredRoute('/project-setup/project-1')).toBe(true);
+    expect(isRegisteredRoute(appRoutes.systemAppearance)).toBe(true);
+    expect(isRegisteredRoute(appRoutes.systemModels)).toBe(true);
+    expect(isRegisteredRoute(appRoutes.systemBillingDocs)).toBe(true);
+    expect(isRegisteredRoute(appRoutes.systemApiKeys)).toBe(true);
     expect(isRegisteredRoute(appRoutes.ipVault)).toBe(true);
     expect(getRouteEntry(appRoutes.ipVault)?.category).toBe('core');
     expect(getRouteEntry(appRoutes.legacy.ipVault)?.category).toBe('legacy');
     expect(getRouteEntry('/storyboard/project-1')?.category).toBe('legacy');
     expect(isDeferredRoute(appRoutes.deferred.demo)).toBe(true);
     expect(isDeferredRoute(appRoutes.deferred.profile)).toBe(true);
+  });
+
+  it('maps System sections to canonical paths', () => {
+    expect(getSystemSectionPath('profile')).toBe(appRoutes.system);
+    expect(getSystemSectionPath('appearance')).toBe(appRoutes.systemAppearance);
+    expect(getSystemSectionPath('models')).toBe(appRoutes.systemModels);
+    expect(getSystemSectionPath('billing')).toBe(appRoutes.systemBilling);
+    expect(getSystemSectionPath('integrations')).toBe(appRoutes.systemIntegrations);
+    expect(getSystemSectionPath('api-keys')).toBe(appRoutes.systemApiKeys);
+  });
+
+  it('resolves active System sections from paths and legacy query links', () => {
+    expect(getSystemSectionFromLocation(appRoutes.system, '')).toBe('profile');
+    expect(getSystemSectionFromLocation(appRoutes.systemAppearance, '')).toBe('appearance');
+    expect(getSystemSectionFromLocation(appRoutes.systemModels, '')).toBe('models');
+    expect(getSystemSectionFromLocation(appRoutes.systemBilling, '?topup=1')).toBe('billing');
+    expect(getSystemSectionFromLocation(appRoutes.systemIntegrations, '')).toBe('integrations');
+    expect(getSystemSectionFromLocation(appRoutes.systemApiKeys, '')).toBe('api-keys');
+    expect(getSystemSectionFromLocation(appRoutes.system, '?section=appearance')).toBe('appearance');
+    expect(getSystemSectionFromLocation('/system/unknown', '')).toBe('profile');
   });
 });

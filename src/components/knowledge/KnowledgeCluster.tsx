@@ -1,9 +1,9 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Layers, Sparkles } from 'lucide-react';
 
-interface KnowledgeClusterData {
+interface KnowledgeClusterData extends Record<string, unknown> {
   label: string;
   description: string;
   category: 'cluster';
@@ -11,7 +11,9 @@ interface KnowledgeClusterData {
   strength: number;
 }
 
-export const KnowledgeCluster = memo<NodeProps<KnowledgeClusterData>>(({ data, selected }) => {
+type KnowledgeClusterFlowNode = Node<KnowledgeClusterData>;
+
+export const KnowledgeCluster = memo<NodeProps<KnowledgeClusterFlowNode>>(({ data, selected }) => {
   return (
     <GlassCard 
       variant="nebula"

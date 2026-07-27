@@ -45,6 +45,8 @@ export function listProviders(): ProviderSummary[] {
   return POSTZ_PROVIDERS.map((provider) => ({
     identifier: provider.identifier,
     name: provider.name,
+    implemented: provider.implemented === true,
     configured: isProviderConfigured(provider),
+    connectable: provider.implemented === true && isProviderConfigured(provider),
   }));
 }

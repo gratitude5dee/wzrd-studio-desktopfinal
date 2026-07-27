@@ -31,8 +31,11 @@ const VOICE_ACTION_NAMES: readonly VoiceActionName[] = [
   'timeline_start_directors_cut',
   'asset_store_save_current',
   'open_project_view',
+  'kanvas_set_prompt',
   'kanvas_set_studio',
   'kanvas_generate',
+  'kanvas_lipsync_set_step',
+  'kanvas_lipsync_set_mode',
   'character_open',
   'character_select',
   'character_edit_image',
@@ -97,6 +100,9 @@ export function getVoiceInstructions(): string {
     '- For shot requests, select/open the target first so the user sees the glow before generation or edits begin.',
     '- For character and shot image edits, preserve the user\'s edit_prompt literally and specifically.',
     '- Use model_alias "nano_banana_fast_edit" for Nanobanana image edit payloads.',
+    '- On Kanvas, use kanvas_set_studio to move between Image, Video, Edit, Lip Sync, Cinema, Worldview, and Characters.',
+    '- For Lip Sync, use kanvas_lipsync_set_step for Script, Voice, Avatar, Environment, or Render; use kanvas_lipsync_set_mode for talking-head versus lip-sync.',
+    '- Use kanvas_set_prompt to place spoken creative direction into the active Kanvas composer before generation.',
     '',
     '# Page-Specific Flow — Be Proactive',
     '',
@@ -148,6 +154,7 @@ export function getVoiceToolDefinitions(_registry: VoiceActionRegistry): Realtim
       name: 'execute_worldstudio_action',
       description:
         'Execute a typed WorldStudio app action such as navigation, project setup, Kanvas generation, character editing, or Studio graph control.',
+      strict: false,
       parameters: {
         type: 'object',
         properties: {

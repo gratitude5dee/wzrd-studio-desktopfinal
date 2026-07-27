@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { ProjectData, ProjectSetupTab } from './types';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { Character, ProjectData, ProjectSetupTab } from './types';
 import { supabase } from '@/integrations/supabase/client';
 import { supabaseService } from '@/services/supabaseService';
 import { toast } from 'sonner';
@@ -8,6 +8,14 @@ import { extractInsufficientCreditsError, routeToBillingTopUp } from '@/lib/bill
 import { buildConceptPayload } from '@/services/conceptPayloadService';
 import { DEFAULT_EVALUATION_THRESHOLDS } from '@/lib/evaluation';
 import { upsertProjectCharacterBlueprints } from '@/services/characterBlueprintService';
+import { getStylePromptFragment, resolveStyleReferenceUrl } from '@/constants/stylePacks';
+import { appRoutes } from '@/lib/routes';
+import { DEFAULT_PROJECT_DATA } from './projectSetupDefaults';
+import { hydrateProjectSetupData } from './projectSetupHydration';
+import {
+  CHARACTER_GENERATION_TIMEOUT_MESSAGE,
+  getStaleCharacterGenerationCutoff,
+} from './characterGenerationWatchdog';
 
 interface ProjectContextProps {
   projectData: ProjectData;
@@ -27,72 +35,59 @@ interface ProjectContextProps {
   handleCreateProject: () => Promise<void>;
   finalizeProjectSetup: () => Promise<boolean>; // New method to invoke the orchestrator
   generationCompletedSignal: number;
+  characters: Character[];
+  isLoadingCharacters: boolean;
+  refreshCharacters: () => Promise<void>;
+  addCharacter: (name?: string, description?: string) => Promise<Character | null>;
+  deleteCharacter: (characterId: string) => Promise<boolean>;
+  generateCharacterImage: (characterId: string, styleReferenceUrl?: string) => Promise<boolean>;
+  failCharacterImageGeneration: (characterId: string, message: string) => Promise<void>;
 }
-
-const defaultProjectData: ProjectData = {
-  title: 'Untitled Project',
-  concept: '',
-  genre: '',
-  tone: '',
-  format: 'custom',
-  customFormat: '',
-  specialRequests: '',
-  addVoiceover: false,
-  product: '',
-  targetAudience: '',
-  mainMessage: '',
-  callToAction: '',
-  conceptOption: 'ai',
-  aspectRatio: '16:9',
-  videoStyle: 'cinematic',
-  adBrief: {
-    product: '',
-    targetAudience: '',
-    mainMessage: '',
-    callToAction: '',
-    adDuration: '30s',
-    platform: 'all',
-    brandGuidelines: ''
-  },
-  musicVideoData: {
-    artistName: '',
-    trackTitle: '',
-    genre: '',
-    lyrics: '',
-    performanceRatio: 50
-  },
-  infotainmentData: {
-    topic: '',
-    educationalGoals: [],
-    targetDemographic: '',
-    hostStyle: 'casual',
-    segments: [],
-    keyFacts: '',
-    visualStyle: ''
-  },
-  shortFilmData: {
-    genre: '',
-    tone: '',
-    duration: '',
-    visualStyle: ''
-  },
-  voiceoverId: '',
-  voiceoverName: '',
-  voiceoverPreviewUrl: '',
-  storylineTextModel: 'gmi/gemini-3.1-flash-lite',
-  storylineTextSettings: {},
-  baseImageModel: 'gmi/seedream-5.0-lite',
-  baseVideoModel: 'gmi/ltx-fast-i2v',
-  baseAudioModel: 'fal-ai/elevenlabs/tts/turbo-v2.5',
-  evaluationMode: 'shadow',
-  evaluationThresholds: DEFAULT_EVALUATION_THRESHOLDS,
-  canonFacts: [],
-  creativeConstraints: [],
-};
 
 const ProjectContext = createContext<ProjectContextProps | undefined>(undefined);
 
-export const ProjectProvider = ({ children }: { children: ReactNode }) => {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return 'Unknown error';
+}
+
+function getBrowserOrigin() {
+  return typeof window === 'undefined' ? undefined : window.location.origin;
+}
+
+function resolveProjectStyleReferenceUrl(projectData: ProjectData) {
+  return resolveStyleReferenceUrl(
+    {
+      videoStyle: projectData.videoStyle,
+      styleReferenceUrl: projectData.styleReferenceUrl,
+      styleReferenceAssetId: projectData.styleReferenceAssetId,
+    },
+    getBrowserOrigin()
+  );
+}
+
+function sortCharactersByCreation(characters: Character[]) {
+  return [...characters].sort((a, b) => {
+    const left = a.created_at ?? '';
+    const right = b.created_at ?? '';
+    return left.localeCompare(right);
+  });
+}
+
+interface ProjectProviderProps {
+  children: ReactNode;
+  initialProjectId?: string | null;
+}
+
+export const ProjectProvider = ({ children, initialProjectId = null }: ProjectProviderProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ProjectSetupTab>('concept');
   const [isCreating, setIsCreating] = useState(false);
@@ -100,8 +95,17 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [isFinalizing, setIsFinalizing] = useState(false); // New state
   const [previousOption, setPreviousOption] = useState<'ai' | 'manual'>('ai');
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [projectData, setProjectData] = useState<ProjectData>(defaultProjectData);
+  const [projectData, setProjectData] = useState<ProjectData>(DEFAULT_PROJECT_DATA);
   const [generationCompletedSignal, setGenerationCompletedSignal] = useState(0);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [isLoadingCharacters, setIsLoadingCharacters] = useState(false);
+  const charactersRef = useRef<Character[]>([]);
+  const characterStatusRef = useRef<Record<string, Character['image_status'] | undefined>>({});
+  const hydratedProjectIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    charactersRef.current = characters;
+  }, [characters]);
   
   // Track option changes for smooth transitions
   useEffect(() => {
@@ -119,6 +123,311 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     setProjectData(prev => ({ ...prev, ...data }));
   };
 
+  const replaceCharacters = useCallback((nextCharacters: Character[]) => {
+    const sortedCharacters = sortCharactersByCreation(nextCharacters);
+    characterStatusRef.current = Object.fromEntries(
+      sortedCharacters.map((character) => [character.id, character.image_status])
+    );
+    setCharacters(sortedCharacters);
+  }, []);
+
+  useEffect(() => {
+    const normalizedProjectId = initialProjectId?.trim() || null;
+
+    if (!normalizedProjectId) {
+      if (hydratedProjectIdRef.current) {
+        hydratedProjectIdRef.current = null;
+        setProjectId(null);
+        setProjectData(DEFAULT_PROJECT_DATA);
+        setPreviousOption(DEFAULT_PROJECT_DATA.conceptOption);
+        setActiveTab('concept');
+        replaceCharacters([]);
+      }
+      return;
+    }
+
+    if (hydratedProjectIdRef.current === normalizedProjectId) {
+      return;
+    }
+
+    let isCancelled = false;
+    hydratedProjectIdRef.current = normalizedProjectId;
+    setProjectId(normalizedProjectId);
+
+    const hydrateProject = async () => {
+      try {
+        const [projectResult, settingsResult] = await Promise.all([
+          supabase.from('projects').select('*').eq('id', normalizedProjectId).maybeSingle(),
+          supabase.from('project_settings').select('*').eq('project_id', normalizedProjectId).maybeSingle(),
+        ]);
+
+        if (projectResult.error) throw projectResult.error;
+        if (settingsResult.error) throw settingsResult.error;
+        if (!projectResult.data) throw new Error('Project not found');
+        if (isCancelled) return;
+
+        const hydratedProjectData = hydrateProjectSetupData(
+          DEFAULT_PROJECT_DATA,
+          projectResult.data,
+          settingsResult.data
+        );
+        setProjectData(hydratedProjectData);
+        setPreviousOption(hydratedProjectData.conceptOption);
+      } catch (error) {
+        if (isCancelled) return;
+        console.error('Failed to hydrate project setup:', error);
+        hydratedProjectIdRef.current = null;
+        setProjectId(null);
+        setProjectData(DEFAULT_PROJECT_DATA);
+        replaceCharacters([]);
+        toast.error('Failed to load project setup');
+      }
+    };
+
+    void hydrateProject();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initialProjectId, replaceCharacters]);
+
+  const upsertCharacter = useCallback((character: Character) => {
+    setCharacters((prev) => {
+      const exists = prev.some((item) => item.id === character.id);
+      const nextCharacters = exists
+        ? prev.map((item) => (item.id === character.id ? { ...item, ...character } : item))
+        : [...prev, character];
+
+      characterStatusRef.current[character.id] = character.image_status;
+      return sortCharactersByCreation(nextCharacters);
+    });
+  }, []);
+
+  const removeCharacterFromState = useCallback((characterId: string) => {
+    setCharacters((prev) => prev.filter((character) => character.id !== characterId));
+    delete characterStatusRef.current[characterId];
+  }, []);
+
+  const updateCharacterState = useCallback((characterId: string, updates: Partial<Character>) => {
+    setCharacters((prev) =>
+      prev.map((character) =>
+        character.id === characterId ? { ...character, ...updates } : character
+      )
+    );
+    if ('image_status' in updates) {
+      characterStatusRef.current[characterId] = updates.image_status;
+    }
+  }, []);
+
+  const notifyCharacterStatusChange = useCallback((character: Character) => {
+    const previousStatus = characterStatusRef.current[character.id];
+    const nextStatus = character.image_status;
+
+    if (!nextStatus || previousStatus === nextStatus) {
+      return;
+    }
+
+    if (nextStatus === 'generating') {
+      toast.info(`Generating image for ${character.name}...`);
+    } else if (nextStatus === 'completed' && character.image_url) {
+      toast.success(`Image generated for ${character.name}`);
+    } else if (nextStatus === 'failed') {
+      toast.error(`Failed to generate image for ${character.name}`, {
+        description: character.image_generation_error || 'Unknown error',
+      });
+    }
+  }, []);
+
+  const markStaleCharacterGenerationsFailed = useCallback(async (currentProjectId: string) => {
+    const { error } = await supabase
+      .from('characters')
+      .update({
+        image_status: 'failed',
+        image_generation_error: CHARACTER_GENERATION_TIMEOUT_MESSAGE,
+      })
+      .eq('project_id', currentProjectId)
+      .eq('image_status', 'generating')
+      .lt('updated_at', getStaleCharacterGenerationCutoff());
+
+    if (error) {
+      console.error('Failed to mark stale character image generations as failed:', error);
+    }
+  }, []);
+
+  const refreshCharacters = useCallback(async () => {
+    if (!projectId) {
+      replaceCharacters([]);
+      setIsLoadingCharacters(false);
+      return;
+    }
+
+    setIsLoadingCharacters(true);
+    try {
+      console.log(`Fetching characters for project: ${projectId}`);
+      await markStaleCharacterGenerationsFailed(projectId);
+      const nextCharacters = await supabaseService.characters.listByProject(projectId);
+      console.log(`Found ${nextCharacters?.length || 0} characters for project`);
+      replaceCharacters((nextCharacters || []) as Character[]);
+    } catch (error) {
+      console.error("Error fetching characters:", error);
+      toast.error("Failed to load characters");
+      replaceCharacters([]);
+    } finally {
+      setIsLoadingCharacters(false);
+    }
+  }, [markStaleCharacterGenerationsFailed, projectId, replaceCharacters]);
+
+  useEffect(() => {
+    refreshCharacters();
+  }, [refreshCharacters, generationCompletedSignal]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    console.log(`Setting up project character realtime subscription for project: ${projectId}`);
+    const channel = supabase
+      .channel(`project-context-characters-${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'characters',
+          filter: `project_id=eq.${projectId}`,
+        },
+        (payload) => {
+          const eventType = payload.eventType;
+
+          if (eventType === 'DELETE') {
+            const deletedId = (payload.old as Partial<Character>)?.id;
+            if (deletedId) removeCharacterFromState(deletedId);
+            return;
+          }
+
+          const nextCharacter = payload.new as Character;
+          notifyCharacterStatusChange(nextCharacter);
+          upsertCharacter(nextCharacter);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log(`Cleaning up project character realtime subscription for project: ${projectId}`);
+      supabase.removeChannel(channel);
+    };
+  }, [notifyCharacterStatusChange, projectId, removeCharacterFromState, upsertCharacter]);
+
+  const addCharacter = useCallback(async (name?: string, description?: string): Promise<Character | null> => {
+    if (!projectId) {
+      toast.error("Please save the project first");
+      return null;
+    }
+
+    try {
+      const nextName = name?.trim() || `Character ${charactersRef.current.length + 1}`;
+      const nextDescription = description?.trim() || "A new character.";
+      const characterId = await supabaseService.characters.create({
+        project_id: projectId,
+        name: nextName,
+        description: nextDescription,
+        image_status: 'pending',
+      });
+
+      const newCharacter: Character = {
+        id: characterId,
+        project_id: projectId,
+        name: nextName,
+        description: nextDescription,
+        image_url: null,
+        image_status: 'pending',
+        image_generation_error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      upsertCharacter(newCharacter);
+      toast.success(`Added ${nextName}`);
+      return newCharacter;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      console.error("Error adding character:", error);
+      toast.error(message || "Failed to add character");
+      return null;
+    }
+  }, [projectId, upsertCharacter]);
+
+  const deleteCharacter = useCallback(async (characterId: string): Promise<boolean> => {
+    try {
+      await supabaseService.characters.delete(characterId);
+      removeCharacterFromState(characterId);
+      toast.success("Character deleted");
+      return true;
+    } catch (error) {
+      console.error("Error deleting character:", error);
+      toast.error("Failed to delete character");
+      return false;
+    }
+  }, [removeCharacterFromState]);
+
+  const failCharacterImageGeneration = useCallback(async (characterId: string, message: string) => {
+    updateCharacterState(characterId, {
+      image_status: 'failed',
+      image_generation_error: message,
+    });
+
+    await supabaseService.characters.update(characterId, {
+      image_status: 'failed',
+      image_generation_error: message,
+    });
+  }, [updateCharacterState]);
+
+  const generateCharacterImage = useCallback(async (
+    characterId: string,
+    styleReferenceUrl?: string
+  ): Promise<boolean> => {
+    const character = charactersRef.current.find((item) => item.id === characterId);
+    const resolvedStyleReferenceUrl = styleReferenceUrl || resolveProjectStyleReferenceUrl(projectData);
+
+    updateCharacterState(characterId, {
+      image_status: 'generating',
+      image_generation_error: null,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-character-image', {
+        body: {
+          character_id: characterId,
+          style_reference_url: resolvedStyleReferenceUrl,
+          style_prompt_fragment: getStylePromptFragment(projectData.videoStyle),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.job === 'queued') {
+        toast.success(character?.name ? `Image generation queued for ${character.name}` : 'Character image generation queued');
+        return true;
+      }
+
+      if (data?.success && data.image_url) {
+        updateCharacterState(characterId, {
+          image_url: data.image_url,
+          image_status: 'completed',
+          image_generation_error: null,
+        });
+      }
+
+      toast.success(character?.name ? `Image generated for ${character.name}` : 'Character image generated');
+      return true;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      console.error('Generate character image error:', error);
+      await failCharacterImageGeneration(characterId, message);
+      toast.error(message || 'Failed to generate image');
+      return false;
+    }
+  }, [failCharacterImageGeneration, projectData, updateCharacterState]);
+
   const saveProjectSettings = async (currentProjectId: string): Promise<void> => {
     const storylineSettings =
       projectData.storylineTextSettings && typeof projectData.storylineTextSettings === 'object'
@@ -134,6 +443,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
           storyline_text_settings: storylineSettings,
           base_image_model: projectData.baseImageModel || 'gmi/seedream-5.0-lite',
           base_video_model: projectData.baseVideoModel || 'gmi/ltx-fast-i2v',
+          base_audio_model: projectData.baseAudioModel || 'fal-ai/elevenlabs/tts/turbo-v2.5',
           evaluation_mode: projectData.evaluationMode || 'shadow',
           evaluation_thresholds: projectData.evaluationThresholds || DEFAULT_EVALUATION_THRESHOLDS,
           canon_facts: projectData.canonFacts || [],
@@ -208,11 +518,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         console.log('Creating new project...');
         const newProjectId = await supabaseService.projects.create(projectPayload);
         
-        console.log(`New project created with ID: ${newProjectId}`);
-        setProjectId(newProjectId);
-        currentProjectId = newProjectId;
-        window.history.replaceState({}, '', `/project-setup/${newProjectId}`);
-        await saveProjectSettings(newProjectId);
+	        console.log(`New project created with ID: ${newProjectId}`);
+	        setProjectId(newProjectId);
+	        currentProjectId = newProjectId;
+	        window.history.replaceState({}, '', appRoutes.projects.setup(newProjectId));
+	        await saveProjectSettings(newProjectId);
         toast.success("Project created successfully");
         return newProjectId;
       }
@@ -359,6 +669,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       
       // Build structured JSON payload with ALL prior step data using the shared conceptPayloadService
       const conceptPayload = buildConceptPayload(projectData);
+      const styleReferenceUrl = resolveProjectStyleReferenceUrl(projectData);
       const structuredPayload = {
         project_id: projectId,
         concept: conceptPayload,
@@ -373,6 +684,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
           baseImageModel: projectData.baseImageModel || 'gmi/seedream-5.0-lite',
           baseVideoModel: projectData.baseVideoModel || 'gmi/ltx-fast-i2v',
           styleReferenceAssetId: projectData.styleReferenceAssetId || null,
+          styleReferenceUrl: styleReferenceUrl || null,
+          stylePromptFragment: getStylePromptFragment(projectData.videoStyle),
           evaluationMode: projectData.evaluationMode || 'shadow',
           evaluationThresholds: projectData.evaluationThresholds || DEFAULT_EVALUATION_THRESHOLDS,
           canonFacts: projectData.canonFacts || [],
@@ -424,7 +737,14 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       generateStoryline,
       handleCreateProject,
       finalizeProjectSetup,
-      generationCompletedSignal
+      generationCompletedSignal,
+      characters,
+      isLoadingCharacters,
+      refreshCharacters,
+      addCharacter,
+      deleteCharacter,
+      generateCharacterImage,
+      failCharacterImageGeneration,
     }}>
       {children}
     </ProjectContext.Provider>

@@ -19,6 +19,7 @@ import {
   useCreatePostzGroup,
   useDeletePostzGroup,
   useFindPostzSlot,
+  usePostNowPostzGroup,
   useUpdatePostzGroup,
   useValidatePostzGroup,
 } from "@/hooks/usePostz";
@@ -57,7 +58,7 @@ function buildGroupInput(params: {
         content: override.content ?? params.globalContent,
         media: override.media ?? params.globalMedia,
         title: override.title ?? params.globalTitle,
-        settings: { provider: providerByChannel.get(channelId) },
+        settings: { __type: providerByChannel.get(channelId), provider: providerByChannel.get(channelId) },
       };
     }),
   };
@@ -87,6 +88,7 @@ export function PostComposer({
   const createMutation = useCreatePostzGroup();
   const updateMutation = useUpdatePostzGroup();
   const deleteMutation = useDeletePostzGroup();
+  const postNowMutation = usePostNowPostzGroup();
   const validateMutation = useValidatePostzGroup();
   const slotMutation = useFindPostzSlot();
 
@@ -229,6 +231,12 @@ export function PostComposer({
     onOpenChange(false);
   };
 
+  const handlePostNow = async () => {
+    if (!editingGroup?.group_id) return;
+    await postNowMutation.mutateAsync(editingGroup.group_id);
+    onOpenChange(false);
+  };
+
   const handleRecommended = async () => {
     const firstChannelId = selectedChannelIds[0] ?? null;
     const res = await slotMutation.mutateAsync(firstChannelId);
@@ -237,7 +245,7 @@ export function PostComposer({
     setTimeValue(`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`);
   };
 
-  const saving = createMutation.isPending || updateMutation.isPending;
+  const saving = createMutation.isPending || updateMutation.isPending || postNowMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -245,7 +253,7 @@ export function PostComposer({
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit post" : "New post"}</DialogTitle>
           <DialogDescription className="text-zinc-500">
-            Compose a multi-channel post. Phase 2 uses seeded demo channels and a mock publish pipeline.
+            Compose once, tailor by channel, then save, schedule, or publish now.
           </DialogDescription>
         </DialogHeader>
 
@@ -359,7 +367,7 @@ export function PostComposer({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-zinc-100">Media</div>
-                      <div className="mt-0.5 text-xs text-zinc-500">Attach finalized assets (Phase 2).</div>
+                      <div className="mt-0.5 text-xs text-zinc-500">Attach finalized video or image assets.</div>
                     </div>
                     <Button
                       type="button"
@@ -513,16 +521,28 @@ export function PostComposer({
         <DialogFooter className="sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             {isEditing && (
-              <Button
-                type="button"
-                variant="destructive"
-                className="bg-red-600 text-white hover:bg-red-600/90"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Delete
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="bg-red-600 text-white hover:bg-red-600/90"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending || postNowMutation.isPending}
+                >
+                  {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  Delete
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="border-orange-400/30 bg-orange-500/10 text-orange-100 hover:bg-orange-500/15"
+                  onClick={handlePostNow}
+                  disabled={saving}
+                >
+                  {postNowMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  Post now
+                </Button>
+              </>
             )}
           </div>
 

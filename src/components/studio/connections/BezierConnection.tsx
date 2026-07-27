@@ -4,7 +4,7 @@
  * Features: Type-specific colors, animated flow effects, interactive states
  */
 
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { EdgeProps, getBezierPath } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { studioTheme, studioLayout } from '@/lib/studio/theme';
@@ -37,15 +37,19 @@ export const BezierConnection = memo<EdgeProps>(({
   const dataType = edgeData?.dataType || 'data';
   
   // Calculate Bezier path
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    curvature: studioLayout.connection.curveStrength,
-  });
+  const [edgePath, labelX, labelY] = useMemo(
+    () =>
+      getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+        curvature: studioLayout.connection.curveStrength,
+      }),
+    [sourcePosition, sourceX, sourceY, targetPosition, targetX, targetY]
+  );
   
   // Get color based on data type
   const color = getConnectionColor(dataType);
@@ -84,26 +88,11 @@ export const BezierConnection = memo<EdgeProps>(({
           </feMerge>
         </filter>
         
-        {/* Gradient for animated flow */}
-        {isAnimated && (
-          <linearGradient id={`flow-gradient-${id}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={color} stopOpacity="0" />
-            <stop offset="50%" stopColor={color} stopOpacity="1" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-            <animate
-              attributeName="x1"
-              values="-100%;100%"
-              dur="2s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="x2"
-              values="0%;200%"
-              dur="2s"
-              repeatCount="indefinite"
-            />
-          </linearGradient>
-        )}
+        <linearGradient id={`flow-gradient-${id}`} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={color} stopOpacity="0" />
+          <stop offset="50%" stopColor={color} stopOpacity="1" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
       </defs>
       
       {/* Invisible wider path for easier clicking */}
@@ -148,55 +137,17 @@ export const BezierConnection = memo<EdgeProps>(({
         markerEnd={markerEnd}
       />
       
-      {/* Animated flow particles for active connections */}
+      {/* CSS-only active flow overlay */}
       {isAnimated && (
-        <>
-          {/* Primary particle */}
-          <motion.circle
-            r={4}
-            fill={selected ? studioTheme.accent.purple : color}
-            initial={{ offsetDistance: '0%', opacity: 0 }}
-            animate={{ 
-              offsetDistance: '100%',
-              opacity: [0, 1, 1, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          >
-            <animateMotion
-              dur="2s"
-              repeatCount="indefinite"
-              path={edgePath}
-            />
-          </motion.circle>
-          
-          {/* Secondary particle (delayed) */}
-          <motion.circle
-            r={3}
-            fill={selected ? studioTheme.accent.purple : color}
-            opacity={0.6}
-            initial={{ offsetDistance: '0%', opacity: 0 }}
-            animate={{ 
-              offsetDistance: '100%',
-              opacity: [0, 0.6, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-              delay: 0.5,
-            }}
-          >
-            <animateMotion
-              dur="2s"
-              repeatCount="indefinite"
-              path={edgePath}
-            />
-          </motion.circle>
-        </>
+        <path
+          d={edgePath}
+          fill="none"
+          stroke={`url(#flow-gradient-${id})`}
+          strokeWidth={strokeWidth + 1}
+          strokeLinecap="round"
+          strokeDasharray="8 8"
+          className="pointer-events-none animate-[studio-flow_1.2s_linear_infinite]"
+        />
       )}
       
       {/* Success flash effect */}

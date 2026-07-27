@@ -2,6 +2,9 @@ import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 
 import {
   extractRealtimeClientSecret,
+  extractRealtimeExpiresAt,
+  extractRealtimeModel,
+  extractRealtimeSession,
   fetchRealtimeClientSecret,
 } from './realtimeClientSecret';
 
@@ -26,6 +29,21 @@ describe('realtime client secret service', () => {
   it('extracts GA client secrets from current and nested response shapes', () => {
     expect(extractRealtimeClientSecret({ value: 'ek_direct' })).toBe('ek_direct');
     expect(extractRealtimeClientSecret({ client_secret: { value: 'ek_nested' } })).toBe('ek_nested');
+  });
+
+  it('extracts the GA realtime session metadata', () => {
+    const payload = {
+      value: 'ek_test123',
+      expires_at: 1781980000,
+      session: {
+        type: 'realtime',
+        model: 'gpt-realtime-2',
+      },
+    };
+
+    expect(extractRealtimeModel(payload)).toBe('gpt-realtime-2');
+    expect(extractRealtimeExpiresAt(payload)).toBe(1781980000);
+    expect(extractRealtimeSession(payload)).toMatchObject({ type: 'realtime' });
   });
 
   describe('fetchRealtimeClientSecret', () => {
@@ -56,6 +74,8 @@ describe('realtime client secret service', () => {
       const result = await fetchRealtimeClientSecret();
       expect(result.clientSecret).toBe('ek_test123');
       expect(result.model).toBeNull();
+      expect(result.expiresAt).toBeNull();
+      expect(result.session).toBeNull();
 
       expect(fetchSpy).toHaveBeenCalledOnce();
       const [url, init] = fetchSpy.mock.calls[0];
@@ -63,6 +83,30 @@ describe('realtime client secret service', () => {
       expect((init as RequestInit).headers).toMatchObject({
         Authorization: 'Bearer test-token',
         apikey: 'test-anon-key',
+      });
+    });
+
+    it('returns the model and expiry from the GA client secret payload', async () => {
+      (supabase.auth.getSession as Mock).mockResolvedValue({
+        data: { session: { access_token: 'test-token' } },
+      });
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({
+          value: 'ek_test123',
+          expires_at: 1781980000,
+          session: { type: 'realtime', model: 'gpt-realtime-2' },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      await expect(fetchRealtimeClientSecret()).resolves.toMatchObject({
+        clientSecret: 'ek_test123',
+        model: 'gpt-realtime-2',
+        expiresAt: 1781980000,
+        session: { type: 'realtime', model: 'gpt-realtime-2' },
       });
     });
 

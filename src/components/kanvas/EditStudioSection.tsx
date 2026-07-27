@@ -10,9 +10,11 @@ import { toast } from 'sonner';
 import { imageEditService } from '@/services/imageEditService';
 import type { ImageEditOperation } from '@/types/imageEdit';
 import type { KanvasAsset, KanvasJob, KanvasAssetType, KanvasModel } from '@/features/kanvas/types';
+import { normalizeKanvasAssetMedia, normalizeKanvasJobMedia } from '@/features/kanvas/helpers';
 import { isFalKanvasModel } from '@/features/kanvas/modelProvider';
 import EditCanvas, { type EditCanvasHandle } from './EditCanvas';
 import { musicPolishAssets } from '@/lib/musicPolishAssets';
+import { KanvasMediaPreview } from '@/components/kanvas/KanvasMediaPreview';
 
 /* ── Types ── */
 type EditFeature = 'inpaint' | 'removeBackground' | 'upscale' | 'relight' | 'stylize' | 'skinEnhance' | 'angles' | 'productPlacement';
@@ -60,9 +62,6 @@ const FEATURE_IMAGES: Record<string, string> = {
 /* ── Helpers ── */
 function resolveAssetUrl(asset: KanvasAsset): string | null {
   return asset.cdn_url ?? asset.preview_url ?? asset.thumbnail_url;
-}
-function resolveAssetThumb(asset: KanvasAsset): string | null {
-  return asset.thumbnail_url ?? asset.preview_url ?? asset.cdn_url;
 }
 
 /* ── Props ── */
@@ -129,7 +128,7 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
   const canvasImageUrl = selectedAsset ? resolveAssetUrl(selectedAsset) : null;
 
   const completedJobs = useMemo(
-    () => jobs.filter((j) => j.status === 'completed' && j.resultUrl),
+    () => jobs.filter((j) => j.status === 'completed' && normalizeKanvasJobMedia(j).status === 'ready'),
     [jobs]
   );
 
@@ -379,7 +378,7 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
 
         {/* Asset thumbnails */}
         {assets.map((asset) => {
-          const thumb = resolveAssetThumb(asset);
+          const media = normalizeKanvasAssetMedia(asset);
           const isActive = selectedAssetId === asset.id;
           return (
             <button
@@ -391,11 +390,12 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
                   : 'opacity-60 hover:opacity-100 hover:scale-[1.02]'
               }`}
             >
-              {thumb ? (
-                <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
-              ) : (
-                <div className="w-full h-full bg-[#1a1a1a]" />
-              )}
+              <KanvasMediaPreview
+                media={media}
+                aspectClassName="aspect-square"
+                className="h-full w-full"
+                showErrorLabel={false}
+              />
             </button>
           );
         })}
@@ -408,22 +408,22 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
               <span className="text-[7px] uppercase tracking-[0.15em] text-zinc-600">Results</span>
               <div className="flex-1 h-px bg-white/[0.06]" />
             </div>
-            {completedJobs.slice(0, 6).map((job) => (
-              <button
-                key={job.id}
-                onClick={() => job.resultUrl && canvasRef.current?.addResultImage(job.resultUrl)}
-                className="w-full aspect-square rounded-xl overflow-hidden flex-shrink-0 opacity-60 hover:opacity-100 transition-all relative group"
-              >
-                {job.resultUrl ? (
-                  <img src={job.resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                ) : (
-                  <div className="w-full h-full bg-[#1a1a1a]" />
-                )}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Sparkles className="h-3 w-3 text-[#f97316]" />
-                </div>
-              </button>
-            ))}
+            {completedJobs.slice(0, 6).map((job) => {
+              const media = normalizeKanvasJobMedia(job);
+              const resultUrl = media.primaryUrl ?? media.previewUrl;
+              return (
+                <button
+                  key={job.id}
+                  onClick={() => resultUrl && canvasRef.current?.addResultImage(resultUrl)}
+                  className="group relative aspect-square w-full flex-shrink-0 overflow-hidden rounded-xl opacity-60 transition-all hover:opacity-100"
+                >
+                  <KanvasMediaPreview media={media} aspectClassName="aspect-square" className="h-full w-full" />
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                    <Sparkles className="h-3 w-3 text-[#f97316]" />
+                  </div>
+                </button>
+              );
+            })}
           </>
         )}
       </div>
@@ -669,15 +669,19 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
               <div className="p-4 border-t border-white/[0.06]">
                 <p className="text-[8px] uppercase tracking-[0.15em] text-zinc-600 mb-2">Recent Results</p>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {completedJobs.slice(0, 4).map((job) => (
-                    <button
-                      key={job.id}
-                      onClick={() => job.resultUrl && canvasRef.current?.addResultImage(job.resultUrl)}
-                      className="aspect-square rounded-lg overflow-hidden opacity-70 hover:opacity-100 transition-opacity"
-                    >
-                      {job.resultUrl && <img src={job.resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" />}
-                    </button>
-                  ))}
+                  {completedJobs.slice(0, 4).map((job) => {
+                    const media = normalizeKanvasJobMedia(job);
+                    const resultUrl = media.primaryUrl ?? media.previewUrl;
+                    return (
+                      <button
+                        key={job.id}
+                        onClick={() => resultUrl && canvasRef.current?.addResultImage(resultUrl)}
+                        className="aspect-square overflow-hidden rounded-lg opacity-70 transition-opacity hover:opacity-100"
+                      >
+                        <KanvasMediaPreview media={media} aspectClassName="aspect-square" className="h-full w-full" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -161,7 +161,7 @@ serve(async (req) => {
 
     const { data: shot, error: shotError } = await supabase
       .from("shots")
-      .select("id, project_id, scene_id, image_asset_id, visual_prompt")
+      .select("id, project_id, scene_id, image_asset_id, visual_prompt, video_generation_attempts")
       .eq("id", shot_id)
       .single();
 
@@ -220,7 +220,12 @@ serve(async (req) => {
 
     await supabase
       .from('shots')
-      .update({ video_status: 'generating', failure_reason: null })
+      .update({
+        video_status: 'generating',
+        video_generation_attempts: Number(shot.video_generation_attempts || 0) + 1,
+        video_generation_error: null,
+        failure_reason: null,
+      })
       .eq('id', shot_id);
 
     let videoGenerationJobId: string | null = null;
@@ -373,7 +378,9 @@ serve(async (req) => {
         .update({
           video_url: publicUrl,
           video_asset_id: videoAssetId,
-          video_status: 'completed'
+          video_status: 'completed',
+          video_generation_error: null,
+          failure_reason: null,
         })
         .eq('id', shot_id);
 
@@ -440,7 +447,11 @@ serve(async (req) => {
         });
         await supabase
           .from('shots')
-          .update({ video_status: 'failed', failure_reason: 'Insufficient credits' })
+          .update({
+            video_status: 'failed',
+            video_generation_error: 'Insufficient credits',
+            failure_reason: 'Insufficient credits',
+          })
           .eq('id', shot_id);
         return insufficientCreditsResponse(error, corsHeaders);
       }
@@ -465,7 +476,11 @@ serve(async (req) => {
 
       await supabase
         .from('shots')
-        .update({ video_status: 'failed', failure_reason: errorMsg })
+        .update({
+          video_status: 'failed',
+          video_generation_error: errorMsg,
+          failure_reason: errorMsg,
+        })
         .eq('id', shot_id);
 
       await updateGenerationJob(supabase, videoGenerationJobId, {

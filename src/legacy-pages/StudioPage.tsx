@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, PanelLeft, PanelRight, Monitor } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
@@ -35,6 +35,7 @@ const StudioPage = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [, setRightPanelWidth] = useState(56);
   const { addNodeOfType, addActionNode, scheduleSave } = useStudioGraphActions(projectId);
+  const initializingProjectRef = useRef<string | null>(null);
 
   const handleWorkflowGenerated = useCallback(
     async (nodes: NodeDefinition[], edges: EdgeDefinition[]) => {
@@ -54,6 +55,12 @@ const StudioPage = () => {
         setIsLoading(false);
         return;
       }
+
+      if (initializingProjectRef.current === projectId) {
+        return;
+      }
+
+      initializingProjectRef.current = projectId;
       try {
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
@@ -66,6 +73,7 @@ const StudioPage = () => {
         console.error('Error initializing project:', error);
         toast.error('Failed to load project state');
       } finally {
+        initializingProjectRef.current = null;
         setIsLoading(false);
       }
     };

@@ -12,7 +12,8 @@ import { useShotCardState } from './useShotCardState';
 import { useAIGeneration } from './useAIGeneration';
 import { useAudioGeneration } from './useAudioGeneration';
 import { Button } from '@/components/ui/button';
-import { Trash2, Move, Expand } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Expand, Film, Image as ImageIcon, Loader2, Move, Trash2, Volume2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface ShotCardProps {
@@ -26,6 +27,87 @@ interface ShotCardProps {
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 }
+
+type MediaStatusTone = 'ready' | 'active' | 'failed' | 'pending' | 'muted';
+
+interface MediaStatusChip {
+  key: 'image' | 'video' | 'audio';
+  label: string;
+  tone: MediaStatusTone;
+  Icon: LucideIcon;
+  spin?: boolean;
+}
+
+const hasMediaOutput = (url: string | null | undefined) =>
+  typeof url === 'string' && url.trim().length > 0;
+
+const mediaStatusToneClasses: Record<MediaStatusTone, string> = {
+  ready: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200',
+  active: 'border-sky-400/20 bg-sky-500/10 text-sky-200',
+  failed: 'border-red-400/25 bg-red-500/10 text-red-100',
+  pending: 'border-amber-400/20 bg-amber-500/10 text-amber-100',
+  muted: 'border-zinc-600/30 bg-zinc-900/60 text-zinc-400'
+};
+
+const getImageChip = (
+  status: ShotDetails['image_status'],
+  imageUrl: string | null,
+  isGenerating: boolean
+): MediaStatusChip => {
+  if (status === 'completed' && hasMediaOutput(imageUrl)) {
+    return { key: 'image', label: 'Image ready', tone: 'ready', Icon: CheckCircle2 };
+  }
+  if (status === 'failed') {
+    return { key: 'image', label: 'Image failed', tone: 'failed', Icon: AlertTriangle };
+  }
+  if (isGenerating || status === 'queued' || status === 'generating') {
+    return { key: 'image', label: status === 'queued' ? 'Image queued' : 'Image running', tone: 'active', Icon: Loader2, spin: true };
+  }
+  return { key: 'image', label: status === 'prompt_ready' ? 'Prompt ready' : 'Image needed', tone: 'pending', Icon: ImageIcon };
+};
+
+const getVideoChip = (
+  status: ShotDetails['video_status'],
+  videoUrl: string | null,
+  imageUrl: string | null
+): MediaStatusChip => {
+  if (status === 'completed' && hasMediaOutput(videoUrl)) {
+    return { key: 'video', label: 'Video ready', tone: 'ready', Icon: CheckCircle2 };
+  }
+  if (status === 'failed') {
+    return { key: 'video', label: 'Video failed', tone: 'failed', Icon: AlertTriangle };
+  }
+  if (status === 'queued' || status === 'generating') {
+    return { key: 'video', label: status === 'queued' ? 'Video queued' : 'Video running', tone: 'active', Icon: Loader2, spin: true };
+  }
+  return {
+    key: 'video',
+    label: hasMediaOutput(imageUrl) ? 'Video needed' : 'Video waits',
+    tone: hasMediaOutput(imageUrl) ? 'pending' : 'muted',
+    Icon: hasMediaOutput(imageUrl) ? Film : Clock3
+  };
+};
+
+const getAudioChip = (
+  status: ShotDetails['audio_status'],
+  audioUrl: string | null,
+  hasDialogue: boolean,
+  isGenerating: boolean
+): MediaStatusChip => {
+  if (!hasDialogue) {
+    return { key: 'audio', label: 'No dialogue', tone: 'muted', Icon: Volume2 };
+  }
+  if (status === 'completed' && hasMediaOutput(audioUrl)) {
+    return { key: 'audio', label: 'Audio ready', tone: 'ready', Icon: CheckCircle2 };
+  }
+  if (status === 'failed') {
+    return { key: 'audio', label: 'Audio failed', tone: 'failed', Icon: AlertTriangle };
+  }
+  if (isGenerating || status === 'generating') {
+    return { key: 'audio', label: 'Audio running', tone: 'active', Icon: Loader2, spin: true };
+  }
+  return { key: 'audio', label: 'Audio needed', tone: 'pending', Icon: Volume2 };
+};
 
 export const ShotCard: React.FC<ShotCardProps> = ({ 
   shot, 
@@ -151,6 +233,13 @@ export const ShotCard: React.FC<ShotCardProps> = ({
       onDelete();
     }
   };
+
+  const hasDialogueContent = !!dialogue?.trim();
+  const mediaStatusChips: MediaStatusChip[] = [
+    getImageChip(localImageStatus, localImageUrl, isGeneratingPrompt || isGeneratingImage),
+    getVideoChip(localVideoStatus || 'pending', localVideoUrl, localImageUrl),
+    getAudioChip(localAudioStatus, localAudioUrl, hasDialogueContent, isGeneratingAudio)
+  ];
 
   return (
     <motion.div
@@ -287,6 +376,21 @@ export const ShotCard: React.FC<ShotCardProps> = ({
         />
       </div>
 
+      <div className="flex flex-wrap gap-1.5 px-3 pt-2" aria-label="Shot media status">
+        {mediaStatusChips.map(({ key, label, tone, Icon, spin }) => (
+          <div
+            key={key}
+            className={cn(
+              'inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium leading-none',
+              mediaStatusToneClasses[tone]
+            )}
+          >
+            <Icon className={cn('h-3 w-3 shrink-0', spin && 'animate-spin')} />
+            <span className="truncate">{label}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Shot details */}
       <div className="flex-1 p-3 flex flex-col justify-between">
         {isEditing ? (
@@ -371,7 +475,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
                 audioUrl={localAudioUrl}
                 status={localAudioStatus}
                 isGenerating={isGeneratingAudio}
-                hasDialogue={!!dialogue}
+                hasDialogue={hasDialogueContent}
                 onGenerateAudio={handleGenerateAudio}
               />
             </div>

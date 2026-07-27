@@ -1,14 +1,12 @@
 // Settings tab for project configuration
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type ProjectData, Character } from './types';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Plus, ChevronRight, Loader2, X } from 'lucide-react';
+import { Plus, ChevronRight, Loader2, X, Sparkles } from 'lucide-react';
 import { useProjectContext } from './ProjectContext';
-import { supabase } from '@/integrations/supabase/client';
-import { supabaseService } from '@/services/supabaseService';
 import CharacterCard from './CharacterCard';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
@@ -21,6 +19,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
+import { runCharacterImageGenerationQueue } from './characterGenerationQueue';
+import {
+  DEFAULT_STYLE_PACK_ID,
+  FEATURED_STYLE_PACKS,
+  STYLE_PACKS,
+  type StylePackId,
+  getStylePackById,
+  resolveStyleReferenceUrl,
+} from '@/constants/stylePacks';
 
 interface SettingsTabProps {
   projectData: ProjectData;
@@ -28,119 +35,42 @@ interface SettingsTabProps {
 }
 
 type AspectRatioOption = '16:9' | '1:1' | '9:16';
-type VideoStyleOption = 'none' | 'cinematic' | 'scribble' | 'film-noir' | 'anime' | 'watercolor' | 'pixel-art' | 'cyberpunk' | 'fantasy' | 'documentary' | 'horror' | 'vintage';
 
-const ALL_VIDEO_STYLES: { value: VideoStyleOption; label: string; description: string }[] = [
-  { value: 'none', label: 'None', description: 'No style applied' },
-  { value: 'cinematic', label: 'Cinematic', description: 'Film-like color grading, lens flares, shallow depth of field' },
-  { value: 'scribble', label: 'Scribble', description: 'Hand-drawn / sketch aesthetic' },
-  { value: 'film-noir', label: 'Film Noir', description: 'High contrast black & white with dramatic lighting' },
-  { value: 'anime', label: 'Anime', description: 'Japanese animation style' },
-  { value: 'watercolor', label: 'Watercolor', description: 'Soft, painterly watercolor look' },
-  { value: 'pixel-art', label: 'Pixel Art', description: 'Retro pixel-style rendering' },
-  { value: 'cyberpunk', label: 'Cyberpunk', description: 'Neon-lit, futuristic dystopia' },
-  { value: 'fantasy', label: 'Fantasy', description: 'Ethereal, magical atmosphere' },
-  { value: 'documentary', label: 'Documentary', description: 'Realistic, natural lighting' },
-  { value: 'horror', label: 'Horror', description: 'Dark, desaturated, unsettling mood' },
-  { value: 'vintage', label: 'Vintage', description: 'Aged film grain, warm tones, vignette' },
-];
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Unknown error';
-}
+const getBrowserOrigin = () =>
+  typeof window === 'undefined' ? undefined : window.location.origin;
 
 const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
-  const { projectId, generationCompletedSignal } = useProjectContext();
+  const {
+    projectId,
+    characters,
+    isLoadingCharacters,
+    addCharacter,
+    deleteCharacter,
+    generateCharacterImage,
+    failCharacterImageGeneration,
+  } = useProjectContext();
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatioOption>(
     (projectData.aspectRatio as AspectRatioOption) || '16:9'
   );
-  const [selectedVideoStyle, setSelectedVideoStyle] = useState<VideoStyleOption>(
-    (projectData.videoStyle as VideoStyleOption) || 'cinematic'
+  const [selectedVideoStyle, setSelectedVideoStyle] = useState<StylePackId>(
+    getStylePackById(projectData.videoStyle || DEFAULT_STYLE_PACK_ID).id
   );
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [isLoadingCharacters, setIsLoadingCharacters] = useState(true);
   const [isAddingCharacter, setIsAddingCharacter] = useState(false);
+  const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
   const [showAllStyles, setShowAllStyles] = useState(false);
   const { isSelected, selectTarget } = useVoiceSelection();
-
-  // Fetch characters when projectId changes or after generation completes
-  useEffect(() => {
-    const fetchCharacters = async () => {
-      if (!projectId) {
-        setCharacters([]);
-        setIsLoadingCharacters(false);
-        return;
-      }
-      setIsLoadingCharacters(true);
-      try {
-        console.log(`Fetching characters for project: ${projectId}, generation signal: ${generationCompletedSignal}`);
-        const characters = await supabaseService.characters.listByProject(projectId);
-
-        console.log(`Found ${characters?.length || 0} characters for project`);
-        setCharacters(characters || []);
-      } catch (error) {
-        console.error("Error fetching characters:", error);
-        toast.error("Failed to load characters");
-        setCharacters([]);
-      } finally {
-        setIsLoadingCharacters(false);
-      }
-    };
-
-    fetchCharacters();
-
-    // Set up realtime subscription for character image updates
-    if (!projectId) return;
-
-    console.log(`Setting up realtime subscription for project: ${projectId}`);
-    const channel = supabase
-      .channel(`characters-${projectId}`)
-      .on(
-        'postgres_changes',
+  const styleReferenceUrlForGeneration = useMemo(
+    () =>
+      resolveStyleReferenceUrl(
         {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'characters',
-          filter: `project_id=eq.${projectId}`
+          videoStyle: selectedVideoStyle,
+          styleReferenceUrl: projectData.styleReferenceUrl,
+          styleReferenceAssetId: projectData.styleReferenceAssetId,
         },
-        (payload) => {
-          console.log('Character updated via realtime:', payload.new);
-          
-          const oldChar = characters.find(c => c.id === payload.new.id);
-          const newStatus = payload.new.image_status;
-          const oldStatus = oldChar?.image_status;
-          
-          // Show toast notifications for status changes
-          if (oldStatus !== newStatus) {
-            if (newStatus === 'generating') {
-              toast.info(`Generating image for ${payload.new.name}...`);
-            } else if (newStatus === 'completed' && payload.new.image_url) {
-              toast.success(`Image generated for ${payload.new.name}`);
-            } else if (newStatus === 'failed') {
-              toast.error(`Failed to generate image for ${payload.new.name}`, {
-                description: payload.new.image_generation_error || 'Unknown error'
-              });
-            }
-          }
-          
-          // Update the character in the local state
-          setCharacters(prev => 
-            prev.map(char => 
-              char.id === payload.new.id 
-                ? { ...char, ...payload.new }
-                : char
-            )
-          );
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      console.log(`Cleaning up realtime subscription for project: ${projectId}`);
-      supabase.removeChannel(channel);
-    };
-  }, [projectId, generationCompletedSignal]);
+        getBrowserOrigin()
+      ),
+    [projectData.styleReferenceAssetId, projectData.styleReferenceUrl, selectedVideoStyle]
+  );
 
   // Update projectData when settings change
   useEffect(() => {
@@ -154,7 +84,7 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
     setSelectedAspectRatio(ratio);
   };
 
-  const handleVideoStyleChange = (style: VideoStyleOption) => {
+  const handleVideoStyleChange = (style: StylePackId) => {
     setSelectedVideoStyle(style);
   };
 
@@ -175,51 +105,48 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
   };
 
   const handleAddCharacter = async () => {
-    if (!projectId) {
-      toast.error("Please save the project first");
-      return;
-    }
     setIsAddingCharacter(true);
     try {
-      const newName = `Character ${characters.length + 1}`;
-      const characterId = await supabaseService.characters.create({
-        project_id: projectId,
-        name: newName,
-        description: "A new character."
-      });
-
-      const newChar = {
-        id: characterId,
-        project_id: projectId,
-        name: newName,
-        description: "A new character.",
-        image_url: undefined,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      setCharacters([...characters, newChar]);
-      toast.success(`Added ${newName}`);
+      await addCharacter();
     } catch (error) {
-      const message = getErrorMessage(error);
       console.error("Error adding character:", error);
-      toast.error(message || "Failed to add character");
+      toast.error("Failed to add character");
     } finally {
       setIsAddingCharacter(false);
     }
   };
 
   const handleDeleteCharacter = async (characterId: string) => {
-    if (!confirm('Are you sure you want to delete this character?')) return;
-    try {
-      await supabaseService.characters.delete(characterId);
-      setCharacters(characters.filter(c => c.id !== characterId));
-      toast.success("Character deleted");
-    } catch (error) {
-      console.error("Error deleting character:", error);
-      toast.error("Failed to delete character");
-    }
+    await deleteCharacter(characterId);
   };
+
+  const handleGenerateCharacterImage = useCallback(
+    (character: Character) => generateCharacterImage(character.id, styleReferenceUrlForGeneration),
+    [generateCharacterImage, styleReferenceUrlForGeneration]
+  );
+
+  const handleCharacterGenerationTimeout = useCallback(
+    (character: Character, message: string) => failCharacterImageGeneration(character.id, message),
+    [failCharacterImageGeneration]
+  );
+
+  const handleGenerateAllCharacterImages = useCallback(async () => {
+    const queuedCharacters = characters.filter(
+      (character) => character.image_status !== 'generating' && (!character.image_url || character.image_status === 'failed')
+    );
+
+    if (queuedCharacters.length === 0) {
+      toast.info('All character images are already ready');
+      return;
+    }
+
+    setIsGeneratingAllImages(true);
+    try {
+      await runCharacterImageGenerationQueue(queuedCharacters, handleGenerateCharacterImage);
+    } finally {
+      setIsGeneratingAllImages(false);
+    }
+  }, [characters, handleGenerateCharacterImage]);
 
   return (
     <div className="min-h-full flex flex-col md:flex-row">
@@ -279,40 +206,29 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
             </div>
             
             <div className="grid grid-cols-4 gap-3">
-              {(['none', 'cinematic', 'scribble', 'film-noir'] as VideoStyleOption[]).map(style => {
-                let imgSrc = '';
-                const altText = style.charAt(0).toUpperCase() + style.slice(1);
-                if (style === 'cinematic') imgSrc = '/lovable-uploads/96cbbf8f-bdb1-4d37-9c62-da1306d5fb96.png';
-                if (style === 'scribble') imgSrc = '/lovable-uploads/4e20f36a-2bff-48d8-b07b-257334e35506.png';
-                if (style === 'film-noir') imgSrc = '/lovable-uploads/96cbbf8f-bdb1-4d37-9c62-da1306d5fb96.png';
-
-                return (
+              {FEATURED_STYLE_PACKS.map(style => (
                   <button
-                    key={style}
-                    onClick={() => handleVideoStyleChange(style)}
+                    key={style.id}
+                    onClick={() => handleVideoStyleChange(style.id)}
+                    aria-pressed={selectedVideoStyle === style.id}
                     className={`relative p-1 pb-6 aspect-square rounded border ${
-                      selectedVideoStyle === style 
+                      selectedVideoStyle === style.id
                         ? 'border-purple-500 ring-1 ring-purple-500/30' 
                         : 'border-zinc-700'
                     }`}
                   >
-                    <div className={`w-full h-full bg-[#18191E] rounded-sm overflow-hidden flex items-center justify-center ${style === 'film-noir' ? 'grayscale contrast-125' : ''}`}>
-                      {imgSrc ? (
-                        <img 
-                          src={imgSrc} 
-                          alt={altText}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-6 h-0.5 bg-zinc-600 rounded-full"></div>
-                      )}
+                    <div className="w-full h-full bg-[#18191E] rounded-sm overflow-hidden flex items-center justify-center">
+                      <img
+                        src={style.thumbUrl}
+                        alt={`${style.label} style reference`}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <span className={`absolute bottom-1 left-0 right-0 text-center text-xs ${
-                      selectedVideoStyle === style ? 'text-white' : 'text-gray-400'
-                    }`}>{altText}</span>
+                      selectedVideoStyle === style.id ? 'text-white' : 'text-gray-400'
+                    }`}>{style.label}</span>
                   </button>
-                );
-              })}
+              ))}
             </div>
           </div>
 
@@ -323,37 +239,25 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
                 <DialogTitle>All Video Styles</DialogTitle>
               </DialogHeader>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
-                {ALL_VIDEO_STYLES.map(style => (
+                {STYLE_PACKS.map(style => (
                   <button
-                    key={style.value}
+                    key={style.id}
                     onClick={() => {
-                      handleVideoStyleChange(style.value);
+                      handleVideoStyleChange(style.id);
                       setShowAllStyles(false);
                     }}
                     className={`relative p-3 rounded-xl border text-left transition-all ${
-                      selectedVideoStyle === style.value
+                      selectedVideoStyle === style.id
                         ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
                         : 'border-zinc-700 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-800/50'
                     }`}
                   >
                     <div className="w-full h-20 bg-zinc-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                      {style.value === 'none' ? (
-                        <div className="w-8 h-0.5 bg-zinc-600 rounded-full" />
-                      ) : (
-                        <span className="text-2xl">{
-                          style.value === 'cinematic' ? '🎬' :
-                          style.value === 'scribble' ? '✏️' :
-                          style.value === 'film-noir' ? '🎞️' :
-                          style.value === 'anime' ? '🎌' :
-                          style.value === 'watercolor' ? '🎨' :
-                          style.value === 'pixel-art' ? '👾' :
-                          style.value === 'cyberpunk' ? '🌃' :
-                          style.value === 'fantasy' ? '✨' :
-                          style.value === 'documentary' ? '📹' :
-                          style.value === 'horror' ? '🌑' :
-                          style.value === 'vintage' ? '📷' : '🎥'
-                        }</span>
-                      )}
+                      <img
+                        src={style.thumbUrl}
+                        alt={`${style.label} style reference`}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
                     <p className="font-medium text-sm">{style.label}</p>
                     <p className="text-xs text-zinc-400 mt-1">{style.description}</p>
@@ -408,7 +312,25 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
       
       {/* Cast Section */}
       <div className="w-full md:w-1/2 p-6">
-        <h2 className="text-2xl font-semibold mb-6">Cast</h2>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-semibold">Cast</h2>
+          {characters.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateAllCharacterImages}
+              disabled={isGeneratingAllImages}
+              className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            >
+              {isGeneratingAllImages ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {isGeneratingAllImages ? 'Generating...' : 'Generate All'}
+            </Button>
+          )}
+        </div>
         
         <div className="flex flex-wrap gap-4">
           {/* Loading State */}
@@ -424,7 +346,9 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
               key={char.id}
               character={char}
               onDelete={handleDeleteCharacter}
-              styleReferenceUrl={projectData.styleReferenceUrl}
+              styleReferenceUrl={styleReferenceUrlForGeneration}
+              onGenerate={handleGenerateCharacterImage}
+              onGenerationTimeout={handleCharacterGenerationTimeout}
               isVoiceSelected={isSelected('character', char.id)}
               onSelect={(character) =>
                 selectTarget({

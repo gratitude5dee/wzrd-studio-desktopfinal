@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/ui/logo';
@@ -33,10 +33,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuShortcut,
 } from '@/components/ui/dropdown-menu';
-import { appRoutes, getCanonicalProjectRoute, getProjectViewFromPath } from '@/lib/routes';
+import { appRoutes, getCanonicalProjectRoute } from '@/lib/routes';
 import { useUserTier } from '@/hooks/useUserTier';
-
-type ViewMode = 'studio' | 'timeline' | 'editor';
+import {
+  PROJECT_PIPELINE_STAGES,
+  getProjectStageFromPath,
+  getProjectStageRoute,
+  getProjectStageStatuses,
+  type ProjectPipelineStage,
+  type ProjectPipelineStageStatus,
+} from '@/lib/projectStages';
 
 const PlanBadge = () => {
   const navigate = useNavigate();
@@ -45,7 +51,7 @@ const PlanBadge = () => {
   const isFree = tier === 'free';
   return (
     <button
-      onClick={() => navigate(appRoutes.settings.billing)}
+      onClick={() => navigate(appRoutes.systemBilling)}
       className={cn(
         'hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide border transition-colors',
         isFree
@@ -83,12 +89,16 @@ export const AppHeader = ({
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ projectId?: string }>();
-  const projectIdFromURL = params.projectId;
+  const projectIdFromQuery = useMemo(() => {
+    return new URLSearchParams(location.search).get('projectId') || undefined;
+  }, [location.search]);
+  const projectIdFromURL = params.projectId || projectIdFromQuery;
   
   const { activeProjectId, activeProjectName, setActiveProject, fetchMostRecentProject } = useAppStore();
   
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [projectRecord, setProjectRecord] = useState<Record<string, unknown> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const titleSchema = z.string()
@@ -96,56 +106,72 @@ export const AppHeader = ({
     .min(1, 'Title cannot be empty')
     .max(100, 'Title must be less than 100 characters');
 
-  const getCurrentView = (): ViewMode => {
-    const currentRouteView = getProjectViewFromPath(location.pathname);
-    if (currentRouteView === 'studio' || currentRouteView === 'timeline' || currentRouteView === 'editor') {
-      return currentRouteView;
+  const getCurrentStage = (): ProjectPipelineStage => {
+    const currentRouteStage = getProjectStageFromPath(location.pathname);
+    if (currentRouteStage) {
+      return currentRouteStage;
     }
     return 'studio';
   };
 
-  const currentView = getCurrentView();
+  const currentStage = getCurrentStage();
+  const stageStatuses = useMemo(
+    () => getProjectStageStatuses(projectRecord, currentStage),
+    [currentStage, projectRecord]
+  );
 
   useEffect(() => {
     if (projectIdFromURL && projectIdFromURL !== activeProjectId) {
       const fetchProjectName = async () => {
         try {
           const project = await supabaseService.projects.find(projectIdFromURL);
+          setProjectRecord(project ? (project as unknown as Record<string, unknown>) : null);
           setActiveProject(projectIdFromURL, project?.title || 'Untitled');
         } catch {
           // Keep navigation usable even when the project title lookup fails.
+          setProjectRecord(null);
         }
       };
       
       fetchProjectName();
+    } else {
+      setProjectRecord(null);
     }
   }, [projectIdFromURL, activeProjectId, setActiveProject]);
 
-  const handleNavigate = async (viewMode: ViewMode) => {
+  const handleNavigate = async (stage: ProjectPipelineStage) => {
     const projectId = projectIdFromURL || activeProjectId;
 
     if (!projectId) {
       const recentProjectId = await fetchMostRecentProject();
       
       if (recentProjectId) {
-        navigate(getCanonicalProjectRoute(viewMode, recentProjectId));
+        navigate(getProjectStageRoute(stage, recentProjectId));
       } else {
         toast.warning('Please select or create a project first');
         navigate(appRoutes.home);
       }
     } else {
-      navigate(getCanonicalProjectRoute(viewMode, projectId));
+      navigate(getProjectStageRoute(stage, projectId));
     }
   };
 
-  const getButtonClass = (viewMode: ViewMode) => {
+  const getButtonClass = (stage: ProjectPipelineStage) => {
     return cn(
-      'text-xs px-2.5 py-1 rounded-md transition-colors duration-200',
-      currentView === viewMode
+      'h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs transition-colors duration-200',
+      currentStage === stage
         ? 'bg-[rgba(249,115,22,0.12)] text-[#f97316]' 
         : 'text-zinc-500 hover:text-white hover:bg-white/5'
     );
   };
+
+  const getStageDotClass = (status: ProjectPipelineStageStatus) => cn(
+    'h-1.5 w-1.5 rounded-full',
+    status === 'current' && 'bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,0.65)]',
+    status === 'complete' && 'bg-[#f97316]',
+    status === 'incomplete' && 'bg-rose-400',
+    status === 'unknown' && 'bg-zinc-600'
+  );
 
   const handleLogoClick = () => {
     navigate(appRoutes.home);
@@ -201,7 +227,7 @@ export const AppHeader = ({
 
   // Dropdown menu handlers
   const handleBackToHome = () => navigate(appRoutes.home);
-  const handleOpenBilling = () => navigate(appRoutes.settings.billing);
+  const handleOpenBilling = () => navigate(appRoutes.systemBilling);
   const handleNewProject = async () => {
     try {
       const newProjectId = await supabaseService.projects.create({
@@ -258,34 +284,22 @@ export const AppHeader = ({
           )}
         </div>
 
-        {/* Center: View Mode Tabs (minimal) */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-zinc-900/50 rounded-lg p-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={getButtonClass('studio')}
-            onClick={() => handleNavigate('studio')}
-          >
-            Studio
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className={getButtonClass('timeline')}
-            onClick={() => handleNavigate('timeline')}
-          >
-            Timeline
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className={getButtonClass('editor')}
-            onClick={() => handleNavigate('editor')}
-          >
-            Editor
-          </Button>
+        {/* Center: project pipeline stage switcher */}
+        <div className="absolute left-1/2 hidden max-w-[min(720px,calc(100vw-520px))] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-lg bg-zinc-900/50 p-0.5 lg:flex">
+          {PROJECT_PIPELINE_STAGES.map((stage) => (
+            <Button
+              key={stage.id}
+              variant="ghost"
+              size="sm"
+              className={getButtonClass(stage.id)}
+              onClick={() => handleNavigate(stage.id)}
+              title={stage.label}
+            >
+              <span className={getStageDotClass(stageStatuses[stage.id])} />
+              <span className="hidden xl:inline">{stage.label}</span>
+              <span className="xl:hidden">{stage.shortLabel}</span>
+            </Button>
+          ))}
         </div>
 
         {/* Right: Plan badge + Credits + Settings Dropdown + Share */}

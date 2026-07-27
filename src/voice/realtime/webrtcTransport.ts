@@ -1,10 +1,13 @@
 /**
  * Direct WebRTC transport to the OpenAI Realtime API.
  *
- * This replaces the @openai/agents-realtime SDK which is Node.js-only
- * (depends on `ws`). The browser-native approach:
+ * Browser-native fallback transport for the Realtime voice runtime. The app
+ * keeps this low-level path so push-to-talk and app action execution remain
+ * available if a higher-level Realtime Agents SDK session is not selected.
+ *
+ * The browser-native approach:
  *   1. Create RTCPeerConnection with mic audio track
- *   2. POST SDP offer to OpenAI's /v1/realtime endpoint
+ *   2. POST SDP offer to OpenAI's GA /v1/realtime/calls endpoint
  *   3. Set SDP answer as remote description
  *   4. Use the "oai-events" data channel for JSON events
  */
@@ -12,6 +15,8 @@
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export const OPENAI_REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
 export interface RealtimeEvent {
   type: string;
@@ -25,16 +30,25 @@ export interface RealtimeToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  strict?: boolean;
 }
 
 export interface RealtimeSessionConfig {
-  modalities?: string[];
-  voice?: string;
+  type: 'realtime';
+  model: string;
+  output_modalities?: ('text' | 'audio')[];
   instructions: string;
   tools: RealtimeToolDefinition[];
   tool_choice?: 'auto' | 'none' | 'required' | string;
-  turn_detection?: Record<string, unknown> | null;
-  input_audio_transcription?: Record<string, unknown>;
+  audio?: {
+    input?: {
+      transcription?: Record<string, unknown> | null;
+      turn_detection?: Record<string, unknown> | null;
+    };
+    output?: {
+      voice?: string;
+    };
+  };
 }
 
 export interface WebRTCTransportOptions {
@@ -99,7 +113,7 @@ export class WebRTCTransport {
 
   /** Connect to the OpenAI Realtime API via WebRTC. */
   async connect(options: WebRTCTransportOptions): Promise<void> {
-    const { apiKey, model, sessionConfig } = options;
+    const { apiKey, sessionConfig } = options;
     this.sessionConfig = sessionConfig;
     this._status = 'connecting';
 
@@ -133,7 +147,7 @@ export class WebRTCTransport {
       if (this.sessionConfig) {
         this.send({
           type: 'session.update',
-          session: this.sessionConfig,
+          session: getSessionUpdatePayload(this.sessionConfig),
         });
       }
       this.emit({ type: 'transport.connected' });
@@ -169,18 +183,16 @@ export class WebRTCTransport {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // 6. Send SDP offer to OpenAI and get the SDP answer
-    const sdpResponse = await fetch(
-      `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp,
+    // 6. Send SDP offer to OpenAI and get the SDP answer.
+    // The session model is bound when the ephemeral client secret is minted.
+    const sdpResponse = await fetch(OPENAI_REALTIME_CALLS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/sdp',
       },
-    );
+      body: offer.sdp,
+    });
 
     if (!sdpResponse.ok) {
       const errorText = await sdpResponse.text().catch(() => 'unknown error');
@@ -244,6 +256,22 @@ export class WebRTCTransport {
     });
     this.wildcardListeners.forEach((h) => h(event));
   }
+}
+
+type RealtimeSessionUpdatePayload = Omit<RealtimeSessionConfig, 'tools'> & {
+  tools: Array<Omit<RealtimeToolDefinition, 'strict'>>;
+};
+
+function getSessionUpdatePayload(config: RealtimeSessionConfig): RealtimeSessionUpdatePayload {
+  return {
+    ...config,
+    tools: config.tools.map(({ type, name, description, parameters }) => ({
+      type,
+      name,
+      description,
+      parameters,
+    })),
+  };
 }
 
 function getRealtimeEventAliases(type: string): string[] {

@@ -1,7 +1,8 @@
 
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Node, Edge } from 'reactflow';
+import type { Json } from '@/integrations/supabase/types';
+import type { Node, Edge } from '@xyflow/react';
 
 export const useWorkflow = () => {
   const { toast } = useToast();
@@ -37,7 +38,7 @@ export const useWorkflow = () => {
         type: node.type || 'default',
         position_x: node.position.x,
         position_y: node.position.y,
-        data: node.data,
+        data: node.data as Json,
         id: node.id
       }));
 
@@ -52,7 +53,7 @@ export const useWorkflow = () => {
         workflow_id: workflow.id,
         source_node_id: edge.source,
         target_node_id: edge.target,
-        data: edge.data || {},
+        data: (edge.data || {}) as Json,
         id: edge.id
       }));
 

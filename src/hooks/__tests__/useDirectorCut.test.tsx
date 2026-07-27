@@ -508,4 +508,72 @@ describe('useDirectorCut', () => {
     });
     expect(result.current.job?.jobId).toBe('retry-job');
   });
+
+  it('loads render history and sends completed jobs to the editor', async () => {
+    invokeMock.mockImplementation(async (_name: string, args: { body: { action: string; jobId?: string } }) => {
+      if (args.body.action === 'history') {
+        return {
+          data: {
+            history: [
+              {
+                id: 'job-history',
+                jobId: 'job-history',
+                status: 'completed',
+                progress: 100,
+                outputUrl: 'https://cdn.example.com/final.mp4',
+                provider: 'fal_remote',
+                providerStatus: 'completed',
+                providerPayload: {
+                  stage: 'completed',
+                  source: 'director_cut',
+                  renderer: 'fal/ffmpeg-api',
+                },
+                finalAssetId: 'asset-history',
+                createdAt: '2026-07-03T12:00:00.000Z',
+                completedAt: '2026-07-03T12:03:00.000Z',
+              },
+            ],
+          },
+          error: null,
+        };
+      }
+
+      if (args.body.action === 'send_to_editor') {
+        return {
+          data: {
+            asset: {
+              id: 'asset-history',
+              file_url: 'https://cdn.example.com/final.mp4',
+            },
+          },
+          error: null,
+        };
+      }
+
+      return { data: {}, error: null };
+    });
+
+    const { result } = renderHook(() => useDirectorCut('project-1'));
+
+    await act(async () => {
+      const history = await result.current.loadHistory();
+      expect(history).toHaveLength(1);
+    });
+
+    expect(result.current.history[0].outputUrl).toBe('https://cdn.example.com/final.mp4');
+    expect(result.current.history[0].stage).toBe('completed');
+    expect(result.current.history[0].renderer).toBe('fal/ffmpeg-api');
+
+    await act(async () => {
+      const asset = await result.current.sendToEditor('job-history');
+      expect(asset).toEqual({
+        id: 'asset-history',
+        file_url: 'https://cdn.example.com/final.mp4',
+      });
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('director-cut', {
+      body: { action: 'send_to_editor', projectId: 'project-1', jobId: 'job-history' },
+    });
+  });
 });

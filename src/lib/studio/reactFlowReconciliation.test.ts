@@ -78,6 +78,40 @@ describe('reactFlowReconciliation', () => {
     expect(reconciled[1]).toBe(previous[1]);
   });
 
+  it('ignores regenerated callback/data object identities when the stable signature is unchanged', () => {
+    const previousCallback = () => 'previous';
+    const nextCallback = () => 'next';
+    const previous = [
+      node('a', 'same', {
+        data: { __signature: 'same', label: 'Image', onExecute: previousCallback },
+      }),
+    ];
+    const next = [
+      node('a', 'same', {
+        data: { __signature: 'same', label: 'Image', onExecute: nextCallback },
+      }),
+    ];
+
+    const reconciled = reconcileReactFlowNodes(previous, next);
+
+    expect(reconciled).toBe(previous);
+    expect(reconciled[0].data).toBe(previous[0].data);
+  });
+
+  it('replaces only the moved node when a position changes', () => {
+    const previous = [node('a', 'same'), node('b', 'same')];
+    const next = [
+      node('a', 'same', { position: { x: 20, y: 20 } }),
+      node('b', 'same'),
+    ];
+
+    const reconciled = reconcileReactFlowNodes(previous, next);
+
+    expect(reconciled).not.toBe(previous);
+    expect(reconciled[0]).not.toBe(previous[0]);
+    expect(reconciled[1]).toBe(previous[1]);
+  });
+
   it('updates node data without replacing the stable shell when only content changes', () => {
     const previous = [node('a', 'old', { data: { __signature: 'old', progress: 10 } })];
     const next = [node('a', 'new', { data: { __signature: 'new', progress: 20 } })];

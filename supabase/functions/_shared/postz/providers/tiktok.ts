@@ -1,4 +1,4 @@
-import type { AuthTokenDetails, OAuthTarget, PostDetails, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
+import type { AuthTokenDetails, ChannelRow, PostDetails, PostResponse, PostzProvider, ProviderCapabilities } from "./types.ts";
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -41,6 +41,7 @@ const CAPABILITIES: ProviderCapabilities = {
 const tiktokProvider: PostzProvider = {
   identifier: "tiktok",
   name: "TikTok",
+  implemented: true,
   capabilities: CAPABILITIES,
   requiredEnvVars: ["POSTZ_TIKTOK_CLIENT_ID", "POSTZ_TIKTOK_CLIENT_SECRET"],
 
@@ -173,13 +174,60 @@ const tiktokProvider: PostzProvider = {
     };
   },
 
-  // Phase 4+ publish core.
-  async post(): Promise<PostResponse[]> {
-    throw new Error("TikTok publishing not implemented yet");
-  },
+  async post(channel: ChannelRow, accessToken: string, posts: PostDetails[]): Promise<PostResponse[]> {
+    const responses: PostResponse[] = [];
 
-  listTargets: async (_accessToken: string): Promise<OAuthTarget[]> => {
-    return [];
+    for (const post of posts) {
+      const media = post.media?.find((item) => item.type === "video") ?? post.media?.[0];
+      if (!media?.url) {
+        throw new Error("TikTok publishing requires a media URL");
+      }
+
+      const settings = (post.settings ?? {}) as Record<string, any>;
+      const postInfo = {
+        title: post.message.slice(0, CAPABILITIES.text.maxLength),
+        privacy_level: String(settings.privacy_level ?? "SELF_ONLY"),
+        disable_duet: settings.duet === undefined ? false : !settings.duet,
+        disable_comment: settings.comment === undefined ? false : !settings.comment,
+        disable_stitch: settings.stitch === undefined ? false : !settings.stitch,
+        brand_content_toggle: Boolean(settings.brand_content_toggle ?? false),
+        brand_organic_toggle: Boolean(settings.brand_organic_toggle ?? false),
+      };
+
+      const res = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+        body: JSON.stringify({
+          post_info: postInfo,
+          source_info: {
+            source: "PULL_FROM_URL",
+            video_url: media.url,
+          },
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(`TikTok publish init failed (${res.status}): ${JSON.stringify(json)}`);
+      }
+
+      const publishId = String(json?.data?.publish_id ?? "");
+      if (!publishId) {
+        throw new Error(`TikTok publish init missing publish_id: ${JSON.stringify(json)}`);
+      }
+
+      responses.push({
+        id: post.id,
+        postId: publishId,
+        releaseURL: channel.username ? `https://www.tiktok.com/@${channel.username}` : "https://www.tiktok.com/",
+        status: "processing",
+      });
+    }
+
+    return responses;
   },
 };
 

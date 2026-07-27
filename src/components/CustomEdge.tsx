@@ -1,5 +1,11 @@
-import { BaseEdge, EdgeProps, getBezierPath } from 'reactflow';
+import { BaseEdge, EdgeProps, getBezierPath } from '@xyflow/react';
 import { EdgeStatus } from '@/types/computeFlow';
+
+interface CustomEdgeData {
+  status?: EdgeStatus;
+  color?: string;
+  dashed?: boolean;
+}
 
 const CustomEdge = ({
   sourceX,
@@ -21,7 +27,8 @@ const CustomEdge = ({
     curvature: 0.8,
   });
 
-  const status: EdgeStatus = data?.status || 'idle';
+  const edgeData = data as CustomEdgeData | undefined;
+  const status: EdgeStatus = edgeData?.status || 'idle';
   const isRunning = status === 'running';
   const isError = status === 'error';
   const isSuccess = status === 'succeeded';
@@ -30,7 +37,7 @@ const CustomEdge = ({
     if (isError) return '#ef4444';
     if (isSuccess) return '#f97316';
     if (isRunning) return '#3b82f6';
-    return data?.color || '#52525b';
+    return edgeData?.color || '#52525b';
   };
 
   const strokeColor = getStatusColor();
@@ -55,9 +62,10 @@ const CustomEdge = ({
           ...style,
           strokeWidth: isRunning ? 3.5 : 3,
           stroke: strokeColor,
-          strokeDasharray: isRunning ? '10 5' : data?.dashed ? '5,5' : 'none',
+          strokeDasharray: isRunning ? '10 5' : edgeData?.dashed ? '5,5' : 'none',
           opacity: 0.9,
         }}
+        className={isRunning ? 'animate-[studio-flow_0.8s_linear_infinite]' : undefined}
       />
 
       {/* Connection dots at endpoints */}
@@ -76,26 +84,18 @@ const CustomEdge = ({
         opacity={0.8}
       />
 
-      {/* Animated flow particles when running */}
-      {isRunning && (
-        <>
-          <circle r="3" fill={strokeColor}>
-            <animateMotion
-              dur="2s"
-              repeatCount="indefinite"
-              path={edgePath}
-            />
-          </circle>
-          <circle r="2" fill={strokeColor} opacity="0.6">
-            <animateMotion
-              dur="2s"
-              repeatCount="indefinite"
-              path={edgePath}
-              begin="0.5s"
-            />
-          </circle>
-        </>
-      )}
+      {isRunning ? (
+        <BaseEdge
+          path={edgePath}
+          style={{
+            strokeWidth: 4,
+            stroke: strokeColor,
+            strokeDasharray: '10 5',
+            opacity: 0.55,
+          }}
+          className="animate-[studio-flow_0.8s_linear_infinite]"
+        />
+      ) : null}
 
       {/* Success flash */}
       {isSuccess && (

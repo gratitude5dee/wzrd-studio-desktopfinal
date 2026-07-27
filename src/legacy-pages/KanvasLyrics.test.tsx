@@ -1,8 +1,29 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@/providers/AuthProvider', () => ({
+  useAuth: () => ({
+    user: { email: 'creator@example.com' },
+  }),
+}));
+vi.mock('@/hooks/useCredits', () => ({
+  useCredits: () => ({
+    availableCredits: 100,
+    isLoading: false,
+  }),
+}));
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: {
+      signOut: vi.fn(),
+    },
+    functions: {
+      invoke: vi.fn().mockResolvedValue({ data: { templates: [] }, error: null }),
+    },
+  },
+}));
 
 import KanvasLyrics from './KanvasLyrics';
 
@@ -23,10 +44,13 @@ const renderPage = (path = '/kanvas/lyrics/new') =>
   );
 
 describe('KanvasLyrics', () => {
-  it('renders templates home on /kanvas/lyrics', () => {
+  it('renders templates home on /kanvas/lyrics', async () => {
     renderPage('/kanvas/lyrics');
 
-    expect(screen.getByRole('heading', { name: 'YOUR TEMPLATES' })).toBeInTheDocument();
+    const sidebar = screen.getByTestId('app-sidebar');
+    expect(sidebar).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: /^kanvas$/i })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('heading', { name: 'YOUR TEMPLATES' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create new template/i })).toBeInTheDocument();
     expect(screen.getByText(/15\/30\/45\/60s clip/i)).toBeInTheDocument();
   });

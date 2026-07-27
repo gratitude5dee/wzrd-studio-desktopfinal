@@ -1,12 +1,9 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
   ChevronDown,
-  Download,
   FileText,
-  HelpCircle,
-  Archive,
   Loader2,
   Mic2,
   Play,
@@ -22,11 +19,14 @@ import {
   Film,
 } from "lucide-react";
 import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/features/kanvas/types";
-import { getJobPrimaryUrl, isJobActive } from "@/features/kanvas/helpers";
+import { normalizeKanvasJobMedia } from "@/features/kanvas/helpers";
 import { cn } from "@/lib/utils";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { musicPolishAssets } from "@/lib/musicPolishAssets";
 import type { MusicPolishAsset } from "@/lib/musicPolishAssets";
+import { KanvasMediaPreview } from "@/components/kanvas/KanvasMediaPreview";
+import { useRegisterVoiceActions } from "@/voice/VoiceAgentProvider";
+import type { VoiceActionRegistration } from "@/voice/actions/registry";
 
 /* ─── Types ──────────────────────────────────────────── */
 
@@ -66,12 +66,12 @@ const NOISE_SVG = `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='h
 
 /* ─── Wizard Steps ───────────────────────────────────── */
 
-const WIZARD_STEPS: { key: WizardStep; label: string; icon: typeof FileText }[] = [
-  { key: "script", label: "Script", icon: FileText },
-  { key: "voice", label: "Voice", icon: Mic2 },
-  { key: "avatar", label: "Avatar", icon: User },
-  { key: "environment", label: "Environment", icon: Globe },
-  { key: "render", label: "Render", icon: Film },
+const WIZARD_STEPS: { key: WizardStep; label: string; description: string; icon: typeof FileText }[] = [
+  { key: "script", label: "Script", description: "Write the line", icon: FileText },
+  { key: "voice", label: "Voice", description: "Tune delivery", icon: Mic2 },
+  { key: "avatar", label: "Avatar", description: "Pick talent", icon: User },
+  { key: "environment", label: "Environment", description: "Set render", icon: Globe },
+  { key: "render", label: "Render", description: "Review launch", icon: Film },
 ];
 
 /* ─── Templates Data ─────────────────────────────────── */
@@ -112,9 +112,35 @@ const EMOTIONS = [
   { id: "angry", label: "Angry", icon: Film },
 ];
 
-/* ─── Wizard Sidebar ─────────────────────────────────── */
+/* ─── Workflow Stepper ───────────────────────────────── */
 
-function WizardSidebar({
+function normalizeWizardStep(value: unknown): WizardStep | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.toLowerCase().trim().replace(/\s+/g, "-");
+  const aliases: Record<string, WizardStep> = {
+    script: "script",
+    copy: "script",
+    voice: "voice",
+    audio: "voice",
+    avatar: "avatar",
+    character: "avatar",
+    talent: "avatar",
+    environment: "environment",
+    render: "render",
+    review: "render",
+  };
+  return aliases[normalized] ?? null;
+}
+
+function normalizeLipsyncMode(value: unknown): "talking-head" | "lip-sync" | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.toLowerCase().trim().replace(/[\s_]+/g, "-");
+  if (["talking-head", "talkinghead", "avatar", "portrait"].includes(normalized)) return "talking-head";
+  if (["lip-sync", "lipsync", "video-sync", "video"].includes(normalized)) return "lip-sync";
+  return null;
+}
+
+function LipsyncWorkflowStepper({
   activeStep,
   onStepChange,
 }: {
@@ -122,20 +148,13 @@ function WizardSidebar({
   onStepChange: (step: WizardStep) => void;
 }) {
   return (
-    <div className="hidden md:fixed md:left-0 md:top-[68px] md:bottom-0 md:w-[260px] md:bg-[#090909] md:z-40 md:flex md:flex-col md:overflow-hidden">
-      {/* Header */}
-      <div className="px-6 pt-8 pb-6">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#f97316] font-['Space_Grotesk']">
-          UGC FACTORY
-        </p>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-zinc-600">
-          Production Wizard
-        </p>
-      </div>
-
-      {/* Steps */}
-      <nav className="flex-1 px-4 space-y-2">
-        {WIZARD_STEPS.map((step, i) => {
+    <div
+      data-testid="lipsync-workflow-stepper"
+      className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-[#0b0b0c]/80 p-1.5 shadow-[0_18px_70px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+      style={{ scrollbarWidth: "none" }}
+    >
+      <nav className="flex min-w-max items-center gap-1" aria-label="Lip Sync workflow">
+        {WIZARD_STEPS.map((step, index) => {
           const active = activeStep === step.key;
           const StepIcon = step.icon;
           return (
@@ -143,41 +162,33 @@ function WizardSidebar({
               key={step.key}
               type="button"
               onClick={() => onStepChange(step.key)}
+              aria-current={active ? "step" : undefined}
               className={cn(
-                "w-full flex items-center gap-4 rounded-full px-4 py-3 text-xs uppercase tracking-[0.15em] font-['Space_Grotesk'] font-bold transition-all",
+                "group flex min-w-[150px] items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f97316]/70",
                 active
-                  ? "bg-[#f97316] text-black"
-                  : "text-zinc-500 hover:text-white hover:bg-white/5"
+                  ? "bg-[#f97316] text-black shadow-[0_0_28px_rgba(249,115,22,0.18)]"
+                  : "text-zinc-500 hover:bg-white/[0.04] hover:text-white"
               )}
             >
               <span className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-black",
-                active ? "bg-black/20" : "bg-white/5"
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black",
+                active ? "bg-black/15 text-black" : "bg-white/5 text-zinc-500 group-hover:text-white"
               )}>
-                {String(i + 1).padStart(2, "0")}
+                {String(index + 1).padStart(2, "0")}
               </span>
-              <StepIcon className="h-4 w-4" />
-              <span>{step.label}</span>
+              <StepIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] font-['Space_Grotesk']">
+                  {step.label}
+                </span>
+                <span className={cn("mt-0.5 block text-[10px]", active ? "text-black/60" : "text-zinc-600")}>
+                  {step.description}
+                </span>
+              </span>
             </button>
           );
         })}
       </nav>
-
-      {/* Footer */}
-      <div className="px-4 pb-8 space-y-3">
-        <button className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-zinc-600 hover:text-white transition-colors w-full">
-          <HelpCircle className="h-3.5 w-3.5" />
-          Support
-        </button>
-        <button className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-zinc-600 hover:text-white transition-colors w-full">
-          <Archive className="h-3.5 w-3.5" />
-          Archive
-        </button>
-        <button className="w-full flex items-center justify-center gap-2 rounded-full border border-white/10 bg-transparent px-4 py-3 text-[10px] uppercase tracking-[0.2em] text-zinc-400 hover:bg-white/5 hover:text-white transition-all font-['Space_Grotesk'] font-bold">
-          <Download className="h-3.5 w-3.5" />
-          Export Project
-        </button>
-      </div>
     </div>
   );
 }
@@ -199,7 +210,6 @@ function LipsyncDashboard({
   onGenerate,
   onUpload,
   uploadingImage,
-  uploadingAudio,
   jobs,
   selectedJob,
   tier,
@@ -218,7 +228,6 @@ function LipsyncDashboard({
   onGenerate: () => void;
   onUpload: (file: File, type: KanvasAssetType) => Promise<void>;
   uploadingImage: boolean;
-  uploadingAudio: boolean;
   jobs: KanvasJob[];
   selectedJob: KanvasJob | null;
   tier: "free" | "pro" | "enterprise";
@@ -226,7 +235,7 @@ function LipsyncDashboard({
   const fileRef = useRef<HTMLInputElement>(null);
   const [audioMode, setAudioMode] = useState<"text" | "generate">("text");
   const latestCompleted = jobs.find((j) => j.status === "completed");
-  const latestUrl = latestCompleted ? getJobPrimaryUrl(latestCompleted) : null;
+  const latestMedia = latestCompleted ? normalizeKanvasJobMedia(latestCompleted) : null;
 
   const workflowSteps = [
     { num: "01", title: "Upload", desc: "Upload your portrait or video asset" },
@@ -458,12 +467,13 @@ function LipsyncDashboard({
           {latestCompleted && (
             <div className="rounded-2xl bg-[#131313] p-6 flex gap-6">
               <div className="h-24 w-24 rounded-xl overflow-hidden bg-white/5 shrink-0">
-                {latestUrl ? (
-                  latestCompleted.resultPayload?.mediaType === "video" ? (
-                    <video src={latestUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                  ) : (
-                    <img src={latestUrl} alt="Latest render" className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                  )
+                {latestMedia ? (
+                  <KanvasMediaPreview
+                    media={{ ...latestMedia, alt: "Latest lipsync render" }}
+                    aspectClassName="aspect-square"
+                    className="h-full w-full"
+                    showErrorLabel={false}
+                  />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
                     <Film className="h-6 w-6 text-zinc-600" />
@@ -563,14 +573,16 @@ function UGCTemplates({
         })}
       </div>
 
-      {/* Floating FAB */}
-      <button
-        type="button"
-        onClick={onNext}
-        className="fixed bottom-8 right-8 z-50 w-20 h-20 rounded-full bg-[#f97316] text-black flex items-center justify-center shadow-[0_0_40px_rgba(249,115,22,0.3)] hover:shadow-[0_0_60px_rgba(249,115,22,0.5)] transition-all"
-      >
-        <ArrowRight className="h-8 w-8" />
-      </button>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onNext}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f97316] text-black shadow-[0_0_40px_rgba(249,115,22,0.25)] transition-all hover:shadow-[0_0_56px_rgba(249,115,22,0.42)]"
+          aria-label="Continue to audio settings"
+        >
+          <ArrowRight className="h-7 w-7" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -886,6 +898,7 @@ function RenderPanel({
 
 export default function LipsyncStudioSection(props: LipsyncStudioProps) {
   const { tier } = useUserTier();
+  const { onLipsyncModeChange, onPromptChange } = props;
   const [activeStep, setActiveStep] = useState<WizardStep>("script");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
@@ -899,6 +912,107 @@ export default function LipsyncStudioSection(props: LipsyncStudioProps) {
 
   const activeView = viewForStep[activeStep];
 
+  const voiceActions = useMemo<VoiceActionRegistration[]>(
+    () => [
+      {
+        name: "kanvas_lipsync_set_step",
+        scope: "kanvas:lipsync",
+        description: "Move the Lip Sync workflow to Script, Voice, Avatar, Environment, or Render.",
+        schema: {
+          type: "object",
+          properties: { step: { type: "string" } },
+          required: ["step"],
+          additionalProperties: false,
+        },
+        handler: (input) => {
+          const step = normalizeWizardStep((input as { step?: unknown }).step);
+          if (!step) {
+            return {
+              ok: false,
+              status: "invalid_input",
+              message: "Choose Script, Voice, Avatar, Environment, or Render.",
+              errorCode: "invalid_lipsync_step",
+            };
+          }
+          setActiveStep(step);
+          return {
+            ok: true,
+            status: "completed",
+            message: `Lip Sync ${WIZARD_STEPS.find((item) => item.key === step)?.label ?? step} step is open.`,
+            data: { step },
+            uiFocus: "lipsync-workflow-stepper",
+          };
+        },
+      },
+      {
+        name: "kanvas_lipsync_set_mode",
+        scope: "kanvas:lipsync",
+        description: "Switch Lip Sync between talking-head portrait generation and video lip-sync.",
+        schema: {
+          type: "object",
+          properties: { mode: { type: "string" } },
+          required: ["mode"],
+          additionalProperties: false,
+        },
+        handler: (input) => {
+          const mode = normalizeLipsyncMode((input as { mode?: unknown }).mode);
+          if (!mode) {
+            return {
+              ok: false,
+              status: "invalid_input",
+              message: "Choose talking-head or lip-sync mode.",
+              errorCode: "invalid_lipsync_mode",
+            };
+          }
+          onLipsyncModeChange(mode);
+          setActiveStep(mode === "talking-head" ? "avatar" : "script");
+          return {
+            ok: true,
+            status: "completed",
+            message: `Lip Sync mode set to ${mode === "talking-head" ? "Talking Head" : "Lip Sync"}.`,
+            data: { mode },
+          };
+        },
+      },
+      {
+        name: "kanvas_set_prompt",
+        scope: "kanvas:lipsync",
+        description: "Set the Lip Sync script or creative direction.",
+        schema: {
+          type: "object",
+          properties: { prompt: { type: "string" } },
+          required: ["prompt"],
+          additionalProperties: false,
+        },
+        handler: (input) => {
+          const prompt = typeof (input as { prompt?: unknown }).prompt === "string"
+            ? (input as { prompt: string }).prompt.trim()
+            : "";
+          if (!prompt) {
+            return {
+              ok: false,
+              status: "invalid_input",
+              message: "Tell me the script or direction to place in Lip Sync.",
+              errorCode: "missing_lipsync_prompt",
+            };
+          }
+          onPromptChange(prompt);
+          setActiveStep("script");
+          return {
+            ok: true,
+            status: "completed",
+            message: "Lip Sync script updated.",
+            data: { prompt },
+            uiFocus: "lipsync-script",
+          };
+        },
+      },
+    ],
+    [onLipsyncModeChange, onPromptChange],
+  );
+
+  useRegisterVoiceActions(voiceActions);
+
   function handleNextStep() {
     const currentIdx = WIZARD_STEPS.findIndex((s) => s.key === activeStep);
     if (currentIdx < WIZARD_STEPS.length - 1) {
@@ -907,59 +1021,50 @@ export default function LipsyncStudioSection(props: LipsyncStudioProps) {
   }
 
   return (
-    <div className="fixed inset-0 top-[68px] z-30 bg-[#000000] overflow-hidden">
-      {/* Film Grain */}
+    <section className="relative min-h-[calc(100vh-7rem)] overflow-hidden rounded-[28px] border border-white/[0.06] bg-[#030304] shadow-[0_24px_120px_rgba(0,0,0,0.45)]">
+      <img
+        src={musicPolishAssets.cinema.soundstage.src}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover opacity-20"
+        loading="lazy"
+        decoding="async"
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(103,232,249,0.16),transparent_32%),linear-gradient(180deg,rgba(0,0,0,0.66),rgba(0,0,0,0.96))]" />
       <div
-        className="pointer-events-none fixed inset-0 z-[1] mix-blend-overlay opacity-[0.15]"
+        className="pointer-events-none absolute inset-0 z-[1] mix-blend-overlay opacity-[0.13]"
         style={{ backgroundImage: NOISE_SVG, backgroundRepeat: "repeat", backgroundSize: "128px 128px" }}
       />
 
-      {/* Mobile: horizontal step indicator */}
-      <div className="md:hidden flex items-center gap-1 px-4 py-3 overflow-x-auto scrollbar-hide border-b border-white/[0.06] bg-[#090909] z-40 relative">
-        {WIZARD_STEPS.map((step, i) => {
-          const active = activeStep === step.key;
-          const StepIcon = step.icon;
-          return (
-            <button
-              key={step.key}
-              onClick={() => setActiveStep(step.key)}
-              className={cn(
-                "shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
-                active
-                  ? "bg-[#f97316] text-black"
-                  : "text-zinc-500 bg-white/[0.03]"
-              )}
-            >
-              <StepIcon className="h-3 w-3" />
-              {step.label}
-            </button>
-          );
-        })}
-      </div>
+      <div className="relative z-[2] px-4 py-4 md:px-8 md:py-7 lg:px-12">
+        <div className="mx-auto max-w-[1180px]">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-200/80">
+                Premium Performance Capture
+              </p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white font-['Space_Grotesk'] md:text-5xl">
+                Lip Sync Studio
+              </h1>
+            </div>
+            <LipsyncWorkflowStepper activeStep={activeStep} onStepChange={setActiveStep} />
+          </div>
 
-      {/* Desktop Sidebar */}
-      <WizardSidebar activeStep={activeStep} onStepChange={setActiveStep} />
-
-      {/* Main Content */}
-      <div className="absolute inset-0 left-0 md:left-[260px] top-[52px] md:top-0 overflow-y-auto z-[2] pb-16 md:pb-0" style={{ scrollbarWidth: "none" }}>
-        <div className="px-4 md:px-10 py-6 md:py-8 max-w-[1200px]">
           {activeView === "dashboard" && (
             <LipsyncDashboard
               prompt={props.prompt}
               onPromptChange={props.onPromptChange}
               lipsyncMode={props.lipsyncMode}
               onLipsyncModeChange={props.onLipsyncModeChange}
-                currentModel={props.currentModel}
-                models={props.models}
-                onModelChange={props.onModelChange}
-                imageId={props.imageId}
-                videoId={props.videoId}
-                audioId={props.audioId}
+              currentModel={props.currentModel}
+              models={props.models}
+              onModelChange={props.onModelChange}
+              imageId={props.imageId}
+              videoId={props.videoId}
+              audioId={props.audioId}
               submitting={props.submitting}
               onGenerate={props.onGenerate}
               onUpload={props.onUpload}
               uploadingImage={props.uploadingImage}
-              uploadingAudio={props.uploadingAudio}
               jobs={props.jobs}
               selectedJob={props.selectedJob}
               tier={tier}
@@ -997,6 +1102,6 @@ export default function LipsyncStudioSection(props: LipsyncStudioProps) {
           )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

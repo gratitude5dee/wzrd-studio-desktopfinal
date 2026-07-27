@@ -9,6 +9,7 @@ import {
   type StructuredImageEditPrompt,
 } from '@/lib/modelAliases';
 import { supabaseService } from '@/services/supabaseService';
+import { resolveStyleReferenceUrl } from '@/constants/stylePacks';
 import { useRegisterVoiceActions } from '@/voice/VoiceAgentProvider';
 import type { VoiceActionName, VoiceActionRegistration, VoiceActionResult } from '@/voice/actions/registry';
 import { scrollVoiceTargetIntoView, useVoiceSelection } from '@/voice/VoiceSelectionContext';
@@ -44,6 +45,21 @@ function needsConfirmation(actionName: VoiceActionName, input: unknown, risk: 'w
 
 function matchesText(value: string | null | undefined, query: string) {
   return value?.toLowerCase().includes(query.toLowerCase()) ?? false;
+}
+
+function getBrowserOrigin() {
+  return typeof window === 'undefined' ? undefined : window.location.origin;
+}
+
+function resolveProjectStyleReferenceUrl(projectData: ProjectData) {
+  return resolveStyleReferenceUrl(
+    {
+      videoStyle: projectData.videoStyle,
+      styleReferenceUrl: projectData.styleReferenceUrl,
+      styleReferenceAssetId: projectData.styleReferenceAssetId,
+    },
+    getBrowserOrigin()
+  );
 }
 
 type SceneVoiceUpdates = Partial<{
@@ -244,8 +260,11 @@ export function ProjectSetupVoiceBridge() {
             }
             const ready = await finalizeProjectSetup();
             if (ready && projectId) {
-              navigate(appRoutes.projects.timeline(projectId));
-              return completed('Storyboard timeline is open.', { projectId, path: appRoutes.projects.timeline(projectId) });
+              navigate(appRoutes.projects.studio(projectId));
+              return completed('Studio is open and storyboard preparation is running.', {
+                projectId,
+                path: appRoutes.projects.studio(projectId),
+              });
             }
             return invalid('I could not start storyboard creation yet.');
           }
@@ -389,13 +408,14 @@ export function ProjectSetupVoiceBridge() {
           if (!character) return invalid('I could not find the selected character.');
           if (!character.image_url) return invalid('Generate a character image before editing it.');
 
+          const styleReferenceUrl = resolveProjectStyleReferenceUrl(projectData);
           const editPayload: StructuredImageEditPrompt = {
             target_type: 'character',
             target_id: character.id,
             source_image_url: character.image_url,
             edit_prompt: editPrompt,
             model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
-            style_reference_url: projectData.styleReferenceUrl ?? null,
+            style_reference_url: styleReferenceUrl ?? null,
             preserve: payload.preserve ?? ['identity', 'face', 'pose', 'character continuity'],
             avoid: payload.avoid ?? ['extra fingers', 'distorted face', 'identity drift'],
             aspect_ratio: payload.aspect_ratio ?? projectData.aspectRatio ?? 'auto',
@@ -406,7 +426,7 @@ export function ProjectSetupVoiceBridge() {
               character_id: character.id,
               source_image_url: character.image_url,
               edit_prompt: JSON.stringify(editPayload),
-              style_reference_url: projectData.styleReferenceUrl,
+              style_reference_url: styleReferenceUrl,
               model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
               preferred_model: resolveFrontendModelAlias(NANO_BANANA_FAST_EDIT_ALIAS),
               structured_prompt: editPayload,
@@ -497,10 +517,10 @@ export function ProjectSetupVoiceBridge() {
         handler: async () => {
           const ready = await finalizeProjectSetup();
           if (ready && projectId) {
-            navigate(appRoutes.projects.timeline(projectId));
-            return completed('Storyboard creation started. Timeline is open.', {
+            navigate(appRoutes.projects.studio(projectId));
+            return completed('Storyboard creation started. Studio is open.', {
               projectId,
-              path: appRoutes.projects.timeline(projectId),
+              path: appRoutes.projects.studio(projectId),
             });
           }
           return invalid('I could not start storyboard creation yet.');

@@ -61,7 +61,7 @@ export function resolveVoiceNavigationTarget(input: VoiceNavigationInput): strin
     case 'learning_studio':
       return appRoutes.learningStudio;
     case 'settings_billing':
-      return appRoutes.settings.billing;
+      return appRoutes.systemBilling;
     case 'kanvas':
       return appRoutes.kanvas;
     case 'kanvas_image':

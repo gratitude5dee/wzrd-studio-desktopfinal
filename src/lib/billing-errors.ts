@@ -9,7 +9,7 @@ export interface InsufficientCreditsPayload {
   error?: string;
 }
 
-const DEFAULT_TOP_UP_URL = appRoutes.settings.billing;
+const DEFAULT_TOP_UP_URL = appRoutes.systemBilling;
 
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;

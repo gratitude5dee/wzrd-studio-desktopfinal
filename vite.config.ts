@@ -4,6 +4,37 @@ import { vitePluginEditframe } from "@editframe/vite-plugin";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import {
+  applyEditorIsolationHeaders,
+  isEditorIsolationPath,
+} from "./src/next/editorIsolationHeaders";
+
+function maybeApplyEditorIsolationHeaders(req: { url?: string }, res: { setHeader: (key: string, value: string) => void }) {
+  if (!req.url) return;
+
+  const pathname = new URL(req.url, "http://vite.local").pathname;
+  if (isEditorIsolationPath(pathname)) {
+    applyEditorIsolationHeaders((key, value) => res.setHeader(key, value));
+  }
+}
+
+function editorIsolationHeadersPlugin() {
+  return {
+    name: "wzrd-editor-isolation-headers",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        maybeApplyEditorIsolationHeaders(req, res);
+        next();
+      });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        maybeApplyEditorIsolationHeaders(req, res);
+        next();
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 // @ts-nocheck
@@ -13,6 +44,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [
+    editorIsolationHeadersPlugin(),
     react(),
     vitePluginEditframe({
       root: "./src",

@@ -56,6 +56,24 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+async function invokePostzPublishGroup(groupId: string, authHeader: string | null) {
+  const base = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");
+  const res = await fetch(`${base}/functions/v1/postz-publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
+    body: JSON.stringify({ action: "publish-group", group_id: groupId }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`Postz publish failed (${res.status}): ${JSON.stringify(json)}`);
+  }
+  return json;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -68,6 +86,47 @@ function asString(value: unknown): string | null {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function isDemoChannel(row: Record<string, unknown>): boolean {
+  return (
+    asRecord(row.profile).seeded === true ||
+    String(row.token_ref ?? "").startsWith("seed:") ||
+    String(row.provider_account_id ?? "").includes(":seed:")
+  );
+}
+
+async function getGroupDemoStatus(input: {
+  supabaseAdmin: any;
+  ownerId: string;
+  groupId: string;
+}): Promise<{ found: boolean; hasDemoChannel: boolean }> {
+  const { data: posts, error: postsError } = await input.supabaseAdmin
+    .from("postz_posts")
+    .select("channel_id")
+    .eq("owner_id", input.ownerId)
+    .eq("group_id", input.groupId)
+    .is("deleted_at", null);
+  if (postsError) throw postsError;
+
+  const channelIds = [...new Set(((posts ?? []) as unknown as Array<Record<string, unknown>>)
+    .map((post) => asString(post.channel_id))
+    .filter((id): id is string => Boolean(id)))];
+
+  if (channelIds.length === 0) return { found: false, hasDemoChannel: false };
+
+  const { data: channels, error: channelsError } = await input.supabaseAdmin
+    .from("postz_channels")
+    .select("id,token_ref,profile,provider_account_id")
+    .eq("owner_id", input.ownerId)
+    .in("id", channelIds)
+    .is("deleted_at", null);
+  if (channelsError) throw channelsError;
+
+  return {
+    found: true,
+    hasDemoChannel: ((channels ?? []) as unknown as Array<Record<string, unknown>>).some(isDemoChannel),
+  };
 }
 
 function asMediaArray(value: unknown): MediaRef[] {
@@ -230,15 +289,16 @@ serve(async (req) => {
 
         const { data: channels, error } = await supabaseAdmin
           .from("postz_channels")
-          .select("id,provider")
+          .select("id,provider,token_ref,profile,provider_account_id")
           .eq("owner_id", user.id)
           .in("id", channelIds)
           .is("deleted_at", null);
         if (error) throw error;
 
         const providerByChannel = new Map<string, string>();
-        for (const channel of channels ?? []) {
-          providerByChannel.set(channel.id, String(channel.provider));
+        for (const channel of (channels ?? []) as unknown as Array<Record<string, unknown>>) {
+          const id = asString(channel.id);
+          if (id) providerByChannel.set(id, String(channel.provider ?? "unknown"));
         }
 
         const per_channel = group.channels.map((ch) => {
@@ -262,15 +322,21 @@ serve(async (req) => {
         const channelIds = group.channels.map((ch) => ch.channel_id);
         const { data: channels, error: channelsError } = await supabaseAdmin
           .from("postz_channels")
-          .select("id,provider")
+          .select("id,provider,token_ref,profile,provider_account_id")
           .eq("owner_id", user.id)
           .in("id", channelIds)
           .is("deleted_at", null);
         if (channelsError) throw channelsError;
 
+        const channelRows = (channels ?? []) as unknown as Array<Record<string, unknown>>;
+        if (group.state === "QUEUE" && channelRows.some(isDemoChannel)) {
+          return errorResponse("Demo channels cannot be scheduled or published. Connect a real channel first.", 400);
+        }
+
         const providerByChannel = new Map<string, string>();
-        for (const channel of channels ?? []) {
-          providerByChannel.set(channel.id, String(channel.provider));
+        for (const channel of channelRows) {
+          const id = asString(channel.id);
+          if (id) providerByChannel.set(id, String(channel.provider ?? "unknown"));
         }
 
         const validation = group.channels.map((ch) => {
@@ -366,15 +432,21 @@ serve(async (req) => {
         const channelIds = group.channels.map((ch) => ch.channel_id);
         const { data: channels, error: channelsError } = await supabaseAdmin
           .from("postz_channels")
-          .select("id,provider")
+          .select("id,provider,token_ref,profile,provider_account_id")
           .eq("owner_id", user.id)
           .in("id", channelIds)
           .is("deleted_at", null);
         if (channelsError) throw channelsError;
 
+        const channelRows = (channels ?? []) as unknown as Array<Record<string, unknown>>;
+        if (group.state === "QUEUE" && channelRows.some(isDemoChannel)) {
+          return errorResponse("Demo channels cannot be scheduled or published. Connect a real channel first.", 400);
+        }
+
         const providerByChannel = new Map<string, string>();
-        for (const channel of channels ?? []) {
-          providerByChannel.set(channel.id, String(channel.provider));
+        for (const channel of channelRows) {
+          const id = asString(channel.id);
+          if (id) providerByChannel.set(id, String(channel.provider ?? "unknown"));
         }
 
         const validation = group.channels.map((ch) => {
@@ -580,6 +652,12 @@ serve(async (req) => {
       }
 
       case "post-now": {
+        const demoStatus = await getGroupDemoStatus({ supabaseAdmin, ownerId: user.id, groupId: body.group_id });
+        if (!demoStatus.found) return errorResponse("Group not found", 404);
+        if (demoStatus.hasDemoChannel) {
+          return errorResponse("Demo channels cannot be published. Connect a real channel first.", 400);
+        }
+
         const nowIso = new Date().toISOString();
         const { error } = await supabaseAdmin
           .from("postz_posts")
@@ -588,7 +666,8 @@ serve(async (req) => {
           .eq("group_id", body.group_id)
           .is("deleted_at", null);
         if (error) throw error;
-        return successResponse({ success: true });
+        const result = await invokePostzPublishGroup(body.group_id, req.headers.get("Authorization"));
+        return successResponse(result);
       }
 
       default:

@@ -5,6 +5,7 @@ import { getVisualPromptSystemPrompt, getVisualPromptUserPrompt } from '../_shar
 import { createPromptVersion } from '../_shared/observability.ts';
 import { executeGmiChatCompletion } from '../_shared/gmi-client.ts';
 import { getCatalogModelById } from '../_shared/ai-model-catalog.ts';
+import { getStylePromptFragment, resolveBuiltInStyleReferenceUrl } from '../_shared/style-packs.ts';
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
@@ -25,6 +26,35 @@ async function resolveTextEndpoint(modelId: string, fallbackId: string): Promise
   return fallback?.endpointId ?? 'google/gemini-3.1-flash-lite';
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function appendStylePrompt(prompt: string, stylePromptFragment?: string | null): string {
+  const stylePrompt = normalizeOptionalString(stylePromptFragment);
+  if (!stylePrompt) return prompt;
+  return `${prompt}\n\nStyle direction: ${stylePrompt}`;
+}
+
+async function getStyleReferenceUrl(styleReferenceAssetId?: string | null): Promise<string | null> {
+  if (!styleReferenceAssetId) return null;
+
+  const { data: mediaItem, error: mediaError } = await supabase
+    .from('media_items')
+    .select('url, storage_bucket, storage_path')
+    .eq('id', styleReferenceAssetId)
+    .single();
+
+  if (mediaError || !mediaItem) return null;
+  if (mediaItem.url) return mediaItem.url;
+
+  if (mediaItem.storage_bucket && mediaItem.storage_path) {
+    return `${supabaseUrl}/storage/v1/object/public/${mediaItem.storage_bucket}/${mediaItem.storage_path}`;
+  }
+
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -34,6 +64,8 @@ serve(async (req) => {
   try {
     const body = await req.json();
     shotId = body.shot_id;
+    const styleReferenceOverride = normalizeOptionalString(body.style_reference_url);
+    const stylePromptOverride = normalizeOptionalString(body.style_prompt_fragment);
 
     if (!shotId) {
       return new Response(
@@ -62,7 +94,8 @@ serve(async (req) => {
           genre,
           tone,
           video_style,
-          cinematic_inspiration
+          cinematic_inspiration,
+          style_reference_asset_id
         )
       `)
       .eq("id", shotId)
@@ -86,6 +119,12 @@ serve(async (req) => {
     const sceneData = sceneArray[0] || { description: '', location: '', lighting: '', weather: '' };
     const projectArray = Array.isArray(shot.projects) ? shot.projects : [];
     const projectData = projectArray[0] || { genre: '', tone: '', video_style: '', cinematic_inspiration: '' };
+    const projectStyleReferenceUrl = await getStyleReferenceUrl(projectData.style_reference_asset_id);
+    const styleReferenceUrl =
+      styleReferenceOverride ||
+      projectStyleReferenceUrl ||
+      resolveBuiltInStyleReferenceUrl(projectData.video_style);
+    const stylePromptFragment = stylePromptOverride || getStylePromptFragment(projectData.video_style);
 
     const systemPrompt = getVisualPromptSystemPrompt();
     const userPrompt = getVisualPromptUserPrompt(
@@ -104,6 +143,7 @@ serve(async (req) => {
         cinematic_inspiration: projectData.cinematic_inspiration
       }
     );
+    const styledUserPrompt = appendStylePrompt(userPrompt, stylePromptFragment);
 
     // Determine model: check project settings, fall back to GMI
     const { data: projectSettings } = await supabase
@@ -125,7 +165,7 @@ serve(async (req) => {
       );
       const result = await executeGmiChatCompletion(gmiModelId, [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: styledUserPrompt },
       ], { temperature: 0.7, max_tokens: 200 });
 
       if (!result.success || !result.data) {
@@ -145,7 +185,7 @@ serve(async (req) => {
           model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
+            { role: 'user', content: styledUserPrompt }
           ],
           temperature: 0.7,
           max_tokens: 200
@@ -160,7 +200,7 @@ serve(async (req) => {
           const gmiModelId = await resolveTextEndpoint('gmi/gemini-3.1-flash-lite', 'gmi/gemini-3.1-flash-lite');
           const fallbackResult = await executeGmiChatCompletion(gmiModelId, [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
+            { role: 'user', content: styledUserPrompt },
           ], { temperature: 0.7, max_tokens: 200 });
           if (!fallbackResult.success || !fallbackResult.data) {
             throw new Error(fallbackResult.error || 'GMI fallback failed');
@@ -179,6 +219,8 @@ serve(async (req) => {
       throw new Error('No visual prompt generated');
     }
 
+    visualPrompt = appendStylePrompt(visualPrompt, stylePromptFragment);
+
     console.log(`[generate-visual-prompt][Shot ${shotId}] Generated visual prompt:`, visualPrompt);
 
     const { error: updateError } = await supabase
@@ -186,6 +228,7 @@ serve(async (req) => {
       .update({ 
         visual_prompt: visualPrompt,
         image_status: "prompt_ready",
+        image_generation_error: null,
         failure_reason: null
       })
       .eq("id", shotId);
@@ -207,11 +250,18 @@ serve(async (req) => {
       metadata: {
         shot_type: shot.shot_type,
         scene_id: shot.scene_id,
+        style_reference_url: styleReferenceUrl,
+        style_prompt_fragment: stylePromptFragment,
       },
     });
 
     return new Response(
-      JSON.stringify({ success: true, visual_prompt: visualPrompt, shot_id: shotId }),
+      JSON.stringify({
+        success: true,
+        visual_prompt: visualPrompt,
+        shot_id: shotId,
+        style_reference_url: styleReferenceUrl,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

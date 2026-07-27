@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -18,6 +18,8 @@ export function usePresence(projectId: string | null) {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, PresenceUser>>({});
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const localPresenceRef = useRef<PresenceUser | null>(null);
+  const pendingUsersRef = useRef<Record<string, PresenceUser> | null>(null);
+  const presenceFrameRef = useRef<number | null>(null);
 
   const color = useMemo(() => {
     if (!user?.id) {
@@ -31,6 +33,23 @@ export function usePresence(projectId: string | null) {
     }
     return palette[hash % palette.length];
   }, [user?.id]);
+
+  const publishOnlineUsers = useCallback((users: Record<string, PresenceUser>) => {
+    pendingUsersRef.current = users;
+
+    if (presenceFrameRef.current !== null || typeof window === 'undefined') {
+      return;
+    }
+
+    presenceFrameRef.current = window.requestAnimationFrame(() => {
+      presenceFrameRef.current = null;
+      const nextUsers = pendingUsersRef.current;
+      pendingUsersRef.current = null;
+      if (nextUsers) {
+        setOnlineUsers(nextUsers);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!projectId || !user) return;
@@ -67,7 +86,7 @@ export function usePresence(projectId: string | null) {
           };
         });
         
-        setOnlineUsers(users);
+        publishOnlineUsers(users);
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         console.log('User joined:', key, newPresences);
@@ -94,11 +113,15 @@ export function usePresence(projectId: string | null) {
     setChannel(presenceChannel);
 
     return () => {
+      if (presenceFrameRef.current !== null) {
+        window.cancelAnimationFrame(presenceFrameRef.current);
+        presenceFrameRef.current = null;
+      }
       presenceChannel.unsubscribe();
     };
-  }, [projectId, user]);
+  }, [color, projectId, publishOnlineUsers, user]);
 
-  const updatePresence = async (overrides: Partial<PresenceUser>) => {
+  const updatePresence = useCallback(async (overrides: Partial<PresenceUser>) => {
     if (channel && user) {
       const nextPresence = {
         userId: user.id,
@@ -112,25 +135,25 @@ export function usePresence(projectId: string | null) {
       localPresenceRef.current = nextPresence;
       await channel.track(nextPresence);
     }
-  };
+  }, [channel, color, user]);
 
-  const updateCursor = async (x: number, y: number) => {
+  const updateCursor = useCallback(async (x: number, y: number) => {
     await updatePresence({
       cursor: { x, y },
     });
-  };
+  }, [updatePresence]);
 
-  const clearCursor = async () => {
+  const clearCursor = useCallback(async () => {
     await updatePresence({
       cursor: undefined,
     });
-  };
+  }, [updatePresence]);
 
-  const updateSelection = async (selectedNodeId: string | null) => {
+  const updateSelection = useCallback(async (selectedNodeId: string | null) => {
     await updatePresence({
       selectedNodeId,
     });
-  };
+  }, [updatePresence]);
 
   return {
     onlineUsers,

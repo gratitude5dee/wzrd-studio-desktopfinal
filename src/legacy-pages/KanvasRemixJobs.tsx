@@ -15,6 +15,7 @@ import { cancelRemixJob, getRemixJob, retryRemixRender } from '@/features/remix/
 import type { RemixJobWithRenders, RemixRender } from '@/features/remix/types';
 import { getTemplate } from '@/features/kanvas-lyrics/service';
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
+import AppShell from '@/components/layout/AppShell';
 import { cn } from '@/lib/utils';
 
 const KanvasRemixJobs = () => {
@@ -88,15 +89,25 @@ const KanvasRemixJobs = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-black text-white"
+        contentAs="div"
+        contentClassName="flex min-h-screen items-center justify-center"
+      >
         <Loader2 className="h-6 w-6 animate-spin text-cyan-300" />
-      </div>
+      </AppShell>
     );
   }
 
   if (!jobState) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
+      <AppShell
+        activeView="kanvas"
+        className="bg-black text-white"
+        contentAs="div"
+        contentClassName="flex min-h-screen items-center justify-center p-6 text-center"
+      >
         <div>
           <XCircle className="mx-auto h-8 w-8 text-rose-300" />
           <h1 className="mt-4 text-xl font-black">Remix job not found</h1>
@@ -108,12 +119,17 @@ const KanvasRemixJobs = () => {
             Back to Remix
           </button>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black px-6 py-8 text-white">
+    <AppShell
+      activeView="kanvas"
+      className="bg-black text-white"
+      contentAs="div"
+      contentClassName="min-h-screen px-6 py-8"
+    >
       <div className="mx-auto max-w-7xl">
         <button
           type="button"
@@ -183,7 +199,7 @@ const KanvasRemixJobs = () => {
           ))}
         </section>
       </div>
-    </div>
+    </AppShell>
   );
 };
 

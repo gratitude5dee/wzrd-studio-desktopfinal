@@ -8,7 +8,7 @@ const SettingsBillingDocsPage = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-4xl px-4 py-10 md:px-8">
-        <Link to={appRoutes.settings.billing} className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200">
+        <Link to={appRoutes.systemBilling} className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200">
           <ArrowLeft className="h-4 w-4" />
           Back to Billing
         </Link>

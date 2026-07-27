@@ -25,7 +25,7 @@ const Credits = () => {
 
   const handleBuyCredits = async (_amount: number, _price: string) => {
     // Route all purchases through proper payment flow
-    navigate(appRoutes.settings.billing);
+    navigate(appRoutes.systemBilling);
   };
 
   const getTransactionIcon = (transaction: CreditTransaction) => {

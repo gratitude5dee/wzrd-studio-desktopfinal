@@ -6,16 +6,32 @@ import {
   processWithAdaptiveConcurrency,
 } from '@/utils/processWithAdaptiveConcurrency';
 import { extractInsufficientCreditsError, routeToBillingTopUp } from '@/lib/billing-errors';
+import {
+  buildStoryboardGenerationCounts,
+  buildStoryboardInsufficientCreditsMessage,
+  determineStoryboardGenerationPhase,
+  estimateStoryboardBatchCredits,
+  getStoryboardGenerationFailures,
+  getStoryboardShotsToProcess,
+  hasEnoughStoryboardCredits,
+  type StoryboardGenerationPhase,
+} from '@/lib/storyboard/generationStatus';
 
 type GenerationPhase = 'idle' | 'images' | 'videos' | 'complete';
 
 interface ShotData {
   id: string;
   scene_id: string;
+  shot_number?: number | null;
   image_url: string | null;
   image_status: string;
+  image_generation_error?: string | null;
+  image_generation_attempts?: number | null;
   video_url: string | null;
   video_status: string;
+  video_generation_error?: string | null;
+  video_generation_attempts?: number | null;
+  failure_reason?: string | null;
   visual_prompt?: string;
 }
 
@@ -28,6 +44,14 @@ interface AutoGenerateState {
     concurrency: number;
   };
   errors: Array<{ shotId: string; error: string }>;
+}
+
+interface StartAutoGenerateOptions {
+  imageModelId?: string | null;
+  videoModelId?: string | null;
+  availableCredits?: number | null;
+  imageCreditCost?: number;
+  videoCreditCost?: number;
 }
 
 const isRetryableError = (error: unknown) => {
@@ -77,7 +101,7 @@ export function useProjectAutoGenerate(projectId: string) {
       const sceneIds = scenes.map((scene) => scene.id);
       const { data: shots, error: shotsError } = await supabase
         .from('shots')
-        .select('id, scene_id, image_url, image_status, video_url, video_status, visual_prompt')
+        .select('id, scene_id, shot_number, image_url, image_status, image_generation_error, image_generation_attempts, video_url, video_status, video_generation_error, video_generation_attempts, failure_reason, visual_prompt')
         .in('scene_id', sceneIds)
         .order('shot_number');
 
@@ -91,23 +115,27 @@ export function useProjectAutoGenerate(projectId: string) {
     }
   }, [projectId]);
 
-  const determinePhase = useCallback((shots: ShotData[]): 'images' | 'videos' => {
-    if (shots.length === 0) return 'images';
-    const allHaveImages = shots.every((shot) => shot.image_status === 'completed' && shot.image_url);
-    return allHaveImages ? 'videos' : 'images';
-  }, []);
+  const markShotsQueued = useCallback(async (phase: StoryboardGenerationPhase, shots: ShotData[]) => {
+    const ids = shots.map((shot) => shot.id);
+    if (ids.length === 0) return;
 
-  const getShotsToProcess = useCallback((phase: 'images' | 'videos', shots: ShotData[]) => {
-    if (phase === 'images') {
-      return shots.filter((shot) => shot.image_status !== 'completed' || !shot.image_url);
+    const updates =
+      phase === 'images'
+        ? {
+            image_status: 'queued',
+            image_generation_error: null,
+            failure_reason: null,
+          }
+        : {
+            video_status: 'queued',
+            video_generation_error: null,
+            failure_reason: null,
+          };
+
+    const { error } = await supabase.from('shots').update(updates).in('id', ids);
+    if (error) {
+      console.warn('Failed to mark storyboard shots queued:', error);
     }
-
-    return shots.filter(
-      (shot) =>
-        shot.image_status === 'completed' &&
-        !!shot.image_url &&
-        shot.video_status !== 'completed'
-    );
   }, []);
 
   const generateImage = useCallback(async (shot: ShotData, modelId?: string | null) => {
@@ -115,7 +143,18 @@ export function useProjectAutoGenerate(projectId: string) {
       const { error: promptError } = await supabase.functions.invoke('generate-visual-prompt', {
         body: { shot_id: shot.id },
       });
-      if (promptError) throw new Error(promptError.message || 'Failed to generate visual prompt');
+      if (promptError) {
+        const message = promptError.message || 'Failed to generate visual prompt';
+        await supabase
+          .from('shots')
+          .update({
+            image_status: 'failed',
+            image_generation_error: message,
+            failure_reason: message,
+          })
+          .eq('id', shot.id);
+        throw new Error(message);
+      }
     }
 
     const { error } = await supabase.functions.invoke('generate-shot-image', {
@@ -178,7 +217,7 @@ export function useProjectAutoGenerate(projectId: string) {
     toast.info('Project-wide generation cancelled');
   }, []);
 
-  const startAutoGenerate = useCallback(async (options?: { imageModelId?: string | null; videoModelId?: string | null }) => {
+  const startAutoGenerate = useCallback(async (options?: StartAutoGenerateOptions) => {
     if (isRunningRef.current) {
       toast.info('Generation already in progress');
       return;
@@ -190,8 +229,8 @@ export function useProjectAutoGenerate(projectId: string) {
       return;
     }
 
-    const phase = determinePhase(shots);
-    const shotsToProcess = getShotsToProcess(phase, shots);
+    const phase = determineStoryboardGenerationPhase(shots);
+    const shotsToProcess = getStoryboardShotsToProcess(phase, shots) as ShotData[];
 
     if (shotsToProcess.length === 0) {
       if (phase === 'images') {
@@ -212,11 +251,28 @@ export function useProjectAutoGenerate(projectId: string) {
       return;
     }
 
-    const initialConcurrency = phase === 'images' ? 4 : 2;
+    const requiredCredits = estimateStoryboardBatchCredits(phase, shotsToProcess.length, {
+      image: options?.imageCreditCost ?? 0,
+      video: options?.videoCreditCost ?? 0,
+    });
+    if (!hasEnoughStoryboardCredits(options?.availableCredits, requiredCredits)) {
+      const message = buildStoryboardInsufficientCreditsMessage(requiredCredits, options?.availableCredits);
+      routeToBillingTopUp({
+        code: 'insufficient_credits',
+        required: requiredCredits,
+        available: options?.availableCredits ?? 0,
+        top_up_url: '/settings/billing',
+      });
+      toast.error(message);
+      return;
+    }
+
+    const initialConcurrency = phase === 'images' ? 4 : 3;
     const abortController = new AbortController();
     abortRef.current = abortController;
     isRunningRef.current = true;
     rateLimitNotifiedRef.current = false;
+    await markShotsQueued(phase, shotsToProcess);
 
     setState({
       phase,
@@ -308,23 +364,17 @@ export function useProjectAutoGenerate(projectId: string) {
     toast.success(
       `${phase === 'images' ? 'Images' : 'Videos'} generated successfully (${successCount}/${shotsToProcess.length})`
     );
-  }, [determinePhase, fetchAllProjectShots, generateImage, generateVideo, getShotsToProcess]);
+  }, [fetchAllProjectShots, generateImage, generateVideo, markShotsQueued]);
 
-  const nextPhase = allShots.length > 0 ? determinePhase(allShots) : 'images';
-  const generationCounts = {
-    totalShots: allShots.length,
-    missingImages: allShots.filter((shot) => shot.image_status !== 'completed' || !shot.image_url).length,
-    missingVideos: allShots.filter(
-      (shot) => shot.image_status === 'completed' && !!shot.image_url && shot.video_status !== 'completed'
-    ).length,
-    failedImages: allShots.filter((shot) => shot.image_status === 'failed').length,
-    failedVideos: allShots.filter((shot) => shot.video_status === 'failed').length,
-  };
+  const nextPhase = allShots.length > 0 ? determineStoryboardGenerationPhase(allShots) : 'images';
+  const generationCounts = buildStoryboardGenerationCounts(allShots);
+  const failures = getStoryboardGenerationFailures(allShots);
 
   return {
     state,
     allShots,
     generationCounts,
+    failures,
     startAutoGenerate,
     cancelAutoGenerate,
     nextPhase,

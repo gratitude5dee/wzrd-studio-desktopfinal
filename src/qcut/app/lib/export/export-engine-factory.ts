@@ -6,6 +6,7 @@ import { debugLog, debugError, debugWarn } from "@qcut-app/lib/debug/debug-confi
 import { useEffectsStore } from "@qcut-app/stores/ai/effects-store";
 import { platform } from "@qcut/platform-core";
 import { isFfmpegWasmFallbackAvailable } from "@/lib/ffmpeg-web";
+import { detectWebGpuSupport } from "../render/webgpu/capabilities";
 
 // Engine types available
 export const ExportEngineType = {
@@ -24,6 +25,7 @@ export type ExportEngineType =
 // Browser capability detection results
 export interface BrowserCapabilities {
 	hasWebCodecs: boolean;
+	hasWebGPU: boolean;
 	hasOffscreenCanvas: boolean;
 	hasWorkers: boolean;
 	hasSharedArrayBuffer: boolean;
@@ -77,6 +79,7 @@ export class ExportEngineFactory {
 
 		const capabilities: BrowserCapabilities = {
 			hasWebCodecs: this.detectWebCodecs(),
+			hasWebGPU: (await detectWebGpuSupport()).supported,
 			hasOffscreenCanvas: this.detectOffscreenCanvas(),
 			hasWorkers: this.detectWorkers(),
 			hasSharedArrayBuffer: this.detectSharedArrayBuffer(),
@@ -186,7 +189,9 @@ export class ExportEngineFactory {
 			return {
 				engineType: ExportEngineType.MUXER,
 				reason:
-					"WebCodecs (Hardware H.264) — using browser-native video encoding via mediabunny",
+					capabilities.hasWebGPU
+						? "WebGPU preview compositor + WebCodecs (Hardware H.264) — using browser-native video encoding via mediabunny"
+						: "WebCodecs (Hardware H.264) — using browser-native video encoding via mediabunny",
 				capabilities,
 				estimatedPerformance: "high",
 			};

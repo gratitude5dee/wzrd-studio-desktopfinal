@@ -23,6 +23,7 @@ export function notImplementedProvider(input: {
   return {
     identifier: input.identifier,
     name: input.name,
+    implemented: false,
     capabilities,
     requiredEnvVars: input.requiredEnvVars,
 

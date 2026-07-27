@@ -108,9 +108,15 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
         <VoiceActionButton
           status={voiceSession.status}
           errorMessage={voiceSession.errorMessage}
+          pendingConfirmation={voiceSession.pendingConfirmation}
+          lastTranscript={voiceSession.lastTranscript}
+          lastActionMessage={voiceSession.lastActionMessage}
+          lastTraceId={voiceSession.lastTraceId}
           onPressStart={voiceSession.pushToTalkStart}
           onPressEnd={voiceSession.pushToTalkStop}
           onDisconnect={voiceSession.disconnect}
+          onConfirm={voiceSession.confirmPendingAction}
+          onCancel={voiceSession.cancelPendingAction}
         />
       ) : null}
       </VoiceSelectionProvider>

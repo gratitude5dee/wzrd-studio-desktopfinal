@@ -13,8 +13,8 @@ export function PostPreview({
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-      <div className="text-sm font-semibold text-zinc-100">Preview (Phase 2)</div>
-      <p className="mt-1 text-xs text-zinc-500">Lightweight previews. Platform-accurate previews land in Phase 3+.</p>
+      <div className="text-sm font-semibold text-zinc-100">Preview</div>
+      <p className="mt-1 text-xs text-zinc-500">Check channel copy before scheduling or publishing.</p>
 
       <div className="mt-4 space-y-2">
         {channelIds.map((id) => {

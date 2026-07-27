@@ -20,8 +20,11 @@ export type VoiceActionName =
   | 'timeline_start_directors_cut'
   | 'asset_store_save_current'
   | 'open_project_view'
+  | 'kanvas_set_prompt'
   | 'kanvas_set_studio'
   | 'kanvas_generate'
+  | 'kanvas_lipsync_set_step'
+  | 'kanvas_lipsync_set_mode'
   | 'character_open'
   | 'character_select'
   | 'character_edit_image'
@@ -55,6 +58,19 @@ export interface VoiceActionConfirmation {
   risk: VoiceActionRisk;
   message: string;
   input: unknown;
+  traceId?: string;
+}
+
+export interface VoiceActionContextSnapshot {
+  locationPath?: string;
+  pathname?: string;
+  search?: string;
+  currentProjectId?: string | null;
+  currentStudio?: string | null;
+  selectedAssetIds?: string[];
+  selectedJobId?: string | null;
+  visibleComponentState?: Record<string, unknown>;
+  availableActions?: VoiceActionName[];
 }
 
 export type VoiceActionResult =
@@ -63,6 +79,8 @@ export type VoiceActionResult =
       status: 'completed';
       message: string;
       data?: unknown;
+      uiFocus?: string;
+      traceId?: string;
     }
   | {
       ok: false;
@@ -71,12 +89,15 @@ export type VoiceActionResult =
       data?: unknown;
       confirmation?: VoiceActionConfirmation;
       errorCode?: string;
+      uiFocus?: string;
+      traceId?: string;
     };
 
 export interface VoiceActionExecutionContext {
   confirmed?: boolean;
   locationPath?: string;
   currentProjectId?: string | null;
+  app?: VoiceActionContextSnapshot;
 }
 
 export type VoiceActionHandler<Input = unknown> = (
@@ -88,6 +109,9 @@ export interface VoiceActionRegistration<Input = unknown> {
   name: VoiceActionName;
   scope: string;
   description?: string;
+  schema?: Record<string, unknown>;
+  risk?: VoiceActionRisk;
+  availability?: (context: VoiceActionExecutionContext) => boolean | VoiceActionResult;
   confirmation?: {
     risk: VoiceActionRisk;
     message: string;
@@ -102,8 +126,12 @@ export interface VoiceActionRegistry {
     input?: unknown,
     context?: VoiceActionExecutionContext,
   ) => Promise<VoiceActionResult>;
-  list: () => VoiceActionRegistration[];
+  list: (context?: VoiceActionExecutionContext) => VoiceActionRegistration[];
   clear: () => void;
+}
+
+function createTraceId(actionName: VoiceActionName): string {
+  return `voice_${actionName}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function cloneRegistrations(
@@ -135,13 +163,31 @@ export function createVoiceActionRegistry(): VoiceActionRegistry {
     async execute(name, input = {}, context = {}) {
       const current = registrations.get(name) ?? [];
       const registration = current[current.length - 1];
+      const traceId = createTraceId(name);
       if (!registration) {
         return {
           ok: false,
           status: 'unavailable',
           message: `Voice action "${name}" is not available on this page.`,
           errorCode: 'voice_action_unavailable',
+          traceId,
         };
+      }
+
+      if (registration.availability) {
+        const availability = registration.availability(context);
+        if (availability !== true) {
+          if (typeof availability === 'object') {
+            return { ...availability, traceId: availability.traceId ?? traceId };
+          }
+          return {
+            ok: false,
+            status: 'unavailable',
+            message: `Voice action "${name}" is not available right now.`,
+            errorCode: 'voice_action_unavailable',
+            traceId,
+          };
+        }
       }
 
       if (registration.confirmation && !context.confirmed) {
@@ -149,29 +195,36 @@ export function createVoiceActionRegistry(): VoiceActionRegistry {
           ok: false,
           status: 'needs_confirmation',
           message: registration.confirmation.message,
+          traceId,
           confirmation: {
             actionName: name,
             risk: registration.confirmation.risk,
             message: registration.confirmation.message,
             input,
+            traceId,
           },
         };
       }
 
       try {
-        return await registration.handler(input, context);
+        const result = await registration.handler(input, context);
+        return { ...result, traceId: result.traceId ?? traceId };
       } catch (error) {
         return {
           ok: false,
           status: 'failed',
           message: error instanceof Error ? error.message : 'Voice action failed.',
           errorCode: 'voice_action_failed',
+          traceId,
         };
       }
     },
 
-    list() {
-      return cloneRegistrations(registrations);
+    list(context = {}) {
+      return cloneRegistrations(registrations).filter((registration) => {
+        if (!registration.availability) return true;
+        return registration.availability(context) === true;
+      });
     },
 
     clear() {

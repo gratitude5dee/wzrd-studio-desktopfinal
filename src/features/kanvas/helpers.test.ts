@@ -7,7 +7,12 @@ import {
   buildLipSyncRequest,
   buildVideoRequest,
   createDefaultCinemaSettings,
+  KANVAS_STUDIO_META,
+  KANVAS_STUDIO_NAV_ITEMS,
+  KANVAS_STUDIO_ORDER,
   normalizeKanvasJobRow,
+  normalizeKanvasJobMedia,
+  normalizeKanvasAssetMedia,
   normalizeStudioParam,
 } from "@/features/kanvas/helpers";
 import type { Database } from "@/integrations/supabase/types";
@@ -28,6 +33,17 @@ describe("kanvas helpers", () => {
 
   it("normalizes worldview studio param", () => {
     expect(normalizeStudioParam("worldview")).toBe("worldview");
+  });
+
+  it("exposes decision-complete studio nav metadata for every studio", () => {
+    expect(KANVAS_STUDIO_NAV_ITEMS).toHaveLength(KANVAS_STUDIO_ORDER.length);
+    expect(KANVAS_STUDIO_META.video).toMatchObject({
+      key: "video",
+      queryValue: "video",
+      mediaKinds: ["image", "video"],
+      supportsGeneration: true,
+    });
+    expect(KANVAS_STUDIO_META.worldview.supportsGeneration).toBe(false);
   });
 
   it("builds the cinema prompt with camera metadata", () => {
@@ -221,5 +237,62 @@ describe("kanvas helpers", () => {
     expect(job.studio).toBe("cinema");
     expect(job.resultPayload?.primaryUrl).toBe("https://cdn.example.com/frame.png");
     expect(job.inputAssets).toEqual([]);
+  });
+
+  it("normalizes media URLs from jobs and assets with thumbnail fallback", () => {
+    const asset = {
+      id: "asset-1",
+      asset_type: "video",
+      cdn_url: "https://cdn.example.com/video.mp4",
+      preview_url: null,
+      thumbnail_url: "https://cdn.example.com/poster.jpg",
+      file_name: "video.mp4",
+      original_file_name: "take-one.mp4",
+    } as any;
+
+    expect(normalizeKanvasAssetMedia(asset)).toMatchObject({
+      kind: "video",
+      primaryUrl: "https://cdn.example.com/video.mp4",
+      previewUrl: "https://cdn.example.com/poster.jpg",
+      posterUrl: "https://cdn.example.com/poster.jpg",
+      alt: "take-one.mp4",
+      sourceType: "asset",
+      status: "ready",
+    });
+
+    const job = normalizeKanvasJobRow({
+      id: "job-video-1",
+      user_id: "user-1",
+      project_id: null,
+      studio: "video",
+      model_id: "fal-ai/sora-2",
+      external_request_id: null,
+      job_type: "video",
+      status: "completed",
+      progress: 100,
+      result_url: null,
+      error_message: null,
+      config: {},
+      input_assets: [],
+      result_payload: {
+        mediaType: "video",
+        primaryUrl: "https://cdn.example.com/out.mp4",
+        thumbnailUrl: "https://cdn.example.com/out.jpg",
+        outputs: [],
+      },
+      created_at: "2026-03-12T10:30:00.000Z",
+      started_at: null,
+      completed_at: null,
+      updated_at: "2026-03-12T10:30:00.000Z",
+    });
+
+    expect(normalizeKanvasJobMedia(job)).toMatchObject({
+      kind: "video",
+      primaryUrl: "https://cdn.example.com/out.mp4",
+      previewUrl: "https://cdn.example.com/out.mp4",
+      posterUrl: "https://cdn.example.com/out.jpg",
+      sourceType: "job",
+      status: "ready",
+    });
   });
 });

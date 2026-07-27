@@ -14,7 +14,6 @@ import {
   Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CharacterEditDialog } from './CharacterEditDialog';
 import { Character } from './types';
@@ -22,11 +21,16 @@ import { musicTalentRange } from '@/lib/musicPolishAssets';
 
 interface CharacterCardProps {
   character: Character;
-  onDelete: (characterId: string) => void;
+  onDelete: (characterId: string) => Promise<void> | void;
   styleReferenceUrl?: string;
   isVoiceSelected?: boolean;
   onSelect?: (character: Character) => void;
+  onGenerate?: (character: Character) => Promise<boolean | void> | boolean | void;
+  onGenerationTimeout?: (character: Character, message: string) => Promise<void> | void;
+  generationTimeoutMs?: number;
 }
+
+const DEFAULT_GENERATION_TIMEOUT_MS = 120_000;
 
 const STATUS_BADGE: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
   pending: {
@@ -62,72 +66,63 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   styleReferenceUrl,
   isVoiceSelected = false,
   onSelect,
+  onGenerate,
+  onGenerationTimeout,
+  generationTimeoutMs = DEFAULT_GENERATION_TIMEOUT_MS,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [hasTimedOut, setHasTimedOut] = useState(false);
+  const onGenerationTimeoutRef = useRef(onGenerationTimeout);
 
-  const isImageLoading = character.image_status === 'generating';
   const hasImage = !!character.image_url;
-  const imageStatus = isGenerating ? 'generating' : (character.image_status || (hasImage ? 'completed' : 'pending'));
-  const isActivelyGenerating = isGenerating || isImageLoading;
+  const rawImageStatus = isGenerating
+    ? 'generating'
+    : (character.image_status || (hasImage ? 'completed' : 'pending'));
+  const imageStatus = hasTimedOut && rawImageStatus === 'generating' ? 'failed' : rawImageStatus;
+  const isActivelyGenerating = imageStatus === 'generating';
+  const timeoutSeconds = Math.round(generationTimeoutMs / 1000);
+  const timeoutMessage = `Generation timed out after ${timeoutSeconds} seconds. Try again.`;
+  const generationError = hasTimedOut ? timeoutMessage : character.image_generation_error;
   const fallbackImage = getCharacterFallback(character.name);
 
-  // Progress bar simulation
   useEffect(() => {
-    if (isActivelyGenerating) {
-      setProgress(5);
-      progressInterval.current = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 30) return prev + 2;       // Phase 1: prompt (~3s)
-          if (prev < 70) return prev + 1;       // Phase 2: image gen (~20s)
-          if (prev < 90) return prev + 0.5;     // Phase 3: upload (~10s)
-          return prev;                           // Hold at 90
-        });
-      }, 500);
-    } else {
-      if (progressInterval.current) {
-        clearInterval(progressInterval.current);
-        progressInterval.current = null;
-      }
-      if (imageStatus === 'completed' && progress > 0) {
-        setProgress(100);
-        const t = setTimeout(() => setProgress(0), 1500);
-        return () => clearTimeout(t);
-      }
-      if (imageStatus === 'failed' && progress > 0) {
-        // Keep current progress but color turns red via className
-        const t = setTimeout(() => setProgress(0), 3000);
-        return () => clearTimeout(t);
-      }
+    onGenerationTimeoutRef.current = onGenerationTimeout;
+  }, [onGenerationTimeout]);
+
+  useEffect(() => {
+    if (character.image_status !== 'generating') {
+      setHasTimedOut(false);
     }
-    return () => {
-      if (progressInterval.current) clearInterval(progressInterval.current);
-    };
-  }, [isActivelyGenerating, imageStatus]);
+  }, [character.id, character.image_status]);
+
+  useEffect(() => {
+    if (!isActivelyGenerating) return;
+
+    const timeout = window.setTimeout(() => {
+      setHasTimedOut(true);
+      setIsGenerating(false);
+      void onGenerationTimeoutRef.current?.(character, timeoutMessage);
+    }, generationTimeoutMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [character, generationTimeoutMs, isActivelyGenerating, timeoutMessage]);
 
   const handleGenerate = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isGenerating) return;
+    if (isActivelyGenerating) return;
+    if (!onGenerate) {
+      toast.error('Character image generation is unavailable');
+      return;
+    }
 
     setIsGenerating(true);
-    setProgress(0);
+    setHasTimedOut(false);
     toast.info('Generating character image...');
 
     try {
-      const { data, error } = await supabase.functions.invoke('generate-character-image', {
-        body: {
-          character_id: character.id,
-          style_reference_url: styleReferenceUrl,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.success) {
-        toast.success('Character image generated!');
-      }
+      await onGenerate(character);
     } catch (err) {
       console.error('Generate error:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to generate image');
@@ -151,14 +146,14 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
 
     setIsDeleting(true);
     try {
-      onDelete(character.id);
+      await onDelete(character.id);
     } finally {
       setIsDeleting(false);
     }
   };
 
   const badge = STATUS_BADGE[imageStatus];
-  const showProgressBar = progress > 0;
+  const generateLabel = imageStatus === 'failed' ? 'Retry' : hasImage ? 'Regenerate' : 'Generate';
 
   return (
     <>
@@ -194,14 +189,18 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
           )}
 
           {/* Progress Bar */}
-          {showProgressBar && (
+          {isActivelyGenerating && (
             <div className="absolute top-0 left-0 right-0 z-20 h-1 bg-zinc-800">
+              <style>{`
+                @keyframes character-card-indeterminate {
+                  0% { transform: translateX(-120%); }
+                  100% { transform: translateX(220%); }
+                }
+              `}</style>
               <div
-                className={cn(
-                  'h-full transition-all duration-500 ease-out rounded-r-full',
-                  imageStatus === 'failed' ? 'bg-red-500' : 'bg-primary'
-                )}
-                style={{ width: `${progress}%` }}
+                data-testid="character-generation-progress"
+                className="h-full w-1/2 rounded-full bg-primary"
+                style={{ animation: 'character-card-indeterminate 1.1s ease-in-out infinite' }}
               />
             </div>
           )}
@@ -236,9 +235,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     <Sparkles className="h-4 w-4 text-primary absolute -top-1 -right-1 animate-pulse" />
                   </div>
                   <p className="text-xs text-zinc-400 mt-3">
-                    {progress < 30 ? 'Creating prompt...' : progress < 70 ? 'Generating image...' : 'Uploading...'}
+                    Generating image...
                   </p>
-                  <p className="text-[10px] text-zinc-600 mt-1">{Math.round(progress)}%</p>
+                  <p className="text-[10px] text-zinc-600 mt-1">This card updates when ready</p>
                 </motion.div>
               ) : (
                 <motion.div
@@ -286,14 +285,14 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     size="sm"
                     className="w-full h-8 text-xs bg-primary/20 hover:bg-primary/30 text-primary border-0 backdrop-blur-sm"
                     onClick={handleGenerate}
-                    disabled={isGenerating}
+                    disabled={isActivelyGenerating}
                   >
                     {isGenerating ? (
                       <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                     ) : (
                       <ImagePlus className="w-3.5 h-3.5 mr-1.5" />
                     )}
-                    {hasImage ? 'Regenerate' : 'Generate'}
+                    {generateLabel}
                   </Button>
 
                   <Button
@@ -321,9 +320,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
               {character.description || 'No description'}
             </p>
-            {character.image_status === 'failed' && character.image_generation_error && (
+            {imageStatus === 'failed' && generationError && (
               <p className="text-[10px] text-red-400/80 mt-1 truncate">
-                {character.image_generation_error}
+                {generationError}
               </p>
             )}
           </CardContent>

@@ -16,12 +16,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/features/kanvas/types";
-import { getJobPrimaryUrl } from "@/features/kanvas/helpers";
+import { normalizeKanvasJobMedia } from "@/features/kanvas/helpers";
 import { getKanvasModelProvider } from "@/features/kanvas/modelProvider";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import { musicPolishAssets } from "@/lib/musicPolishAssets";
 import type { CharacterMention } from "@/types/character-creation";
+import { KanvasMediaPreview } from "@/components/kanvas/KanvasMediaPreview";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -319,17 +320,16 @@ export default function ImageStudioSection({
       <div className="px-12 py-8">
         <div className="columns-2 md:columns-4 lg:columns-5 gap-4 space-y-4">
           {displayJobs.map((job) => {
-            const url = getJobPrimaryUrl(job);
-            if (!url) return null;
+            const media = normalizeKanvasJobMedia(job);
             return (
               <div key={job.id} className="break-inside-avoid group cursor-pointer">
                 <div className="relative rounded-xl overflow-hidden border border-white/5 bg-white/5">
-                  <img
-                    src={url}
-                    alt="Generated"
-                    className="w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                    loading="lazy"
-                    decoding="async"
+                  <KanvasMediaPreview
+                    media={{ ...media, alt: "Generated image" }}
+                    aspectClassName="aspect-[4/5]"
+                    className="w-full"
+                    mediaClassName="transition-transform duration-500 group-hover:scale-[1.02]"
+                    showErrorLabel
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -627,17 +627,16 @@ export default function ImageStudioSection({
               </div>
               <div className="columns-2 md:columns-4 lg:columns-5 gap-4 space-y-4">
                 {completedJobs.slice(0, 10).map((job) => {
-                  const url = getJobPrimaryUrl(job);
-                  if (!url) return null;
+                  const media = normalizeKanvasJobMedia(job);
                   return (
                     <div key={job.id} className="break-inside-avoid group cursor-pointer">
                       <div className="relative rounded-xl overflow-hidden border border-white/5 bg-white/5">
-                        <img
-                          src={url}
-                          alt="Generated"
-                          className="w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                          loading="lazy"
-                          decoding="async"
+                        <KanvasMediaPreview
+                          media={{ ...media, alt: "Generated image" }}
+                          aspectClassName="aspect-[4/5]"
+                          className="w-full"
+                          mediaClassName="transition-transform duration-500 group-hover:scale-[1.02]"
+                          showErrorLabel
                         />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/30">
                           <Eye className="h-5 w-5 text-[#f97316]" />

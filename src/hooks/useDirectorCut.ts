@@ -101,6 +101,35 @@ export interface DirectorCutJobState {
   debugSummary?: DirectorCutDebugSummary;
 }
 
+export interface DirectorCutRenderHistoryItem {
+  id: string;
+  jobId: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  stage: DirectorCutStage;
+  outputUrl: string | null;
+  error: string | null;
+  provider: string | null;
+  providerStatus: string | null;
+  providerJobId: string | null;
+  fallbackUsed: boolean;
+  providerPayload: Record<string, unknown> | null;
+  shotFailures: ShotFailureInfo[];
+  partialSuccess: boolean;
+  renderer: string | null;
+  falRequestId: string | null;
+  fallbackReason: string | null;
+  fallbackStatus: string | null;
+  fallbackError: string | null;
+  falError: string | null;
+  failedShotCount: number | null;
+  finalAssetId: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  debugSummary: DirectorCutDebugSummary;
+}
+
 const clampProgress = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
 
 const asString = (value: unknown): string | null =>
@@ -232,12 +261,78 @@ const buildDebugSummary = (payload: Record<string, unknown>, providerJobId?: str
   audioTracks: asNumber(payload.audioTracks),
 });
 
+const normalizeDirectorCutHistoryItem = (value: unknown): DirectorCutRenderHistoryItem | null => {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const id = asString(record.id);
+  if (!id) return null;
+
+  const providerPayload =
+    record.providerPayload && typeof record.providerPayload === 'object'
+      ? (record.providerPayload as Record<string, unknown>)
+      : null;
+  const payload = providerPayload ?? {};
+  const debugSummary = buildDebugSummary(payload, asString(record.providerJobId));
+  const status = asString(record.status) as DirectorCutRenderHistoryItem['status'] | null;
+  const normalizedStatus: DirectorCutRenderHistoryItem['status'] =
+    status === 'pending' || status === 'processing' || status === 'completed' || status === 'failed'
+      ? status
+      : 'pending';
+  const payloadStage = asString(payload.stage) as DirectorCutStage | null;
+  const stage: DirectorCutStage =
+    payloadStage ??
+    (normalizedStatus === 'completed'
+      ? 'completed'
+      : normalizedStatus === 'failed'
+        ? 'failed'
+        : 'provider_processing');
+
+  return {
+    id,
+    jobId: asString(record.jobId),
+    status: normalizedStatus,
+    progress: clampProgress(asNumber(record.progress) ?? (normalizedStatus === 'completed' ? 100 : 0)),
+    stage,
+    outputUrl: asString(record.outputUrl),
+    error: asString(record.error),
+    provider: asString(record.provider),
+    providerStatus: asString(record.providerStatus),
+    providerJobId: debugSummary.providerJobId ?? null,
+    fallbackUsed: Boolean(record.fallbackUsed),
+    providerPayload,
+    shotFailures: normalizeShotFailures(payload.shotFailures),
+    partialSuccess: Boolean(payload.partialSuccess),
+    renderer: debugSummary.renderer ?? null,
+    falRequestId: debugSummary.falRequestId ?? null,
+    fallbackReason: debugSummary.fallbackReason ?? null,
+    fallbackStatus: debugSummary.fallbackStatus ?? null,
+    fallbackError: debugSummary.fallbackError ?? null,
+    falError: debugSummary.falError ?? null,
+    failedShotCount: debugSummary.failedShotCount ?? null,
+    finalAssetId: asString(record.finalAssetId),
+    createdAt: asString(record.createdAt),
+    startedAt: asString(record.startedAt),
+    completedAt: asString(record.completedAt),
+    debugSummary,
+  };
+};
+
+const normalizeDirectorCutHistory = (value: unknown): DirectorCutRenderHistoryItem[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeDirectorCutHistoryItem)
+    .filter((item): item is DirectorCutRenderHistoryItem => Boolean(item));
+};
+
 export function useDirectorCut(projectId: string | undefined) {
   const [summary, setSummary] = useState<DirectorCutSummary | null>(null);
   const [job, setJob] = useState<DirectorCutJobState | null>(null);
+  const [history, setHistory] = useState<DirectorCutRenderHistoryItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isSendingToEditor, setIsSendingToEditor] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const pollTimerRef = useRef<number | null>(null);
@@ -280,6 +375,61 @@ export function useDirectorCut(projectId: string | undefined) {
     [projectId]
   );
 
+  const loadHistory = useCallback(async () => {
+    if (!projectId) return [];
+    setIsLoadingHistory(true);
+
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('director-cut', {
+        body: {
+          action: 'history',
+          projectId,
+        },
+      });
+
+      if (invokeError) {
+        throw new Error(invokeError.message || "Failed to load Director's Cut history");
+      }
+
+      const nextHistory = normalizeDirectorCutHistory(data?.history);
+      setHistory(nextHistory);
+      return nextHistory;
+    } catch (historyError) {
+      console.error("Director's Cut history error:", historyError);
+      return [];
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [projectId]);
+
+  const sendToEditor = useCallback(async (jobId: string) => {
+    if (!projectId) return null;
+    setIsSendingToEditor(true);
+
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('director-cut', {
+        body: {
+          action: 'send_to_editor',
+          projectId,
+          jobId,
+        },
+      });
+
+      if (invokeError) {
+        throw new Error(invokeError.message || "Failed to send Director's Cut to editor");
+      }
+
+      await loadHistory();
+      return data?.asset ?? null;
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : "Failed to send Director's Cut to editor";
+      toast.error(message);
+      return null;
+    } finally {
+      setIsSendingToEditor(false);
+    }
+  }, [loadHistory, projectId]);
+
   const startPolling = useCallback(
     (jobId: string) => {
       stopPolling();
@@ -319,6 +469,7 @@ export function useDirectorCut(projectId: string | undefined) {
 
           if (nextState.status === 'completed') {
             stopPolling();
+            void loadHistory();
             if (nextState.partialSuccess && nextState.shotFailures && nextState.shotFailures.length > 0) {
               toast.success(
                 `Director's Cut is ready (${nextState.shotFailures.length} shot(s) skipped due to errors)`
@@ -341,7 +492,7 @@ export function useDirectorCut(projectId: string | undefined) {
         poll().catch(() => undefined);
       }, POLL_INTERVAL_MS);
     },
-    [getStatus, stopPolling]
+    [getStatus, loadHistory, stopPolling]
   );
 
   const syncAssets = useCallback(async () => {
@@ -450,12 +601,17 @@ export function useDirectorCut(projectId: string | undefined) {
   return {
     summary,
     job,
+    history,
     error,
     isSyncing,
     isStarting,
     isPolling,
+    isLoadingHistory,
+    isSendingToEditor,
     syncAssets,
     startDirectorCut,
+    loadHistory,
+    sendToEditor,
     refreshStatus: () => (job ? getStatus(job.jobId) : Promise.resolve(null)),
     stopPolling,
   };

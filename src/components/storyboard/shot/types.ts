@@ -1,5 +1,7 @@
 // Image status to track generation progress
-export type ImageStatus = 'pending' | 'prompt_ready' | 'generating' | 'completed' | 'failed';
+export type ImageStatus = 'pending' | 'queued' | 'prompt_ready' | 'generating' | 'completed' | 'failed';
+
+export type VideoStatus = 'pending' | 'queued' | 'generating' | 'completed' | 'failed';
 
 export interface ShotDetails {
   id: string;
@@ -13,10 +15,16 @@ export interface ShotDetails {
   sound_effects: string | null;
   image_url: string | null;
   image_status: ImageStatus;
+  image_generation_error?: string | null;
+  image_generation_attempts?: number | null;
   audio_url: string | null;
   audio_status?: 'pending' | 'generating' | 'completed' | 'failed';
   failure_reason?: string | null;
   luma_generation_id: string | null;
+  video_url?: string | null;
+  video_status?: VideoStatus;
+  video_generation_error?: string | null;
+  video_generation_attempts?: number | null;
   created_at?: string;
   updated_at?: string;
 }

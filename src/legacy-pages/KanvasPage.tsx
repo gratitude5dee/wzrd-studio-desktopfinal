@@ -1394,6 +1394,43 @@ export default function KanvasPage() {
   const voiceActions = useMemo<VoiceActionRegistration[]>(
     () => [
       {
+        name: "kanvas_set_prompt",
+        scope: "kanvas",
+        description: "Set the prompt or creative direction for the active Kanvas studio.",
+        schema: {
+          type: "object",
+          properties: {
+            studio: { type: "string" },
+            prompt: { type: "string" },
+          },
+          required: ["prompt"],
+          additionalProperties: false,
+        },
+        handler: (input) => {
+          const payload = input as { studio?: KanvasStudio; prompt?: string | null };
+          const requestedStudio = payload.studio ? normalizeStudioParam(payload.studio) : studio;
+          if (!payload.prompt?.trim()) {
+            return {
+              ok: false,
+              status: "invalid_input",
+              message: "Tell me the prompt to place in Kanvas.",
+              errorCode: "missing_kanvas_prompt",
+            };
+          }
+          if (requestedStudio !== studio) {
+            setStudio(requestedStudio);
+          }
+          applyVoicePrompt(requestedStudio, payload.prompt);
+          return {
+            ok: true,
+            status: "completed",
+            message: `${KANVAS_STUDIO_META[requestedStudio].label} prompt updated.`,
+            data: { studio: requestedStudio, prompt: payload.prompt },
+            uiFocus: "kanvas-composer",
+          };
+        },
+      },
+      {
         name: "kanvas_set_studio",
         scope: "kanvas",
         description: "Switch the active Kanvas studio.",

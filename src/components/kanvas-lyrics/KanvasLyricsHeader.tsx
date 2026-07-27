@@ -113,15 +113,15 @@ export function KanvasLyricsHeader() {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => navigate(appRoutes.settings.billing)}
+                  onClick={() => navigate(appRoutes.systemBilling)}
                   className="hidden md:flex h-9 w-9 rounded-full bg-white/[0.04] border border-white/[0.06] items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.08] transition-all duration-200"
-                  aria-label="Settings"
+                  aria-label="System"
                 >
                   <Settings className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={8}>
-                Settings & Billing
+                System & Billing
               </TooltipContent>
             </Tooltip>
           </div>
