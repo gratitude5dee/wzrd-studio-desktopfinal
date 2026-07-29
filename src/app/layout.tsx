@@ -7,6 +7,10 @@ import "../styles/themes/light-premium.css";
 export const metadata: Metadata = {
   title: "WZRD Studio",
   description: "Create, edit, and export AI-assisted video projects.",
+  icons: {
+    icon: [{ url: "/wzrdtechlogo.png", type: "image/png" }],
+    shortcut: [{ url: "/wzrdtechlogo.png", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
