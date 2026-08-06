@@ -39,7 +39,7 @@ export type KanvasRadius = keyof typeof kanvasRadius;
 
 /** Condensed uppercase display recipe used by studio headlines. */
 export const kanvasDisplay =
-  "font-display font-bold uppercase tracking-tighter text-kanvas-text-primary";
+  "font-kanvas-display font-bold uppercase tracking-tighter text-kanvas-text-primary";
 
 /** Small uppercase label above a control group. */
 export const kanvasEyebrow =

@@ -167,6 +167,8 @@ export default {
 				serif: ['Cinzel', 'serif'],
 				cyber: ['Orbitron', 'monospace'],
 				inter: ['Inter', 'sans-serif'],
+				// Kanvas design system display face
+				'kanvas-display': ['var(--kanvas-font-display)', 'Inter', 'system-ui', 'sans-serif'],
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
