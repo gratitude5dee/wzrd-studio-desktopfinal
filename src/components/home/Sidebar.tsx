@@ -358,7 +358,7 @@ export const Sidebar = memo(function Sidebar({ activeView, onViewChange }: Sideb
           <div className="mx-auto my-2 h-px w-6 shrink-0 bg-white/[0.06]" />
 
           {/* Nav items */}
-          <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto scrollbar-none">
+          <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto hide-scrollbar">
             {FLOATING_NAV_ITEMS.map((entry) => {
               if (entry.kind === 'divider') {
                 return <div key={entry.id} className="mx-auto my-2 h-px w-6 shrink-0 bg-white/[0.06]" />;
@@ -369,7 +369,7 @@ export const Sidebar = memo(function Sidebar({ activeView, onViewChange }: Sideb
               const isOpen = group ? isGroupOpen(group.id) : false;
 
               return (
-                <div key={node.id} className="flex flex-col items-center gap-1">
+                <div key={node.id} className="flex shrink-0 flex-col items-center gap-1">
                   <FloatingNavButton
                     item={node}
                     isActive={activeView === node.id}
