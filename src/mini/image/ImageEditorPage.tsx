@@ -1,9 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { MiniShell } from '../MiniShell';
 import { getDeviceId, publishArtifact } from '../lib/mini-api';
 import { downloadBlob, shareArtifact } from '../lib/share';
-import { defaultControlValues, type ControlGroup, type ControlValues } from './app-schema';
+import {
+  defaultControlValues,
+  resetGroupValues,
+  type ControlGroup,
+  type ControlValues,
+} from './app-schema';
 import { CanvasStage } from './components/CanvasStage';
 import { Composer } from './components/Composer';
 import { ControlSheet } from './components/ControlSheet';
@@ -11,6 +16,7 @@ import { HistoryFormatBar } from './components/HistoryFormatBar';
 import { IntentRail } from './components/IntentRail';
 import { MiniHeader } from './components/MiniHeader';
 import { SendButton } from './components/SendButton';
+import { UndoFilmstrip } from './components/UndoFilmstrip';
 import { ASPECT_PRESETS, centeredCropForRatio, type CropRect } from './lib/canvas-ops';
 import { useImageEditor } from './state/useImageEditor';
 
@@ -36,16 +42,42 @@ export function ImageEditorPage() {
   const [cropRect, setCropRect] = useState<CropRect | null>(null);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [filmstripOpen, setFilmstripOpen] = useState(false);
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
 
   const { snapshot } = editor;
   const straighten = Number(values['reframe.straighten'] ?? 0);
   const aspectRatio = ratioForPreset(values['reframe.aspect']);
+  const aspectLabel = values['reframe.aspect'] === 'free' ? 'Free' : String(values['reframe.aspect']);
 
   /** The overlay lives in frame space, which already carries the image aspect. */
   const frameRatio = useMemo(() => {
     if (aspectRatio === null || !snapshot) return null;
     return aspectRatio / (snapshot.width / snapshot.height);
   }, [aspectRatio, snapshot]);
+
+  // §8: local controls stay live offline; only the generative ones dim.
+  useEffect(() => {
+    const sync = () => setOffline(!navigator.onLine);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
+
+  // §3.3: paste matters more than it sounds — people copy images out of threads.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const file = [...(event.clipboardData?.items ?? [])]
+        .find((item) => item.type.startsWith('image/'))
+        ?.getAsFile();
+      if (file) void editor.importFile(file);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [editor]);
 
   const setValue = useCallback(
     (controlId: string, value: string | number | boolean) => {
@@ -134,12 +166,17 @@ export function ImageEditorPage() {
     }
   }, [snapshot]);
 
+  const resetGroup = useCallback((target: ControlGroup) => {
+    setValues((current) => resetGroupValues(target, current));
+    if (target === 'reframe') setCropRect(null);
+  }, []);
+
   const pendingReframe = Boolean(cropRect) || straighten !== 0;
 
   return (
     <MiniShell>
       <MiniHeader
-        title="Image"
+        title="image"
         action={
           snapshot ? (
             <button
@@ -152,6 +189,12 @@ export function ImageEditorPage() {
           ) : null
         }
       />
+
+      {offline && (
+        <p className="shrink-0 px-4 py-1 text-[13px] text-wzrd-muted-text" role="status">
+          Reframe and Style still work offline.
+        </p>
+      )}
 
       <CanvasStage
         snapshot={snapshot}
@@ -168,7 +211,13 @@ export function ImageEditorPage() {
         canRedo={editor.canRedo}
         onUndo={editor.undo}
         onRedo={editor.redo}
-        format={snapshot ? `${snapshot.width}×${snapshot.height}` : null}
+        onLongPressUndo={editor.canUndo ? () => setFilmstripOpen(true) : undefined}
+        formatLabel={aspectLabel}
+        onFormatClick={() => {
+          setGroup('reframe');
+          setSheetOpen(true);
+        }}
+        dimensions={snapshot ? `${snapshot.width}×${snapshot.height}` : null}
       />
 
       {pendingReframe && (
@@ -203,6 +252,7 @@ export function ImageEditorPage() {
         activeGroup={group}
         onGroupChange={setGroup}
         onOpenSheet={() => setSheetOpen(true)}
+        onResetGroup={resetGroup}
         values={values}
         onValueChange={setValue}
         onAction={onAction}
@@ -218,10 +268,19 @@ export function ImageEditorPage() {
 
       <SendButton enabled={Boolean(snapshot)} pending={sending} onSend={() => void send()} />
 
+      <UndoFilmstrip
+        open={filmstripOpen}
+        past={editor.history.past}
+        current={snapshot}
+        onJumpTo={editor.jumpTo}
+        onClose={() => setFilmstripOpen(false)}
+      />
+
       <ControlSheet
         open={sheetOpen}
         activeGroup={group}
         onGroupChange={setGroup}
+        onResetGroup={resetGroup}
         onClose={() => setSheetOpen(false)}
         values={values}
         onValueChange={setValue}

@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-import type { ControlDefinition, ControlValues } from '../app-schema';
+import type { ControlDefinition, ControlSurface, ControlValues } from '../app-schema';
 
 export interface ControlHandlers {
   values: ControlValues;
@@ -9,17 +9,19 @@ export interface ControlHandlers {
 }
 
 /**
- * Renders one schema control. The same renderer backs the desktop rail and the
- * mobile sheet so the two surfaces can never drift (§5.1).
+ * Renders one schema control. The same renderer backs the desktop panel and the
+ * expanded sheet so the two surfaces can never drift (§5.1).
  */
 export function ControlRenderer({
   control,
   values,
   onValueChange,
   onAction,
-  layout,
-}: ControlHandlers & { control: ControlDefinition; layout: 'rail' | 'sheet' }) {
+  surface,
+}: ControlHandlers & { control: ControlDefinition; surface: ControlSurface }) {
   const disabled = control.available === false;
+  // Touch targets are 44pt on the phone sheet, tighter on a pointer surface.
+  const tall = surface === 'expanded';
 
   if (control.type === 'action') {
     return (
@@ -30,20 +32,25 @@ export function ControlRenderer({
         onClick={() => onAction(control.id)}
         className={cn(
           'flex items-center gap-1.5 whitespace-nowrap rounded-full border border-wzrd-hairline px-3 text-[13px] transition-colors duration-wzrd-fast ease-wzrd-standard',
-          layout === 'sheet' ? 'h-11 justify-center' : 'h-8',
+          tall ? 'h-11 justify-center' : 'h-8',
           disabled ? 'text-wzrd-steel' : 'text-wzrd-mist hover:border-wzrd-blue hover:bg-wzrd-deep'
         )}
       >
         {control.label}
-        <CostDot cost={control.cost} />
+        <Cost control={control} />
       </button>
     );
   }
 
-  if (control.type === 'choice') {
+  if (control.type === 'segmented' || control.type === 'select' || control.type === 'grid') {
     const current = values[control.id];
     return (
-      <div className={cn('flex items-center gap-1', layout === 'sheet' && 'flex-wrap')}>
+      <div
+        className={cn(
+          'flex items-center gap-1',
+          control.type === 'grid' ? 'flex-wrap' : tall && 'flex-wrap'
+        )}
+      >
         {control.options?.map((option) => (
           <button
             key={option.value}
@@ -52,7 +59,7 @@ export function ControlRenderer({
             onClick={() => onValueChange(control.id, option.value)}
             className={cn(
               'rounded-full px-3 text-[13px] transition-colors duration-wzrd-fast ease-wzrd-standard',
-              layout === 'sheet' ? 'h-11' : 'h-8',
+              tall ? 'h-11' : 'h-8',
               disabled
                 ? 'text-wzrd-steel'
                 : current === option.value
@@ -63,11 +70,12 @@ export function ControlRenderer({
             {option.label}
           </button>
         ))}
+        <Cost control={control} />
       </div>
     );
   }
 
-  if (control.type === 'range' && control.range) {
+  if (control.type === 'slider' && control.range) {
     const current = Number(values[control.id] ?? control.default ?? 0);
     return (
       <label className="flex min-w-[180px] items-center gap-2 text-[13px] text-wzrd-chrome">
@@ -89,31 +97,37 @@ export function ControlRenderer({
     );
   }
 
-  const enabled = Boolean(values[control.id]);
+  const on = Boolean(values[control.id]);
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={() => onValueChange(control.id, !enabled)}
+      onClick={() => onValueChange(control.id, !on)}
       className={cn(
-        'rounded-full border px-3 text-[13px] transition-colors duration-wzrd-fast ease-wzrd-standard',
-        layout === 'sheet' ? 'h-11' : 'h-8',
-        enabled ? 'border-wzrd-blue text-wzrd-mist' : 'border-wzrd-hairline text-wzrd-chrome'
+        'flex items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors duration-wzrd-fast ease-wzrd-standard',
+        tall ? 'h-11' : 'h-8',
+        on ? 'border-wzrd-blue text-wzrd-mist' : 'border-wzrd-hairline text-wzrd-chrome'
       )}
     >
       {control.label}
+      <Cost control={control} />
     </button>
   );
 }
 
-/** Cost dot: on-device controls render nothing, credit-spending ones a dot per tier. */
-function CostDot({ cost }: { cost: number }) {
-  if (cost === 0) return null;
+/**
+ * §5.2: local controls show nothing — free and instant is the default
+ * assumption. Job controls carry a blue dot and their credit cost in mono.
+ */
+function Cost({ control }: { control: ControlDefinition }) {
+  if (control.cost !== 'job') return null;
   return (
-    <span className="flex gap-0.5" aria-label={`${cost} credit tier`}>
-      {Array.from({ length: cost }, (_, index) => (
-        <span key={index} className="h-1 w-1 rounded-full bg-wzrd-blue" />
-      ))}
+    <span
+      className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-wzrd-chrome"
+      aria-label={`Costs ${control.credits ?? 1} credits`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-wzrd-blue" />
+      {control.credits ?? 1}
     </span>
   );
 }

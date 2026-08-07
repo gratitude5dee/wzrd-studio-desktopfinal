@@ -21,6 +21,7 @@ import {
   type Bitmap,
   type CropRect,
 } from '../lib/canvas-ops';
+import { jumpToPast } from '../lib/history-jump';
 
 /** Maximum number of undo steps retained (§5.3). */
 export const HISTORY_DEPTH = 20;
@@ -65,6 +66,8 @@ export interface ImageEditorApi {
   applyStraighten: (degrees: number) => Promise<void>;
   undo: () => void;
   redo: () => void;
+  /** Jump straight to a state in `history.past` — backs the undo filmstrip (§5.3). */
+  jumpTo: (pastIndex: number) => void;
   reset: () => void;
 }
 
@@ -176,6 +179,16 @@ export function useImageEditor(): ImageEditorApi {
       setHistory(result.history);
       setSnapshot(result.restoredState);
     }, [history, snapshot]),
+    jumpTo: useCallback(
+      (pastIndex: number) => {
+        if (!snapshot) return;
+        const result = jumpToPast(history, snapshot, pastIndex);
+        if (!result) return;
+        setHistory(result.history);
+        setSnapshot(result.restoredState);
+      },
+      [history, snapshot]
+    ),
     reset: useCallback(() => {
       liveUrls.current.forEach((url) => URL.revokeObjectURL(url));
       liveUrls.current.clear();

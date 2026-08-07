@@ -7,6 +7,7 @@ interface ControlSheetProps extends ControlHandlers {
   open: boolean;
   activeGroup: ControlGroup;
   onGroupChange: (group: ControlGroup) => void;
+  onResetGroup: (group: ControlGroup) => void;
   onClose: () => void;
 }
 
@@ -15,9 +16,12 @@ export function ControlSheet({
   open,
   activeGroup,
   onGroupChange,
+  onResetGroup,
   onClose,
   ...handlers
 }: ControlSheetProps) {
+  const active = INTENT_GROUPS.find((group) => group.id === activeGroup);
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
@@ -61,10 +65,20 @@ export function ControlSheet({
           ))}
         </div>
         <div className="flex flex-col gap-3">
-          {controlsForGroup(activeGroup, 'sheet').map((control) => (
-            <ControlRenderer key={control.id} control={control} layout="sheet" {...handlers} />
+          {controlsForGroup(activeGroup, 'expanded').map((control) => (
+            <ControlRenderer key={control.id} control={control} surface="expanded" {...handlers} />
           ))}
         </div>
+
+        {active?.available && (
+          <button
+            type="button"
+            onClick={() => onResetGroup(activeGroup)}
+            className="mt-3 h-11 w-full rounded-full text-[13px] text-wzrd-muted-text"
+          >
+            Reset {active.label}
+          </button>
+        )}
       </div>
     </div>
   );

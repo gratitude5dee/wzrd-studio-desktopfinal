@@ -1,24 +1,29 @@
 /**
  * Schema-driven control system (§5.1).
  *
- * Every control the Image Editor exposes is declared here once. Both the
- * desktop intent rail and the mobile bottom sheet render from this same
- * declaration, so a control can never exist on one surface only.
+ * Every control the Image Editor exposes is declared here once, as data. That
+ * is what lets one definition render as a bottom sheet on a phone and a panel
+ * on desktop without forking behaviour (§5.1), and it is why `surface` is a
+ * list rather than a single value.
  */
 
-export type ControlType = 'action' | 'choice' | 'range' | 'toggle';
+export type ControlType = 'segmented' | 'slider' | 'select' | 'action' | 'toggle' | 'grid';
 
-/** Which intent group a control belongs to. */
+/** Which intent group a control belongs to (§3.2). */
 export type ControlGroup = 'reframe' | 'retouch' | 'style';
 
-/** Where a control is allowed to render. */
-export type ControlSurface = 'rail' | 'sheet' | 'both';
+/**
+ * Work surfaces. The compact strip is never one (§5.1) — it is a launcher, so
+ * no control may declare it.
+ */
+export type ControlSurface = 'expanded' | 'desktop';
 
 /**
- * Credit cost tier. `0` runs entirely on-device; higher tiers render a cost dot
- * and only become available once the reactor path ships.
+ * §5.2: every control shows its cost before it runs. `local` shows nothing,
+ * because free and instant is the default assumption; `job` carries a blue dot
+ * and its credit count in mono.
  */
-export type ControlCost = 0 | 1 | 2;
+export type ControlCost = 'local' | 'job';
 
 export interface ControlOption {
   value: string;
@@ -37,10 +42,12 @@ export interface ControlDefinition {
   type: ControlType;
   group: ControlGroup;
   cost: ControlCost;
-  surface: ControlSurface;
+  surface: ControlSurface[];
   default?: string | number | boolean;
   options?: ControlOption[];
   range?: ControlRange;
+  /** Credits shown beside the cost dot. Job controls only. */
+  credits?: number;
   /** Phase gate: controls whose backing path has not shipped render disabled. */
   available?: boolean;
   hint?: string;
@@ -53,20 +60,23 @@ export interface IntentGroupDefinition {
   available: boolean;
 }
 
+/** §3.2: three intents, in order of decreasing frequency. Reframe is first and local. */
 export const INTENT_GROUPS: IntentGroupDefinition[] = [
   { id: 'reframe', label: 'Reframe', available: true },
   { id: 'retouch', label: 'Retouch', available: false },
   { id: 'style', label: 'Style', available: false },
 ];
 
+const EVERYWHERE: ControlSurface[] = ['expanded', 'desktop'];
+
 export const CONTROLS: ControlDefinition[] = [
   {
     id: 'reframe.aspect',
     label: 'Crop',
-    type: 'choice',
+    type: 'segmented',
     group: 'reframe',
-    cost: 0,
-    surface: 'both',
+    cost: 'local',
+    surface: EVERYWHERE,
     default: 'free',
     options: [
       { value: '1:1', label: '1:1' },
@@ -82,8 +92,8 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Rotate',
     type: 'action',
     group: 'reframe',
-    cost: 0,
-    surface: 'both',
+    cost: 'local',
+    surface: EVERYWHERE,
     available: true,
     hint: 'Rotate 90° clockwise',
   },
@@ -92,8 +102,8 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Flip',
     type: 'action',
     group: 'reframe',
-    cost: 0,
-    surface: 'both',
+    cost: 'local',
+    surface: EVERYWHERE,
     available: true,
     hint: 'Mirror horizontally',
   },
@@ -102,17 +112,17 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Flip vertical',
     type: 'action',
     group: 'reframe',
-    cost: 0,
-    surface: 'sheet',
+    cost: 'local',
+    surface: ['expanded'],
     available: true,
   },
   {
     id: 'reframe.straighten',
     label: 'Straighten',
-    type: 'range',
+    type: 'slider',
     group: 'reframe',
-    cost: 0,
-    surface: 'both',
+    cost: 'local',
+    surface: EVERYWHERE,
     default: 0,
     range: { min: -15, max: 15, step: 0.5 },
     available: true,
@@ -122,8 +132,9 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Remove background',
     type: 'action',
     group: 'retouch',
-    cost: 1,
-    surface: 'both',
+    cost: 'job',
+    surface: EVERYWHERE,
+    credits: 1,
     available: false,
   },
   {
@@ -131,8 +142,9 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Erase',
     type: 'action',
     group: 'retouch',
-    cost: 1,
-    surface: 'both',
+    cost: 'job',
+    surface: EVERYWHERE,
+    credits: 1,
     available: false,
   },
   {
@@ -140,8 +152,9 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Upscale',
     type: 'action',
     group: 'retouch',
-    cost: 2,
-    surface: 'both',
+    cost: 'job',
+    surface: EVERYWHERE,
+    credits: 2,
     available: false,
   },
   {
@@ -149,17 +162,19 @@ export const CONTROLS: ControlDefinition[] = [
     label: 'Enhance',
     type: 'action',
     group: 'retouch',
-    cost: 1,
-    surface: 'both',
+    cost: 'job',
+    surface: EVERYWHERE,
+    credits: 1,
     available: false,
   },
+  /** §4.4: local presets are free and instant; the generative ones cost a job. */
   {
-    id: 'style.preset',
+    id: 'style.local',
     label: 'Look',
-    type: 'choice',
+    type: 'grid',
     group: 'style',
-    cost: 0,
-    surface: 'both',
+    cost: 'local',
+    surface: EVERYWHERE,
     default: 'none',
     options: [
       { value: 'none', label: 'None' },
@@ -174,12 +189,30 @@ export const CONTROLS: ControlDefinition[] = [
     available: false,
   },
   {
-    id: 'style.quality',
-    label: 'Quality',
-    type: 'choice',
+    id: 'style.generative',
+    label: 'Restyle',
+    type: 'grid',
     group: 'style',
-    cost: 2,
-    surface: 'both',
+    cost: 'job',
+    surface: EVERYWHERE,
+    default: 'none',
+    options: [
+      { value: 'none', label: 'None' },
+      { value: 'illustrate', label: 'Illustrate' },
+      { value: 'paint', label: 'Paint' },
+      { value: 'anime', label: 'Anime' },
+      { value: 'ascii', label: 'ASCII' },
+    ],
+    credits: 1,
+    available: false,
+  },
+  {
+    id: 'style.tier',
+    label: 'Quality',
+    type: 'segmented',
+    group: 'style',
+    cost: 'local',
+    surface: EVERYWHERE,
     default: 'fast',
     options: [
       { value: 'fast', label: 'Fast' },
@@ -189,9 +222,12 @@ export const CONTROLS: ControlDefinition[] = [
   },
 ];
 
-export function controlsForGroup(group: ControlGroup, surface: 'rail' | 'sheet'): ControlDefinition[] {
+export function controlsForGroup(
+  group: ControlGroup,
+  surface: ControlSurface
+): ControlDefinition[] {
   return CONTROLS.filter(
-    (control) => control.group === group && (control.surface === 'both' || control.surface === surface)
+    (control) => control.group === group && control.surface.includes(surface)
   );
 }
 
@@ -208,4 +244,15 @@ export function defaultControlValues(): ControlValues {
     }
     return values;
   }, {});
+}
+
+/** §5.2: reset is per-group, never global. */
+export function resetGroupValues(group: ControlGroup, values: ControlValues): ControlValues {
+  const next = { ...values };
+  for (const control of CONTROLS) {
+    if (control.group === group && control.default !== undefined) {
+      next[control.id] = control.default;
+    }
+  }
+  return next;
 }

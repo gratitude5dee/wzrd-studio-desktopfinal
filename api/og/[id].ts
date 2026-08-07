@@ -18,10 +18,10 @@ function barSvg(): Buffer {
   return Buffer.from(
     `<svg width="${OG_WIDTH}" height="${BAR_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${OG_WIDTH}" height="${BAR_HEIGHT}" fill="#0b0e14" fill-opacity="0.85"/>
-      <text x="24" y="16.5" font-family="Helvetica, Arial, sans-serif" font-size="12"
-        font-weight="600" letter-spacing="2.2" fill="#e7ebf2">WZRD</text>
-      <text x="${OG_WIDTH - 24}" y="16.5" text-anchor="end" font-family="ui-monospace, Menlo, monospace"
-        font-size="11" fill="#9aa6bc">mini.wzrd.tech/image</text>
+      <text x="24" y="18" font-family="Helvetica, Arial, sans-serif" font-size="20"
+        font-weight="600" letter-spacing="2.4" fill="#e7ebf2">WZRD</text>
+      <text x="${OG_WIDTH - 24}" y="17" text-anchor="end" font-family="ui-monospace, Menlo, monospace"
+        font-size="12" fill="#9aa6bc">mini.wzrd.tech/image</text>
     </svg>`
   );
 }

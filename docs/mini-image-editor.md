@@ -4,6 +4,13 @@ A public, zero-auth image surface served from the same Vite SPA as the desktop
 studio. Phase 1 ships the spine: import a photo, reframe it locally, and share
 it as a permalink. No models, no sign-in, no wallet.
 
+Spec: [`docs/goals/goal-image.md`](./goals/goal-image.md). Section numbers below
+refer to it. It inherits a parent `goal.md` that is not in this repo, so the
+palette and motion values in `src/styles/wzrd-tokens.css` remain provisional.
+
+This is *not* the video mini-app. The only thing shared with QCut is the pure
+history stack.
+
 ## Routes
 
 | Route | Component | Notes |
@@ -36,11 +43,17 @@ empty corners are ever revealed.
 ## Controls
 
 `src/mini/image/app-schema.ts` declares every control once as
-`{id, label, type, group, cost, surface, default, options, range}`. The desktop
-rail (`IntentRail`) and the mobile bottom sheet (`ControlSheet`) both render
-through `ControlRenderer`, so the two surfaces cannot drift. Controls whose
-backing path has not shipped are declared with `available: false` and render
-disabled rather than being hidden.
+`{id, label, type, group, cost, surface, default, options, range}` (§5.1), where
+`type` is `segmented | slider | select | action | toggle | grid`, `group` is
+`reframe | retouch | style`, `cost` is `local | job` and `surface` is
+`expanded | desktop`. The desktop rail (`IntentRail`) and the mobile bottom
+sheet (`ControlSheet`) both render through `ControlRenderer`, so the two
+surfaces cannot drift. Controls whose backing path has not shipped are declared
+with `available: false` and render disabled rather than being hidden.
+
+Cost is visible before the control runs: local controls carry no marker, job
+controls carry a blue dot and their credit count in mono. Reset is per-group
+(`resetGroupValues`), never global (§5.2).
 
 ## History
 
@@ -48,6 +61,12 @@ disabled rather than being hidden.
 each operation onto the QCut history stack, capped at 20 entries. Undo restores
 a snapshot; it never recomputes an operation, which is what makes generative
 undo free once the reactor path lands.
+
+`↺/↻` are permanently mounted and merely disable, so the bar never reflows.
+Long-pressing `↺` opens `UndoFilmstrip`, the last eight states (§5.3);
+selecting one calls `jumpToPast`, which leaves the history in exactly the state
+repeated undos would have — the skipped snapshots land on the redo stack in
+order, so `↻` walks back the way it came.
 
 ## Data model
 
@@ -76,8 +95,8 @@ new id.
 ### `api/og/[id].ts`
 
 1200×630 card: the artifact resized to cover the frame, with a 24px
-`--wzrd-ink` bar at 85% opacity across the bottom — `WZRD` left, mono
-`mini.wzrd.tech/image` right. Encoded as progressive JPEG and stepped down
+`--wzrd-ink` bar at 85% opacity across the bottom — `WZRD` at 20px left, mono
+`mini.wzrd.tech/image` at 12px `--wzrd-chrome` right, and nothing else (§4.5). Encoded as progressive JPEG and stepped down
 through quality 82/70/58/46 until it fits the 300KB budget; a PNG of a
 photograph at this size cannot. Cached immutably.
 
@@ -121,6 +140,16 @@ supabase functions deploy mini-artifacts   # needs SUPABASE_ACCESS_TOKEN
 Vercel needs no new client env: `api/` reads `VITE_SUPABASE_URL` (falling back
 to the project URL) and talks only to the public function. Server-only secrets
 stay in Supabase Edge Function secrets.
+
+## Canvas and states
+
+The canvas is the only non-chrome area above the fold (§3.1): pinch to zoom to
+6x, one finger to pan once zoomed, double-tap to fit. Empty, it is a
+`DitherGradient` wash with three example prompts (§8). Import accepts a file
+pick, a drop, a camera capture and a paste.
+
+Offline (§8), local controls stay live and the surface says so; the generative
+controls are already disabled in this phase.
 
 ## Not yet shipped
 

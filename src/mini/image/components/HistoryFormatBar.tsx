@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import { cn } from '@/lib/utils';
 
 interface HistoryFormatBarProps {
@@ -5,9 +7,13 @@ interface HistoryFormatBarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
-  /** Long-press opens the undo filmstrip; absent until that surface ships. */
+  /** Long-press `↺` opens the filmstrip of the last eight states (§5.3). */
   onLongPressUndo?: () => void;
-  format: string | null;
+  /** The active crop preset, shown as the format chip (§3.1). */
+  formatLabel: string;
+  onFormatClick: () => void;
+  /** Working buffer size, in mono, as a secondary readout. */
+  dimensions: string | null;
 }
 
 /**
@@ -20,29 +26,64 @@ export function HistoryFormatBar({
   onUndo,
   onRedo,
   onLongPressUndo,
-  format,
+  formatLabel,
+  onFormatClick,
+  dimensions,
 }: HistoryFormatBarProps) {
-  let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+  const longPress = useRef<ReturnType<typeof setTimeout>>();
+  const fired = useRef(false);
+
+  const cancelLongPress = () => clearTimeout(longPress.current);
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-t border-wzrd-hairline px-4">
+    <div className="flex h-11 shrink-0 items-center justify-between border-t border-wzrd-hairline px-4">
       <div className="flex items-center gap-1">
         <HistoryButton
           label="Undo"
           glyph="↺"
           disabled={!canUndo}
-          onClick={onUndo}
-          onPointerDown={() => {
-            if (onLongPressUndo) longPressTimer = setTimeout(onLongPressUndo, 500);
+          onClick={() => {
+            if (fired.current) {
+              fired.current = false;
+              return;
+            }
+            onUndo();
           }}
-          onPointerUp={() => clearTimeout(longPressTimer)}
-          onPointerLeave={() => clearTimeout(longPressTimer)}
+          onPointerDown={() => {
+            if (!onLongPressUndo) return;
+            fired.current = false;
+            longPress.current = setTimeout(() => {
+              fired.current = true;
+              onLongPressUndo();
+            }, 450);
+          }}
+          onPointerUp={cancelLongPress}
+          onPointerLeave={cancelLongPress}
+          onContextMenu={(event) => event.preventDefault()}
         />
         <HistoryButton label="Redo" glyph="↻" disabled={!canRedo} onClick={onRedo} />
       </div>
-      <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-wzrd-muted-text">
-        {format ?? '—'}
-      </span>
+
+      <div className="flex items-center gap-3">
+        {dimensions && (
+          <span className="font-mono text-[11px] tabular-nums text-wzrd-muted-text">
+            {dimensions}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onFormatClick}
+          className="flex h-8 items-center gap-1.5 rounded-full border border-wzrd-hairline px-3 text-[13px] text-wzrd-mist"
+        >
+          <span aria-hidden className="text-wzrd-chrome">
+            ⬚
+          </span>
+          {formatLabel}
+          <span aria-hidden className="text-wzrd-chrome">
+            ⌄
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -67,7 +108,7 @@ function HistoryButton({
       onClick={onClick}
       {...handlers}
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-full text-[15px] transition-colors duration-wzrd-fast ease-wzrd-standard',
+        'flex h-11 w-11 select-none items-center justify-center rounded-full text-[15px] transition-colors duration-wzrd-fast ease-wzrd-standard',
         disabled ? 'text-wzrd-steel' : 'text-wzrd-mist hover:bg-wzrd-deep'
       )}
     >

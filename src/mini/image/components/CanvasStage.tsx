@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 
 import { largestInnerRect, type CropRect } from '../lib/canvas-ops';
 import { resizeRect, type CropHandleId } from '../lib/crop-rect';
+import { usePinchZoom } from '../lib/use-pinch-zoom';
 import type { ImageSnapshot } from '../state/useImageEditor';
+import { EmptyCanvas } from './EmptyCanvas';
 
 interface CanvasStageProps {
   snapshot: ImageSnapshot | null;
@@ -19,6 +21,7 @@ interface CanvasStageProps {
   cropRatio: number | null;
   straightenDegrees: number;
   onPickFile: (file: File) => void;
+  onExamplePrompt?: (prompt: string) => void;
   busy: boolean;
 }
 
@@ -33,11 +36,12 @@ export function CanvasStage({
   cropRatio,
   straightenDegrees,
   onPickFile,
+  onExamplePrompt,
   busy,
 }: CanvasStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState<CropHandleId | null>(null);
+  const zoom = usePinchZoom(Boolean(snapshot));
   const dragOrigin = useRef<{ x: number; y: number; rect: CropRect } | null>(null);
 
   // Mirrors the zoom `straighten()` applies, so preview and result agree.
@@ -104,46 +108,30 @@ export function CanvasStage({
     };
   }, [cropRatio, dragging, onCropRectChange, toNormalized]);
 
-  const handleFiles = (files: FileList | null) => {
-    const file = files?.[0];
-    if (file?.type.startsWith('image/')) onPickFile(file);
-  };
+  // A new working image is always shown fit-to-frame.
+  const resetZoom = zoom.reset;
+  useEffect(() => {
+    resetZoom();
+  }, [resetZoom, snapshot?.url]);
 
   if (!snapshot) {
-    return (
-      <div
-        className="flex flex-1 items-center justify-center p-6"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          handleFiles(event.dataTransfer.files);
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex h-full w-full max-w-md flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-wzrd-hairline-strong bg-wzrd-ink/60 px-8 py-16 text-center transition-colors duration-wzrd-fast ease-wzrd-standard hover:border-wzrd-blue"
-        >
-          <span className="text-base text-wzrd-mist">Drop a photo</span>
-          <span className="text-[13px] text-wzrd-muted-text">or tap to choose from your device</span>
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => handleFiles(event.target.files)}
-        />
-      </div>
-    );
+    return <EmptyCanvas onPickFile={onPickFile} onExamplePrompt={onExamplePrompt} />;
   }
 
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-hidden p-3">
+    <div
+      className="relative flex flex-1 touch-none items-center justify-center overflow-hidden p-3"
+      {...zoom.handlers}
+    >
       <div
         ref={frameRef}
         className="relative max-h-full max-w-full"
-        style={{ aspectRatio: `${snapshot.width} / ${snapshot.height}` }}
+        style={{
+          aspectRatio: `${snapshot.width} / ${snapshot.height}`,
+          // Transforming the frame itself keeps the crop overlay's normalized
+          // coordinates valid — every rect it measures already carries the zoom.
+          transform: `translate(${zoom.view.x}px, ${zoom.view.y}px) scale(${zoom.view.scale})`,
+        }}
       >
         {/* Clipped so the preview shows the same zoomed-in framing as the applied result. */}
         <div className="h-full w-full overflow-hidden">
