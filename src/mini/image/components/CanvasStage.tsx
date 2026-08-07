@@ -111,6 +111,18 @@ export function CanvasStage({
     };
   }, [cropRatio, dragging, onCropRectChange, toNormalized]);
 
+  // A mouse gets no implicit capture, so a release outside the stage never
+  // reaches its handler — the window owns the end of every gesture.
+  useEffect(() => {
+    const release = (event: PointerEvent) => activePointers.current.delete(event.pointerId);
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+    };
+  }, []);
+
   // A new working image is always shown fit-to-frame.
   const resetZoom = zoom.reset;
   useEffect(() => {
@@ -133,14 +145,6 @@ export function CanvasStage({
           setDragging(null);
         }
         zoom.handlers.onPointerDown(event);
-      }}
-      onPointerUp={(event) => {
-        activePointers.current.delete(event.pointerId);
-        zoom.handlers.onPointerUp(event);
-      }}
-      onPointerCancel={(event) => {
-        activePointers.current.delete(event.pointerId);
-        zoom.handlers.onPointerCancel(event);
       }}
     >
       <div

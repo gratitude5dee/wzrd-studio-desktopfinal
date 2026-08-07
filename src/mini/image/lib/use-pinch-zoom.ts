@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ViewTransform {
   scale: number;
@@ -87,9 +87,19 @@ export function usePinchZoom(enabled: boolean, cropping = false) {
     [cropping, enabled, view.scale]
   );
 
-  const onPointerUp = useCallback((event: React.PointerEvent) => {
-    pointers.current.delete(event.pointerId);
-    if (pointers.current.size < 2) pinch.current = null;
+  // A mouse gets no implicit capture, so a release outside the canvas would
+  // never reach an element handler and the pointer would be tracked forever.
+  useEffect(() => {
+    const release = (event: PointerEvent) => {
+      pointers.current.delete(event.pointerId);
+      if (pointers.current.size < 2) pinch.current = null;
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+    };
   }, []);
 
   const onDoubleClick = useCallback(() => {
@@ -102,8 +112,6 @@ export function usePinchZoom(enabled: boolean, cropping = false) {
     handlers: {
       onPointerDown,
       onPointerMove,
-      onPointerUp,
-      onPointerCancel: onPointerUp,
       onDoubleClick,
     },
   };
