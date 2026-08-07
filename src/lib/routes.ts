@@ -26,6 +26,11 @@ export const appRoutes = {
   sourcify: '/sourcify',
   postz: '/postz',
   clipStudio: '/clip-studio',
+  // Mini-apps: public, zero-auth surfaces served from a lightweight route tree.
+  mini: {
+    image: '/image',
+    artifact: (artifactId: string) => `/a/${artifactId}`,
+  },
   settings: {
     billing: '/settings/billing',
     billingDocs: '/settings/billing/docs',
@@ -82,6 +87,8 @@ export const ROUTE_MANIFEST: RouteManifestEntry[] = [
   { id: 'sourcify', pattern: appRoutes.sourcify, category: 'core' },
   { id: 'postz', pattern: appRoutes.postz, category: 'core' },
   { id: 'clip-studio', pattern: appRoutes.clipStudio, category: 'legacy' },
+  { id: 'mini-image', pattern: appRoutes.mini.image, category: 'core' },
+  { id: 'mini-artifact', pattern: '/a/:artifactId', category: 'core' },
   { id: 'settings-billing', pattern: appRoutes.settings.billing, category: 'core' },
   { id: 'settings-billing-docs', pattern: appRoutes.settings.billingDocs, category: 'core' },
   { id: 'project-studio', pattern: '/projects/:projectId/studio', category: 'core' },

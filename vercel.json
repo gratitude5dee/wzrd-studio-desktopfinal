@@ -3,5 +3,11 @@
   "installCommand": "bun install",
   "buildCommand": "bun run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "functions": {
+    "api/og/[id].ts": { "memory": 1024, "maxDuration": 15 }
+  },
+  "rewrites": [
+    { "source": "/a/:id", "destination": "/api/a/:id" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

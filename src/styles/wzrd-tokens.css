@@ -1,0 +1,60 @@
+/*
+ * WZRD brand tokens (parent spec §4.2 palette, §4.4 motion).
+ *
+ * Colors are raw hex (not HSL triplets) because the mini-app surfaces consume
+ * them directly through the `wzrd-*` Tailwind scale rather than through the
+ * shadcn `hsl(var(--token))` indirection used by the desktop app.
+ */
+
+:root {
+  /* §4.2 — core ramp, darkest to lightest */
+  --wzrd-abyss: #05070b;
+  --wzrd-ink: #0b0e14;
+  --wzrd-deep: #131924;
+  --wzrd-blue: #2f6bff;
+  --wzrd-steel: #56617a;
+  --wzrd-chrome: #9aa6bc;
+  --wzrd-mist: #e7ebf2;
+
+  /* §4.2 — corrected neutrals */
+  --wzrd-paper: #ffffff;
+  --wzrd-hairline: rgba(11, 14, 20, 0.12);
+  --wzrd-hairline-strong: rgba(11, 14, 20, 0.24);
+  --wzrd-muted-text: #767676;
+
+  /* §4.4 — motion */
+  --wzrd-duration-instant: 80ms;
+  --wzrd-duration-fast: 140ms;
+  --wzrd-duration-base: 240ms;
+  --wzrd-duration-slow: 420ms;
+  --wzrd-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --wzrd-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --wzrd-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --wzrd-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/*
+ * Light-mode muted text correction (§4.2): #767676 = hsl(0 0% 46%).
+ * Scoped to the light selectors on purpose — a bare `:root` rule here would
+ * load after index.css and clobber the dark theme's muted foreground too.
+ */
+:root:not(.dark),
+:root[data-theme='light'],
+html.light {
+  --muted-foreground: 0 0% 46%;
+}
+
+.dark {
+  --wzrd-hairline: rgba(231, 235, 242, 0.12);
+  --wzrd-hairline-strong: rgba(231, 235, 242, 0.24);
+  --wzrd-muted-text: #9aa6bc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wzrd-duration-instant: 0ms;
+    --wzrd-duration-fast: 0ms;
+    --wzrd-duration-base: 0ms;
+    --wzrd-duration-slow: 0ms;
+  }
+}
