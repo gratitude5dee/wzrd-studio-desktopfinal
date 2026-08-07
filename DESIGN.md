@@ -122,11 +122,11 @@ navigation. `SIDEBAR_SECTIONS` holds exactly five root groups:
    (view-based; landing view `all`).
 2. **Kanvas** — Image, Video, Edit, Lip Sync, Cinema, Worldview, Characters,
    Lyrics (`/kanvas/lyrics`); landing `/kanvas`.
-3. **IP Management** — IP Vault only; landing `/ip-vault`.
+3. **IP Management** — IP Vault plus the external WTR link; landing `/ip-vault`.
 4. **Clip Studio** — Clipper, Sourcify, Postz; landing `/clipper`.
 5. **Settings** — Billing; landing `/settings`.
 
-WTR is not surfaced. Asset Store is gone: `/assets` redirects to `/ip-vault`.
+Asset Store is gone: `/assets` redirects to `/ip-vault`.
 `/clip-studio` → `/clipper` and `/IPVault` → `/ip-vault` remain.
 
 Consumers derive from this model: `Sidebar`, `FloatingNavPill` (the collapsed
