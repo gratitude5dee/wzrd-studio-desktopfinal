@@ -30,7 +30,7 @@ export function HistoryFormatBar({
   onFormatClick,
   dimensions,
 }: HistoryFormatBarProps) {
-  const longPress = useRef<ReturnType<typeof setTimeout>>();
+  const longPress = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fired = useRef(false);
 
   const cancelLongPress = () => clearTimeout(longPress.current);
