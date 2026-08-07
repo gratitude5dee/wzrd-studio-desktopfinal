@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import wzrdLogo from '@/assets/wzrd-logo.png';
+import { staticAssetUrl } from '@/lib/staticAsset';
 
 export function StickyFooter() {
   const [email, setEmail] = useState('');
@@ -46,7 +47,7 @@ export function StickyFooter() {
           {/* Brand */}
           <div className="col-span-2">
             <Link to="/" className="inline-block mb-4">
-              <img src={wzrdLogo} alt="WZRD" className="h-10 w-auto" />
+              <img src={staticAssetUrl(wzrdLogo)} alt="WZRD" className="h-10 w-auto" />
             </Link>
             <p className="text-white/40 text-sm leading-relaxed max-w-xs mb-4">
               The agentic video editor that helps you create stunning content 10x faster.

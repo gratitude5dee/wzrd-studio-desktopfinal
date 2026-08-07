@@ -4,8 +4,8 @@ import { useEffect, useRef, useCallback } from 'react';
  * Hook for optimizing render performance using RequestAnimationFrame
  */
 export function useRequestAnimationFrame(callback: (deltaTime: number) => void, deps: any[] = []) {
-  const requestRef = useRef<number>();
-  const previousTimeRef = useRef<number>();
+  const requestRef = useRef<number | undefined>(undefined);
+  const previousTimeRef = useRef<number | undefined>(undefined);
 
   const animate = useCallback((time: number) => {
     if (previousTimeRef.current !== undefined) {
@@ -34,7 +34,7 @@ export function useThrottle<T extends (...args: any[]) => void>(
   delay: number
 ): (...args: Parameters<T>) => void {
   const lastRun = useRef(Date.now());
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   return useCallback(
     (...args: Parameters<T>) => {
@@ -70,7 +70,7 @@ export function useBatchedUpdates<T>(
   delay: number = 50
 ) {
   const batchRef = useRef<T[]>([]);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const addToBatch = useCallback(
     (update: T) => {
@@ -118,7 +118,7 @@ export function useIntersectionObserver(
   callback: (entry: IntersectionObserverEntry) => void,
   options: IntersectionObserverInit = {}
 ) {
-  const observerRef = useRef<IntersectionObserver>();
+  const observerRef = useRef<IntersectionObserver | undefined>(undefined);
 
   useEffect(() => {
     observerRef.current = new IntersectionObserver((entries) => {

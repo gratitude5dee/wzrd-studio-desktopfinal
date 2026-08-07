@@ -8,6 +8,7 @@ import {
   Hand,
   MousePointer,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { FlowsPanel } from './panels/FlowsPanel';
@@ -199,7 +200,7 @@ const Divider = () => (
 );
 
 interface SidebarButtonProps {
-  icon: React.ElementType;
+  icon: LucideIcon;
   label: string;
   active?: boolean;
   onClick: () => void;

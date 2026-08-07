@@ -24,6 +24,7 @@ import {
   Star,
   Trash2
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HANDLE_COLORS, HANDLE_GLOW_COLORS, Port, DataType, isTypeCompatible } from '@/types/computeFlow';
 import { NodeHoverMenu } from './NodeHoverMenu';
@@ -58,7 +59,7 @@ export interface ComputeNodeData {
   onParamsChange?: (params: Record<string, unknown>) => void;
 }
 
-const NODE_ICONS: Record<string, React.ElementType> = {
+const NODE_ICONS: Record<string, LucideIcon> = {
   Image: Image,
   Text: Type,
   Video: Video,

@@ -42,7 +42,7 @@ function createAIPipelineNamespace(): PlatformAIPipelineAPI {
 		generate: async (...args: any[]) => {
 			const api = getElectronAPI();
 			if (!api?.aiPipeline?.generate) {
-				throw new PlatformUnsupportedError(PlatformCapability.AI_PIPELINE, "web");
+				throw new PlatformUnsupportedError(PlatformCapability.AiPipeline, "web");
 			}
 			return api.aiPipeline.generate(...args);
 		},
@@ -121,7 +121,7 @@ function createMediaImportNamespace(): PlatformMediaImportAPI {
 		import: async (options) => {
 			const api = getElectronAPI();
 			if (!api?.mediaImport?.import) {
-				throw new PlatformUnsupportedError(PlatformCapability.MEDIA_IMPORT, "web");
+				throw new PlatformUnsupportedError(PlatformCapability.MediaImport, "web");
 			}
 			return api.mediaImport.import(options);
 		},
@@ -156,14 +156,14 @@ function createProjectFolderNamespace(): PlatformProjectFolderAPI {
 		getRoot: async (projectId) => {
 			const api = getElectronAPI();
 			if (!api?.projectFolder?.getRoot) {
-				throw new PlatformUnsupportedError(PlatformCapability.PROJECT_FOLDER, "web");
+				throw new PlatformUnsupportedError(PlatformCapability.ProjectFolder, "web");
 			}
 			return api.projectFolder.getRoot(projectId);
 		},
 		scan: async (projectId, subPath, options) => {
 			const api = getElectronAPI();
 			if (!api?.projectFolder?.scan) {
-				throw new PlatformUnsupportedError(PlatformCapability.PROJECT_FOLDER, "web");
+				throw new PlatformUnsupportedError(PlatformCapability.ProjectFolder, "web");
 			}
 			return api.projectFolder.scan(projectId, subPath, options);
 		},
@@ -186,7 +186,7 @@ export function createDesktopAdapter(): PlatformAPI {
 		...web,
 		platform: "desktop",
 		isElectron,
-		hasCapability: (cap) => isPlatformCapable(cap, isElectron ? "desktop" : "web"),
+		hasCapability: (cap) => isPlatformCapable(isElectron ? "desktop" : "web", cap),
 		// Only implement namespaces needed by tests for now.
 		aiPipeline: createAIPipelineNamespace(),
 		mediaImport: createMediaImportNamespace(),

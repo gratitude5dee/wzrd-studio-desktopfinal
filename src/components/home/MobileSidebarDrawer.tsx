@@ -7,7 +7,13 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import CreditsDisplay from '../CreditsDisplay';
 import { Badge } from '@/components/ui/badge';
 import { appRoutes } from '@/lib/routes';
-import { SIDEBAR_SECTIONS, isNavGroup, useNavGroupState, type SidebarNavItem } from './navigation';
+import {
+  SIDEBAR_SECTIONS,
+  isNavGroup,
+  useNavGroupState,
+  type SidebarNavGroup,
+  type SidebarNavItem,
+} from './navigation';
 
 interface MobileSidebarDrawerProps {
   isOpen: boolean;
@@ -18,7 +24,7 @@ interface MobileSidebarDrawerProps {
 
 export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange }: MobileSidebarDrawerProps) => {
   const navigate = useNavigate();
-  const { isGroupOpen, toggleGroup } = useNavGroupState(activeView);
+  const { isGroupOpen, toggleGroup, openGroup } = useNavGroupState(activeView);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -32,12 +38,28 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
   };
 
   const handleNavClick = (item: SidebarNavItem) => {
-    if (item.isRoute) {
+    if (item.externalUrl) {
+      window.open(item.externalUrl, '_blank', 'noopener,noreferrer');
+    } else if (item.isRoute) {
       navigate(item.path ?? appRoutes.kanvas);
     } else {
       onViewChange(item.id);
     }
     onClose();
+  };
+
+  const handleGroupLandingClick = (group: SidebarNavGroup) => {
+    if (group.landingViewId) {
+      openGroup(group.id);
+      onViewChange(group.landingViewId);
+      onClose();
+      return;
+    }
+    if (group.isRoute || group.externalUrl) {
+      handleNavClick(group);
+      return;
+    }
+    toggleGroup(group.id);
   };
 
   return (
@@ -53,7 +75,7 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
 
       {/* Drawer */}
       <aside className={cn(
-        "fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-50 md:hidden",
+        "fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-[60] md:hidden",
         "bg-card border-r border-border/50 rounded-r-2xl",
         "transform transition-transform duration-300 ease-out",
         "flex flex-col h-full",
@@ -91,39 +113,51 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
 
                   return (
                     <div key={node.id}>
-                      <button
-                        onClick={() => (group ? toggleGroup(group.id) : handleNavClick(node))}
-                        aria-label={node.label}
-                        aria-expanded={group ? isExpanded : undefined}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all",
-                          isActive
-                            ? "bg-primary/15 text-primary border border-primary/30"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-9 h-9 rounded-lg flex items-center justify-center",
-                          isActive ? "bg-primary/25" : "bg-muted/50"
-                        )}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <span className="flex-1 text-left">{node.label}</span>
-                        {node.showBadge && (
-                          <Badge variant="secondary" className="text-[9px] bg-primary/20 text-primary border-primary/30">
-                            New
-                          </Badge>
-                        )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => (group ? handleGroupLandingClick(group) : handleNavClick(node))}
+                          aria-label={node.label}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={cn(
+                            "w-full min-h-[44px] flex items-center gap-3 px-3 py-3 rounded-wzrd-md text-sm font-medium",
+                            "transition-[background-color,color] duration-wzrd-control",
+                            isActive
+                              ? "bg-accent-ember/12 text-accent-ember border border-accent-ember/25"
+                              : "text-text-secondary hover:text-text-primary hover:bg-accent-air/8 border border-transparent"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-9 h-9 rounded-wzrd-sm flex items-center justify-center",
+                            isActive ? "bg-accent-ember/15" : "bg-surface-raised"
+                          )}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <span className="flex-1 text-left">{node.label}</span>
+                          {node.showBadge && (
+                            <Badge variant="secondary" className="text-[9px] bg-accent-ember/15 text-accent-ember border-accent-ember/25">
+                              New
+                            </Badge>
+                          )}
+                        </button>
                         {group && (
-                          <ChevronLeft className={cn(
-                            "w-4 h-4 transition-transform duration-200",
-                            isExpanded ? "-rotate-90" : "rotate-0"
-                          )} />
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(group.id)}
+                            aria-label={`Toggle ${group.label} section`}
+                            aria-expanded={isExpanded}
+                            aria-controls={`mobile-subnav-${group.id}`}
+                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-wzrd-sm text-text-secondary transition-colors duration-wzrd-control hover:text-text-primary"
+                          >
+                            <ChevronLeft className={cn(
+                              "w-4 h-4 transition-transform duration-wzrd-control",
+                              isExpanded ? "-rotate-90" : "rotate-0"
+                            )} />
+                          </button>
                         )}
-                      </button>
+                      </div>
 
                       {group && isExpanded && (
-                        <div className="mt-1 ml-6 pl-3 border-l border-border/60 space-y-0.5">
+                        <div id={`mobile-subnav-${group.id}`} className="mt-1 ml-6 pl-3 border-l border-line-subtle space-y-0.5">
                           {group.children.length === 0 ? (
                             <p className="text-xs text-muted-foreground/50 py-2 italic">{group.emptyLabel}</p>
                           ) : (
@@ -136,17 +170,19 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
                                   key={child.id}
                                   onClick={() => handleNavClick(child)}
                                   aria-label={child.label}
+                                  aria-current={isChildActive ? 'page' : undefined}
                                   className={cn(
-                                    "w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm transition-all",
+                                    "w-full min-h-[44px] flex items-center gap-2.5 px-2.5 py-2.5 rounded-wzrd-sm text-sm",
+                                    "transition-[background-color,color] duration-wzrd-control",
                                     isChildActive
-                                      ? "bg-primary/10 text-primary"
-                                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                      ? "bg-accent-ember/10 text-accent-ember"
+                                      : "text-text-secondary hover:text-text-primary hover:bg-accent-air/8"
                                   )}
                                 >
                                   <ChildIcon className="w-4 h-4 flex-shrink-0" />
                                   <span className="flex-1 text-left">{child.label}</span>
                                   {child.showBadge && (
-                                    <Badge variant="secondary" className="text-[9px] bg-primary/20 text-primary border-primary/30">
+                                    <Badge variant="secondary" className="text-[9px] bg-accent-ember/15 text-accent-ember border-accent-ember/25">
                                       New
                                     </Badge>
                                   )}

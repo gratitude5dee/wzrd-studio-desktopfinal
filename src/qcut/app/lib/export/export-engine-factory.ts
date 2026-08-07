@@ -5,6 +5,7 @@ import { MediaItem } from "@qcut-app/stores/media/media-store";
 import { debugLog, debugError, debugWarn } from "@qcut-app/lib/debug/debug-config";
 import { useEffectsStore } from "@qcut-app/stores/ai/effects-store";
 import { platform } from "@qcut/platform-core";
+import { isFfmpegWasmFallbackAvailable } from "@/lib/ffmpeg-web";
 
 // Engine types available
 export const ExportEngineType = {
@@ -38,6 +39,18 @@ export interface EngineRecommendation {
 	reason: string;
 	capabilities: BrowserCapabilities;
 	estimatedPerformance: "high" | "medium" | "low";
+}
+
+function readLocalStorageFlag(key: string): boolean {
+	if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+		return false;
+	}
+
+	try {
+		return window.localStorage.getItem(key) === "true";
+	} catch {
+		return false;
+	}
 }
 
 export class ExportEngineFactory {
@@ -111,11 +124,14 @@ export class ExportEngineFactory {
 
 		// 🚀 FORCE CLI FFmpeg in Electron - most stable and performant
 		// DEBUG OVERRIDE: Allow forcing regular engine for sticker debugging
-		const forceRegularEngine =
-			localStorage.getItem("qcut_force_regular_engine") === "true";
+		const forceRegularEngine = readLocalStorageFlag(
+			"qcut_force_regular_engine"
+		);
+		const forceWebCodecsOff = readLocalStorageFlag("qcut_force_webcodecs_off");
 
 		console.log("🔍 EXPORT ENGINE DEBUG - Starting engine selection:");
 		console.log("  - Force regular engine override:", forceRegularEngine);
+		console.log("  - Force WebCodecs off override:", forceWebCodecsOff);
 		console.log("  - Is Electron environment:", this.isElectron());
 		console.log("  - Platform isElectron:", platform().isElectron);
 		console.log(
@@ -159,6 +175,7 @@ export class ExportEngineFactory {
 		// iPad/browser with WebCodecs → mediabunny muxer engine (MP4 via WebCodecs)
 		// Skip on simulator (WebCodecs APIs exist but CanvasSource stalls in WKWebView sim)
 		if (
+			!forceWebCodecsOff &&
 			capabilities.hasWebCodecs &&
 			!this.isSimulator() &&
 			(await this.probeWebCodecsEncoder())
@@ -175,8 +192,18 @@ export class ExportEngineFactory {
 			};
 		}
 
-		// REMOVED: FFmpeg WASM engine - disabled due to timeout issues
-		// Now falls through to Optimized or Standard engine for browsers
+		if (await isFfmpegWasmFallbackAvailable()) {
+			console.log(
+				"🚀 EXPORT ENGINE SELECTION: FFmpeg WASM fallback chosen for isolated browser"
+			);
+			return {
+				engineType: ExportEngineType.FFMPEG,
+				reason:
+					"WebCodecs unavailable or disabled; using self-hosted FFmpeg WASM fallback on an isolated editor route",
+				capabilities,
+				estimatedPerformance: "low",
+			};
+		}
 
 		// Browser fallback - optimized engine if available
 		if (capabilities.hasOffscreenCanvas && capabilities.hasWorkers) {
@@ -272,16 +299,16 @@ export class ExportEngineFactory {
 				}
 
 			case ExportEngineType.FFMPEG:
-				// FFmpeg WASM engine removed - fall back to Standard engine
 				console.log(
-					"🚀 EXPORT ENGINE CREATION: FFmpeg WASM removed, using Standard engine instead"
+					"🚀 EXPORT ENGINE CREATION: Creating Standard renderer with FFmpeg WASM recorder"
 				);
 				return new ExportEngine(
 					canvas,
 					settings,
 					tracks,
 					mediaItems,
-					totalDuration
+					totalDuration,
+					{ useFFmpegExport: true }
 				);
 
 			case ExportEngineType.CLI:
@@ -647,10 +674,9 @@ export class ExportEngineFactory {
 		return this.detectCapabilities();
 	}
 
-	/** Check if FFmpeg WASM is available (always false — removed). */
+	/** Check if FFmpeg WASM fallback is available for isolated browser export. */
 	static async isFFmpegAvailable(): Promise<boolean> {
-		// Always return false as FFmpeg WASM export is disabled
-		return false;
+		return isFfmpegWasmFallbackAvailable();
 	}
 
 	/** Check if running in Electron environment with native FFmpeg CLI. */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +21,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import wzrdLogo from '@/assets/wzrd-logo.png';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
+import { staticAssetUrl } from '@/lib/staticAsset';
 import { ROYALTY_POLICY_LAP_ADDRESS } from '@/lib/story/constants';
 import { claimVaultRevenueOnStory, registerVaultItemOnStory } from '@/lib/story/registration';
 import { ipVaultService } from '@/services/ipVaultService';
@@ -38,6 +39,13 @@ export function IPVaultPage() {
   const { isCollapsed, setIsCollapsed } = useSidebar();
   const isMobile = useIsMobile();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const handleHomeViewChange = useCallback(
+    (view: string) => {
+      navigate(appRoutes.home, { state: { activeView: view } });
+    },
+    [navigate],
+  );
 
   const storyWallet = useStoryProtocolClient();
   const [items, setItems] = useState<IPVaultItem[]>([]);
@@ -190,7 +198,7 @@ export function IPVaultPage() {
     <div className="min-h-screen bg-background flex w-full">
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar activeView="ip-vault" onViewChange={() => {}} />
+        <Sidebar activeView="ip-vault" onViewChange={handleHomeViewChange} />
       </div>
 
       {/* Mobile Sidebar Drawer */}
@@ -198,13 +206,13 @@ export function IPVaultPage() {
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
         activeView="ip-vault"
-        onViewChange={() => {}}
+        onViewChange={handleHomeViewChange}
       />
 
       {/* Main Content */}
       <motion.div
         className="flex-1 pb-20 md:pb-0 min-h-screen"
-        animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 0 : 256) }}
+        animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 64 : 256) }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         initial={false}
       >
@@ -252,7 +260,7 @@ export function IPVaultPage() {
               </button>
 
               <img
-                src={wzrdLogo}
+                src={staticAssetUrl(wzrdLogo)}
                 alt="WZRD STUDIO Logo"
                 className="h-20 object-contain"
               />
@@ -280,7 +288,7 @@ export function IPVaultPage() {
           />
 
           {/* Section Header */}
-          <div className="border-b border-white/[0.08] bg-[#0c0c10]/95 px-4 py-5 backdrop-blur md:px-8">
+          <div className="border-b border-white/[0.08] bg-[#0c0c10]/95 px-4 py-5 backdrop-blur md:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-300">

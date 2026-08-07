@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Image as ImageIcon, Film, Music, FolderOpen, Search } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useVideoEditorStore, type LibraryMediaItem } from '@/store/videoEditorStore';
 import { MediaItem } from '../media/MediaItem';
 import { editorTheme, typography } from '@/lib/editor/theme';
@@ -46,7 +47,7 @@ export const ProjectAssetsTab: React.FC<ProjectAssetsTabProps> = ({ projectId })
     };
   }, [items]);
 
-  const FILTER_OPTIONS: { key: MediaFilter; label: string; icon: React.ElementType }[] = [
+  const FILTER_OPTIONS: { key: MediaFilter; label: string; icon: LucideIcon }[] = [
     { key: 'all', label: 'All', icon: FolderOpen },
     { key: 'image', label: 'Images', icon: ImageIcon },
     { key: 'video', label: 'Videos', icon: Film },

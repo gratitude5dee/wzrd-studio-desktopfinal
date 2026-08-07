@@ -364,7 +364,7 @@ export const videoEditorService = {
         text: clip.text ?? null,
         masks: clip.masks ?? [],
         playbackRate: clip.playbackRate ?? 1,
-      } as Json,
+      } as unknown as Json,
     });
 
     if (error) {

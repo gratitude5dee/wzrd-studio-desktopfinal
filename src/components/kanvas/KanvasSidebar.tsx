@@ -1,21 +1,30 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Home,
-  Music2,
-} from 'lucide-react';
+import { Home, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
+import { supabase } from '@/integrations/supabase/client';
 import type { KanvasStudio } from '@/features/kanvas/types';
-import { KANVAS_STUDIO_ORDER, KANVAS_STUDIO_META } from '@/features/kanvas/helpers';
-import { KANVAS_STUDIO_ICONS as STUDIO_ICONS } from '@/features/kanvas/studioIcons';
+import { FloatingNavButton } from '@/components/home/Sidebar';
+import {
+  FLOATING_NAV_ITEMS,
+  isNavGroup,
+  kanvasStudioFromNavItem,
+  useNavGroupState,
+  type SidebarNavItem,
+  type SidebarNavNode,
+} from '@/components/home/navigation';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ShineBorder } from '@/components/ui/shine-border';
+
+/** Shared focus treatment: visible ring on keyboard focus only. */
+const FOCUS_RING =
+  'outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-canvas';
 
 interface KanvasSidebarProps {
   activeStudio: KanvasStudio;
@@ -24,45 +33,49 @@ interface KanvasSidebarProps {
 
 export function KanvasSidebar({ activeStudio, onStudioChange }: KanvasSidebarProps) {
   const navigate = useNavigate();
-  const [isVisible, setIsVisible] = useState(false);
+  const activeView = `kanvas-${activeStudio}`;
+  const { isGroupOpen, toggleGroup } = useNavGroupState(activeView);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    setIsVisible(e.clientX <= 80);
-  }, []);
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('Failed to log out');
+    } else {
+      toast.success('Logged out successfully');
+      navigate('/');
+    }
+  };
 
-  useEffect(() => {
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [handleMouseMove]);
+  const handleItemClick = useCallback((item: SidebarNavItem) => {
+    const studio = kanvasStudioFromNavItem(item);
+    if (studio) {
+      onStudioChange(studio as KanvasStudio);
+      return;
+    }
+    if (item.isRoute) {
+      navigate(item.path ?? appRoutes.kanvas);
+      return;
+    }
+    navigate(appRoutes.home, { state: { activeView: item.id } });
+  }, [navigate, onStudioChange]);
+
+  const handleNodeClick = useCallback((node: SidebarNavNode) => {
+    if (isNavGroup(node)) {
+      toggleGroup(node.id);
+      return;
+    }
+    handleItemClick(node);
+  }, [handleItemClick, toggleGroup]);
 
   return (
     <TooltipProvider delayDuration={200}>
-      {/* Invisible hover trigger zone — desktop only */}
-      <div className="hidden md:block fixed left-0 top-[68px] bottom-0 w-[80px] z-[49]" />
-
       <aside
+        aria-label="Kanvas navigation rail"
         className={cn(
-          'hidden md:flex fixed left-3 top-[calc(50%+34px)] -translate-y-1/2 z-50 flex-col items-center py-3 rounded-2xl',
-          'bg-kanvas-bg/90 backdrop-blur-xl border border-white/[0.06]',
-          'shadow-[0_8px_32px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.03)]',
-          'transition-all duration-300 ease-out',
-          isVisible
-            ? 'w-14 opacity-100 translate-x-0'
-            : 'w-3 opacity-0 -translate-x-2 pointer-events-none overflow-hidden',
+          'hidden md:flex fixed left-3 top-[calc(50%+34px)] -translate-y-1/2 z-50 max-h-[calc(100vh-100px)] w-14 flex-col items-center py-3 rounded-wzrd-lg',
+          'bg-surface-raised border border-line-subtle shadow-lg',
         )}
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
       >
-        {/* Lime glow border */}
-        <ShineBorder
-          shineColor={['hsl(25 95% 53%)', '#86efac', 'hsl(25 95% 53%)']}
-          borderWidth={1}
-          duration={8}
-        />
-
-        {/* Faint lime gradient top-highlight */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-kanvas-accent/[0.04] via-transparent to-transparent pointer-events-none" />
-
         {/* Home button */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -70,7 +83,11 @@ export function KanvasSidebar({ activeStudio, onStudioChange }: KanvasSidebarPro
               type="button"
               onClick={() => navigate(appRoutes.home)}
               aria-label="Home"
-              className="relative flex h-10 w-10 items-center justify-center rounded-lg text-kanvas-text-muted transition-all duration-200 hover:bg-white/[0.04] hover:text-kanvas-text-secondary"
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-wzrd-sm text-text-secondary',
+                'transition-[background-color,color] duration-wzrd-control hover:bg-accent-air/8 hover:text-text-primary',
+                FOCUS_RING,
+              )}
             >
               <Home className="h-[18px] w-[18px]" />
             </button>
@@ -79,62 +96,66 @@ export function KanvasSidebar({ activeStudio, onStudioChange }: KanvasSidebarPro
         </Tooltip>
 
         {/* Divider */}
-        <div className="mx-auto my-3 h-px w-6 bg-white/[0.06]" />
+        <div className="mx-auto my-2 h-px w-6 shrink-0 bg-line-subtle" />
 
-        {/* Studio icons */}
-        <nav className="flex flex-1 flex-col items-center gap-1">
-          {KANVAS_STUDIO_ORDER.map((studio) => {
-            const Icon = STUDIO_ICONS[studio];
-            const label = KANVAS_STUDIO_META[studio].label;
-            const isActive = activeStudio === studio;
+        {/* Nav items (same structure as the home sidebar) */}
+        <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto hide-scrollbar">
+          {FLOATING_NAV_ITEMS.map((entry) => {
+            if (entry.kind === 'divider') {
+              return <div key={entry.id} className="mx-auto my-2 h-px w-6 shrink-0 bg-line-subtle" />;
+            }
+
+            const node = entry.node;
+            const group = isNavGroup(node) ? node : null;
+            const isOpen = group ? isGroupOpen(group.id) : false;
 
             return (
-              <Tooltip key={studio}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onStudioChange(studio)}
-                    aria-label={label}
-                    className={cn(
-                      'relative flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200',
-                      isActive
-                        ? 'bg-white/10 text-kanvas-accent'
-                        : 'text-kanvas-text-muted hover:bg-white/[0.04] hover:text-kanvas-text-secondary',
-                    )}
-                  >
-                    {isActive && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-r-full bg-kanvas-accent shadow-[0_0_6px_hsl(var(--kanvas-accent)/0.4)]" />
-                    )}
-                    <Icon className="h-[18px] w-[18px]" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8} className="z-[60]">{label}</TooltipContent>
-              </Tooltip>
+              <div key={node.id} className="flex shrink-0 flex-col items-center gap-1">
+                <FloatingNavButton
+                  item={node}
+                  isActive={activeView === node.id}
+                  isExpanded={group ? isOpen : undefined}
+                  onClick={() => handleNodeClick(node)}
+                />
+                {group && isOpen && group.children.map((child) => (
+                  <FloatingNavButton
+                    key={child.id}
+                    item={child}
+                    isActive={activeView === child.id}
+                    isChild
+                    onClick={() => handleItemClick(child)}
+                  />
+                ))}
+              </div>
             );
           })}
-
-          {/* Lyrics shortcut — separate route */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => navigate(appRoutes.kanvasLyrics)}
-                aria-label="Lyrics"
-                className="relative flex h-10 w-10 items-center justify-center rounded-lg text-kanvas-text-muted transition-all duration-200 hover:bg-white/[0.04] hover:text-kanvas-text-secondary"
-              >
-                <Music2 className="h-[18px] w-[18px]" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8} className="z-[60]">Lyrics</TooltipContent>
-          </Tooltip>
         </nav>
 
-        {/* Bottom WZRD mark + brand dot */}
-        <div className="mt-auto pt-3 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center">
-            <img src="/lovable-uploads/wzrdtechlogo.png" alt="WZRD" className="h-10 w-10 object-contain" />
-          </div>
-          <div className="h-1.5 w-1.5 rounded-full bg-kanvas-accent shadow-[0_0_6px_hsl(var(--kanvas-accent)/0.5)]" />
+        {/* Divider */}
+        <div className="mx-auto my-2 h-px w-6 shrink-0 bg-line-subtle" />
+
+        {/* Logout */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="Logout"
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-wzrd-sm text-text-secondary',
+                'transition-[background-color,color] duration-wzrd-control hover:bg-status-danger/10 hover:text-status-danger',
+                FOCUS_RING,
+              )}
+            >
+              <LogOut className="h-[18px] w-[18px]" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8} className="z-[60]">Logout</TooltipContent>
+        </Tooltip>
+
+        {/* Brand dot */}
+        <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center">
+          <div className="h-2 w-2 rounded-wzrd-chip bg-accent-ember/60" />
         </div>
       </aside>
     </TooltipProvider>

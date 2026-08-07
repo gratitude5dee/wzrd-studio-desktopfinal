@@ -103,6 +103,7 @@ export interface BuildExportOptionsParams {
 	wordFilterSegments: Array<{ start: number; end: number }> | undefined;
 	videoSources: VideoSourceInput[];
 	videoInput: { path: string; trimStart: number; trimEnd: number } | null;
+	projectId?: string;
 }
 
 /** Assembles the final FFmpeg export options object from analysis results and filter chains. */
@@ -160,5 +161,6 @@ export function buildExportOptions(params: BuildExportOptionsParams) {
 		wordFilterSegments,
 		crossfadeMs: 30,
 		optimizationStrategy: exportAnalysis?.optimizationStrategy,
+		projectId: params.projectId,
 	};
 }

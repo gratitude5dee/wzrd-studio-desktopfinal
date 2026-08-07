@@ -9,6 +9,7 @@ import { assetService } from "@/services/assetService";
 import type { AssetFilters, AssetUploadRequest } from "@/types/assets";
 import { toast } from "sonner";
 import { MOCK_ASSET_EVENT_NAME } from "@/services/mockAssetApi";
+import { readPublicFlag } from "@/lib/env";
 
 export const ASSET_QUERY_KEYS = {
   all: ["assets"] as const,
@@ -24,7 +25,7 @@ export const ASSET_QUERY_KEYS = {
 };
 
 const useMockAssets =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_USE_MOCK_ASSETS === "true") ||
+  readPublicFlag("USE_MOCK_ASSETS", ["VITE_USE_MOCK_ASSETS"]) ||
   (typeof process !== "undefined" && process.env?.VITE_USE_MOCK_ASSETS === "true");
 
 /**

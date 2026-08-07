@@ -129,6 +129,32 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         </p>
       </div>
 
+      {/* How it works */}
+      <section className="mt-10 rounded-lg border border-white/5 bg-[#0B0D13] p-6">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          How it works
+        </h2>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            { n: 1, title: 'Upload audio', body: 'Drop a clip from your song and choose 15/30/45/60 seconds.' },
+            { n: 2, title: 'Sync lyrics', body: 'AI transcribes and aligns words to the beat.' },
+            { n: 3, title: 'Place markers', body: 'Tap M to mark cut points across the clip.' },
+          ].map((s) => (
+            <div key={s.n} className="rounded-lg border border-white/5 bg-black/30 p-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/15 text-[10px] font-bold text-[#f97316]">
+                  {s.n}
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-white">
+                  {s.title}
+                </h3>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* CTA + filter row */}
       <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
         <button
@@ -244,31 +270,6 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         )}
       </section>
 
-      {/* How it works */}
-      <section className="mt-16 rounded-lg border border-white/5 bg-[#0B0D13] p-6">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">
-          How it works
-        </h2>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            { n: 1, title: 'Upload audio', body: 'Drop a clip from your song and choose 15/30/45/60 seconds.' },
-            { n: 2, title: 'Sync lyrics', body: 'AI transcribes and aligns words to the beat.' },
-            { n: 3, title: 'Place markers', body: 'Tap M to mark cut points across the clip.' },
-          ].map((s) => (
-            <div key={s.n} className="rounded-lg border border-white/5 bg-black/30 p-4">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/15 text-[10px] font-bold text-[#f97316]">
-                  {s.n}
-                </span>
-                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-white">
-                  {s.title}
-                </h3>
-              </div>
-              <p className="mt-2 text-xs text-zinc-500">{s.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

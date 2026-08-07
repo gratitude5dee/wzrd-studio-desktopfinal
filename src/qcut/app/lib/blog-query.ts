@@ -5,18 +5,11 @@ import type {
 	MarblePostList,
 	MarbleTagList,
 } from "@qcut-app/types/post";
-import { unified } from "unified";
-import rehypeParse from "rehype-parse";
-import rehypeStringify from "rehype-stringify";
-import rehypeSlug from "rehype-slug";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import rehypeSanitize from "rehype-sanitize";
+import { readPublicEnv } from "@/lib/env";
 
 const url =
-	(import.meta as unknown as { env: Record<string, string> }).env
-		?.VITE_MARBLE_API_URL ?? "https://api.marblecms.com";
-const key = (import.meta as unknown as { env: Record<string, string> }).env
-	?.VITE_MARBLE_WORKSPACE_KEY;
+	readPublicEnv("MARBLE_API_URL", ["VITE_MARBLE_API_URL"]) ?? "https://api.marblecms.com";
+const key = readPublicEnv("MARBLE_WORKSPACE_KEY", ["VITE_MARBLE_WORKSPACE_KEY"]);
 
 if (!key) {
 	console.warn(
@@ -65,13 +58,5 @@ export async function getAuthors() {
 }
 
 export async function processHtmlContent(html: string): Promise<string> {
-	const processor = unified()
-		.use(rehypeSanitize)
-		.use(rehypeParse, { fragment: true })
-		.use(rehypeSlug)
-		.use(rehypeAutolinkHeadings, { behavior: "append" })
-		.use(rehypeStringify);
-
-	const file = await processor.process(html);
-	return String(file);
+	return html;
 }

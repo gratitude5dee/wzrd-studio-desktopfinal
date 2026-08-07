@@ -12,6 +12,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,7 +124,7 @@ function ActionIconButton({
   label,
   onClick,
 }: {
-  icon: React.ElementType;
+  icon: LucideIcon;
   label: string;
   onClick?: () => void;
 }) {

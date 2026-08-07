@@ -281,7 +281,7 @@ export function mergeEffectParameters(
 					(merged as any)[typedKey] = numericCurrentValue * numericValue;
 				} else {
 					// Override: last value wins (for discrete/boolean parameters)
-					merged[typedKey] = value;
+					(merged as any)[typedKey] = value;
 				}
 			}
 		}

@@ -57,14 +57,41 @@ vi.mock("@qcut-app/types/export", () => ({
 	ExportPurpose: { PREVIEW: "preview", FINAL: "final" },
 }));
 
+function setCrossOriginIsolated(value: boolean) {
+	Object.defineProperty(globalThis, "crossOriginIsolated", {
+		configurable: true,
+		value,
+	});
+}
+
 describe("ExportEngineFactory", () => {
 	let ExportEngineFactory: any;
 	let ExportEngineType: any;
+	const originalWorker = globalThis.Worker;
+	const originalFetch = globalThis.fetch;
 
 	beforeEach(async () => {
 		vi.clearAllMocks();
 		mockPlatform.isElectron = false;
 		mockPlatform.ffmpeg.exportVideoCLI = undefined;
+		localStorage.clear();
+		setCrossOriginIsolated(false);
+		if (originalFetch) {
+			globalThis.fetch = originalFetch;
+		}
+		if (originalWorker) {
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				value: originalWorker,
+			});
+		} else {
+			delete (globalThis as typeof globalThis & { Worker?: typeof Worker })
+				.Worker;
+		}
+		delete (globalThis as any).VideoEncoder;
+		delete (globalThis as any).VideoDecoder;
+		delete (globalThis as any).VideoFrame;
+		delete (globalThis as any).EncodedVideoChunk;
 
 		// Mock MediaRecorder (not available in test env)
 		if (typeof globalThis.MediaRecorder === "undefined") {
@@ -91,9 +118,23 @@ describe("ExportEngineFactory", () => {
 	});
 
 	describe("isFFmpegAvailable", () => {
-		it("always returns false (FFmpeg WASM removed)", async () => {
+		it("returns false when the isolated browser fallback is unavailable", async () => {
 			const result = await ExportEngineFactory.isFFmpegAvailable();
 			expect(result).toBe(false);
+		});
+
+		it("returns true when isolated wasm assets are reachable", async () => {
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				value: class {},
+			});
+			setCrossOriginIsolated(true);
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+
+			const result = await ExportEngineFactory.isFFmpegAvailable();
+			expect(result).toBe(true);
 		});
 	});
 
@@ -290,6 +331,54 @@ describe("ExportEngineFactory", () => {
 				rec.engineType
 			);
 		});
+
+		it("recommends FFmpeg WASM fallback when WebCodecs is unavailable on an isolated editor route", async () => {
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				value: class {},
+			});
+			setCrossOriginIsolated(true);
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+
+			const factory = ExportEngineFactory.getInstance();
+			const rec = await factory.getEngineRecommendation(
+				{ width: 1280, height: 720 },
+				10
+			);
+
+			expect(rec.engineType).toBe(ExportEngineType.FFMPEG);
+			expect(rec.reason).toContain("FFmpeg WASM fallback");
+		});
+
+		it("uses FFmpeg WASM fallback when WebCodecs is explicitly forced off", async () => {
+			(globalThis as any).VideoEncoder = {
+				isConfigSupported: vi.fn().mockResolvedValue({ supported: true }),
+			};
+			(globalThis as any).VideoDecoder = class {};
+			(globalThis as any).VideoFrame = class {
+				close = vi.fn();
+			};
+			(globalThis as any).EncodedVideoChunk = class {};
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				value: class {},
+			});
+			setCrossOriginIsolated(true);
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+			localStorage.setItem("qcut_force_webcodecs_off", "true");
+
+			const factory = ExportEngineFactory.getInstance();
+			const rec = await factory.getEngineRecommendation(
+				{ width: 1280, height: 720 },
+				10
+			);
+
+			expect(rec.engineType).toBe(ExportEngineType.FFMPEG);
+		});
 	});
 
 	describe("createEngine", () => {
@@ -352,7 +441,7 @@ describe("ExportEngineFactory", () => {
 			expect(engine).toBeDefined();
 		});
 
-		it("creates standard engine for FFMPEG type (removed)", async () => {
+		it("creates a standard renderer with FFmpeg recorder enabled for FFMPEG type", async () => {
 			const factory = ExportEngineFactory.getInstance();
 			const canvas = createMockCanvas();
 			const engine = await factory.createEngine(
@@ -365,6 +454,7 @@ describe("ExportEngineFactory", () => {
 			);
 
 			expect(engine).toBeDefined();
+			expect((engine as any).useFFmpegExport).toBe(true);
 		});
 
 		it("creates muxer engine for MUXER type", async () => {

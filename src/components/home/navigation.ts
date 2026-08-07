@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   CalendarDays,
   Clapperboard,
+  CreditCard,
   DatabaseZap,
   FolderKanban,
   Globe,
-  Images,
   Layers,
   Music2,
   Scissors,
@@ -27,6 +27,8 @@ export type SidebarNavItem = {
   icon: LucideIcon;
   isRoute?: boolean;
   path?: string;
+  /** Opens in a new tab instead of navigating in-app. */
+  externalUrl?: string;
   showBadge?: boolean;
 };
 
@@ -35,6 +37,11 @@ export type SidebarNavGroup = SidebarNavItem & {
   children: SidebarNavItem[];
   /** Rendered in place of children when the group has none. */
   emptyLabel?: string;
+  /**
+   * View selected when the group label is activated, for groups whose landing
+   * is a view rather than a route.
+   */
+  landingViewId?: string;
 };
 
 export type SidebarNavNode = SidebarNavItem | SidebarNavGroup;
@@ -52,6 +59,15 @@ export function isNavGroup(node: SidebarNavNode): node is SidebarNavGroup {
 }
 
 export const kanvasStudioPath = (studio: string) => `${appRoutes.kanvas}?studio=${studio}`;
+
+const KANVAS_STUDIO_PATH_PREFIX = `${appRoutes.kanvas}?studio=`;
+
+/** The studio a Kanvas nav item switches to, or null for routed entries (Lyrics). */
+export function kanvasStudioFromNavItem(item: SidebarNavItem): string | null {
+  if (!item.path?.startsWith(KANVAS_STUDIO_PATH_PREFIX)) return null;
+  const studio = item.path.slice(KANVAS_STUDIO_PATH_PREFIX.length);
+  return (KANVAS_STUDIO_ORDER as readonly string[]).includes(studio) ? studio : null;
+}
 
 const KANVAS_GROUP: SidebarNavGroup = {
   id: 'kanvas',
@@ -83,54 +99,65 @@ const CLIP_STUDIO_GROUP: SidebarNavGroup = {
   children: [
     { id: 'clipper', label: 'Clipper', icon: Scissors, isRoute: true, path: appRoutes.clipper, showBadge: true },
     { id: 'sourcify', label: 'Sourcify', icon: DatabaseZap, isRoute: true, path: appRoutes.sourcify, showBadge: true },
+    { id: 'postz', label: 'Postz', icon: CalendarDays, isRoute: true, path: appRoutes.postz },
   ],
 };
 
-export const FAVORITES_GROUP: SidebarNavGroup = {
-  id: 'favorites',
-  label: 'Favorites',
-  icon: Star,
+const STUDIO_GROUP: SidebarNavGroup = {
+  id: 'studio',
+  label: 'Studio',
+  icon: Sparkles,
   collapsible: true,
-  children: [],
-  emptyLabel: 'No favorites yet',
+  landingViewId: 'all',
+  children: [
+    { id: 'all', label: 'All Projects', icon: FolderKanban },
+    { id: 'shared', label: 'Shared with me', icon: Users },
+    { id: 'community', label: 'Community', icon: Globe },
+    { id: 'favorites', label: 'Favorites', icon: Star },
+    { id: 'aura', label: 'Aura', icon: Sparkles },
+  ],
 };
 
+const IP_MANAGEMENT_GROUP: SidebarNavGroup = {
+  id: 'ip-management',
+  label: 'IP Management',
+  icon: ShieldCheck,
+  collapsible: true,
+  isRoute: true,
+  path: appRoutes.ipVault,
+  children: [
+    { id: 'ip-vault', label: 'IP Vault', icon: ShieldCheck, isRoute: true, path: appRoutes.ipVault },
+  ],
+};
+
+const SETTINGS_GROUP: SidebarNavGroup = {
+  id: 'settings',
+  label: 'Settings',
+  icon: Settings,
+  collapsible: true,
+  isRoute: true,
+  path: appRoutes.settings.root,
+  children: [
+    { id: 'settings-billing', label: 'Billing', icon: CreditCard, isRoute: true, path: appRoutes.settings.billing },
+  ],
+};
+
+/** The five root groups of the Creator OS information architecture. */
 export const SIDEBAR_SECTIONS: SidebarNavSection[] = [
   {
-    id: 'studio',
-    label: 'Studio',
-    labelIcon: Sparkles,
-    accent: true,
+    id: 'main',
     items: [
-      { id: 'all', label: 'All Projects', icon: FolderKanban },
-      { id: 'shared', label: 'Shared with me', icon: Users },
-      { id: 'community', label: 'Community', icon: Globe },
-      FAVORITES_GROUP,
-      { id: 'aura', label: 'Aura', icon: Sparkles },
-    ],
-  },
-  {
-    id: 'kanvas',
-    items: [KANVAS_GROUP],
-  },
-  {
-    id: 'ip-management',
-    label: 'IP Management',
-    labelIcon: ShieldCheck,
-    items: [
-      { id: 'asset-store', label: 'Asset Store', icon: Images },
-      { id: 'ip-vault', label: 'WTR', icon: ShieldCheck, isRoute: true, path: appRoutes.ipVault },
-    ],
-  },
-  {
-    id: 'production',
-    items: [
+      STUDIO_GROUP,
+      KANVAS_GROUP,
+      IP_MANAGEMENT_GROUP,
       CLIP_STUDIO_GROUP,
-      { id: 'postz', label: 'Postz', icon: CalendarDays, isRoute: true, path: appRoutes.postz },
-      { id: 'settings', label: 'Settings', icon: Settings, isRoute: true, path: appRoutes.settings.billing },
+      SETTINGS_GROUP,
     ],
   },
 ];
+
+/** Kanvas studio entries, shared by every Kanvas surface. */
+export const KANVAS_NAV_ITEMS: SidebarNavItem[] = KANVAS_GROUP.children;
 
 const GROUP_ID_BY_CHILD_ID: Record<string, string> = Object.fromEntries(
   SIDEBAR_SECTIONS.flatMap((section) =>
@@ -146,8 +173,8 @@ export function getGroupIdForView(view: string): string | undefined {
 }
 
 /**
- * Open/closed state for collapsible groups. Favorites and the group owning the
- * active view are open unless the user explicitly collapsed them.
+ * Open/closed state for collapsible groups. The group owning the active view
+ * is open unless the user explicitly collapsed it.
  */
 export function useNavGroupState(activeView: string) {
   const activeGroupId = getGroupIdForView(activeView);
@@ -163,7 +190,7 @@ export function useNavGroupState(activeView: string) {
   }, [activeGroupId]);
 
   const isGroupOpen = useCallback(
-    (groupId: string) => overrides[groupId] ?? (groupId === FAVORITES_GROUP.id || groupId === activeGroupId),
+    (groupId: string) => overrides[groupId] ?? groupId === activeGroupId,
     [overrides, activeGroupId]
   );
 
@@ -171,13 +198,17 @@ export function useNavGroupState(activeView: string) {
     (groupId: string) => {
       setOverrides((current) => ({
         ...current,
-        [groupId]: !(current[groupId] ?? (groupId === FAVORITES_GROUP.id || groupId === activeGroupId)),
+        [groupId]: !(current[groupId] ?? groupId === activeGroupId),
       }));
     },
     [activeGroupId]
   );
 
-  return { isGroupOpen, toggleGroup };
+  const openGroup = useCallback((groupId: string) => {
+    setOverrides((current) => (current[groupId] === true ? current : { ...current, [groupId]: true }));
+  }, []);
+
+  return { isGroupOpen, toggleGroup, openGroup };
 }
 
 export type FloatingNavEntry =

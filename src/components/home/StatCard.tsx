@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { NumberTicker } from '@/components/ui/number-ticker';
 import { ShineBorder } from '@/components/ui/shine-border';
+import { DitherGradient } from '@/components/dither-kit';
+import { ditherBloom, ditherColors } from '@/lib/ditherTheme';
 
 interface StatCardProps {
   icon: ReactNode;
@@ -48,6 +50,15 @@ export const StatCard = ({
         className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
       />
       
+      {/* Dithered brand wash anchored to the card's base */}
+      <DitherGradient
+        from={ditherColors.primary}
+        direction="up"
+        bloom={ditherBloom.perf}
+        opacity={0.08}
+        className="pointer-events-none absolute inset-x-0 top-auto bottom-0 h-2/3 [mask-image:linear-gradient(to_top,black,transparent)]"
+      />
+
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-[rgba(249,115,22,0.03)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
       

@@ -13,6 +13,7 @@ import {
   Loader2,
   Plus,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
@@ -167,7 +168,7 @@ export const AssetsGalleryPanel: React.FC<AssetsGalleryPanelProps> = ({
     return true;
   });
 
-  const TYPE_ICONS: Record<AssetType, React.ElementType> = {
+  const TYPE_ICONS: Record<AssetType, LucideIcon> = {
     image: ImageIcon,
     video: Video,
     audio: Music,

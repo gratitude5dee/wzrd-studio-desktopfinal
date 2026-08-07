@@ -239,24 +239,38 @@ export function VideoStudioSection({
   };
 
   /* ── Sub-nav ── */
+  const SUB_TABS = [
+    { key: "create", label: "Create Video", shortLabel: "Create", icon: Film },
+    { key: "edit", label: "Edit Video", shortLabel: "Edit", icon: SlidersHorizontal },
+    { key: "motion", label: "Motion Control", shortLabel: "Motion", icon: Users },
+  ] as const;
+
   const subNav = (
     <div className="space-y-3">
       <div className="flex justify-center">
-        <div className="inline-flex items-center bg-kanvas-surface-2 rounded-full p-1 border border-kanvas-border-subtle">
-          {(["create", "edit", "motion"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "px-5 py-2 rounded-full text-sm font-medium transition-all duration-200",
-                activeTab === tab
-                  ? "bg-kanvas-surface-3 text-kanvas-accent shadow-[inset_0_0_12px_rgba(249,115,22,0.06)]"
-                  : "text-kanvas-text-muted hover:text-kanvas-text-secondary"
-              )}
-            >
-              {tab === "create" ? "Create Video" : tab === "edit" ? "Edit Video" : "Motion Control"}
-            </button>
-          ))}
+        <div role="tablist" aria-label="Video studio mode" className="inline-flex items-center bg-kanvas-surface-2 rounded-full p-1 border border-kanvas-border-subtle">
+          {SUB_TABS.map((tab) => {
+            const TabIcon = tab.icon;
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  "flex items-center gap-2 px-4 md:px-5 py-2 rounded-full text-sm font-medium transition-all duration-200",
+                  active
+                    ? "bg-kanvas-surface-3 text-kanvas-accent shadow-[inset_0_0_12px_rgba(249,115,22,0.06)]"
+                    : "text-kanvas-text-muted hover:text-kanvas-text-secondary"
+                )}
+              >
+                <TabIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className="flex items-center gap-4 text-[11px] text-kanvas-text-faint">
@@ -496,7 +510,7 @@ export function VideoStudioSection({
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {PRESET_GALLERY.map((preset, i) => (
               <div key={preset.title} className="group relative aspect-video rounded-kanvas-md bg-kanvas-surface-2 overflow-hidden cursor-pointer border border-kanvas-border-subtle hover:border-kanvas-accent-edge transition-colors">
                 <img
@@ -528,7 +542,7 @@ export function VideoStudioSection({
               <p className="text-sm font-semibold text-kanvas-text-primary">Recent Creations</p>
               <button className="text-[10px] font-bold uppercase tracking-widest text-kanvas-text-muted hover:text-kanvas-accent transition-colors">View All →</button>
             </div>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
               {recentResults.map((job) => {
                 const url = getJobPrimaryUrl(job);
                 if (!url) return null;
@@ -561,8 +575,8 @@ export function VideoStudioSection({
   /*  EDIT TAB                                                         */
   /* ================================================================ */
   const renderEditTab = () => (
-    <div className="flex gap-8">
-      <div className="w-[300px] shrink-0 space-y-5">
+    <div className="flex flex-col md:flex-row gap-6 md:gap-8">
+      <div className="w-full md:w-[300px] md:shrink-0 space-y-5">
         <div>
           <h2 className="font-kanvas-display text-2xl font-bold tracking-tight text-kanvas-text-primary">
             Edit Video
@@ -663,10 +677,10 @@ export function VideoStudioSection({
   /*  MOTION CONTROL TAB                                               */
   /* ================================================================ */
   const renderMotionTab = () => (
-    <div className="flex gap-8">
+    <div className="flex flex-col-reverse md:flex-row gap-6 md:gap-8">
       <div className="min-w-0 flex-1 space-y-10">
         <div>
-          <h1 className="font-kanvas-display text-5xl font-bold tracking-tighter text-kanvas-text-primary lg:text-6xl">
+          <h1 className="font-kanvas-display text-3xl md:text-5xl font-bold tracking-tighter text-kanvas-text-primary lg:text-6xl">
             RECREATE ANY <em className="not-italic text-kanvas-accent">MOTION</em><br />WITH YOUR IMAGE
           </h1>
           <p className="mt-4 max-w-2xl text-sm text-kanvas-text-muted">Our neural animation engine analyzes reference motion and re-creates it with your character or scene.</p>
@@ -724,7 +738,7 @@ export function VideoStudioSection({
         {wzrdTip("Select a motion reference from the library, then add your character image. The AI transfers motion while maintaining identity and proportions.")}
       </div>
 
-      <div className="w-[280px] shrink-0 space-y-5">
+      <div className="w-full md:w-[280px] md:shrink-0 space-y-5">
         <Dropzone label="Add Motion to Copy" hint="Drop reference video (3-30s)" icon={Video} uploading={uploading} onUpload={(f) => void onUpload(f, "image")} accept="video/*,image/*" aspectClass="aspect-video" />
         <Dropzone label="Add Your Character" hint="Drop character image" icon={ImagePlus} uploading={false} onUpload={(f) => void onUpload(f, "image")} aspectClass="aspect-square" />
 
@@ -773,9 +787,11 @@ export function VideoStudioSection({
   /* ================================================================ */
   return (
     <div className="fixed inset-0 top-[68px] bg-kanvas-bg z-20 overflow-y-auto px-4 py-4 md:p-8 pb-20 md:pb-8" style={{ scrollbarWidth: "none" }}>
-      {subNav}
-      <div className="mt-4 md:mt-6">
-        {activeTab === "edit" ? renderEditTab() : activeTab === "motion" ? renderMotionTab() : renderCreateTab()}
+      <div className="mx-auto max-w-[1600px]">
+        {subNav}
+        <div className="mt-4 md:mt-6">
+          {activeTab === "edit" ? renderEditTab() : activeTab === "motion" ? renderMotionTab() : renderCreateTab()}
+        </div>
       </div>
     </div>
   );

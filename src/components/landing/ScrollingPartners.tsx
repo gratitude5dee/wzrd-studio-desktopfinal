@@ -5,6 +5,7 @@ import humantechLogo from '@/assets/logos/humantech.svg';
 import elevenlabsLogo from '@/assets/logos/elevenlabs.png';
 import anthropicLogo from '@/assets/logos/anthropic.svg';
 import fiveDeeLogo from '@/assets/logos/5dee.svg';
+import { staticAssetUrl } from '@/lib/staticAsset';
 
 interface Logo {
   id: string;
@@ -14,17 +15,17 @@ interface Logo {
 }
 
 const logos: Logo[] = [
-  { id: '1', name: '5DEE Studios', image: fiveDeeLogo },
-  { id: '2', name: 'Anthropic', image: anthropicLogo },
-  { id: '4', name: 'ElevenLabs', image: elevenlabsLogo },
-  { id: '5', name: 'Story Protocol', image: storyLogo, height: 44 },
-  { id: '6', name: 'Human.tech', image: humantechLogo, height: 44 },
+  { id: '1', name: '5DEE Studios', image: staticAssetUrl(fiveDeeLogo) },
+  { id: '2', name: 'Anthropic', image: staticAssetUrl(anthropicLogo) },
+  { id: '4', name: 'ElevenLabs', image: staticAssetUrl(elevenlabsLogo) },
+  { id: '5', name: 'Story Protocol', image: staticAssetUrl(storyLogo), height: 44 },
+  { id: '6', name: 'Human.tech', image: staticAssetUrl(humantechLogo), height: 44 },
   { id: '7', name: 'Veo 3.1' },
   { id: '9', name: 'Seedream 2' },
   { id: '10', name: 'Seedance 2' },
   { id: '11', name: 'WAN 2.6' },
   { id: '12', name: 'Runway 4.5' },
-  { id: '13', name: 'thirdweb', image: thirdwebLogo },
+  { id: '13', name: 'thirdweb', image: staticAssetUrl(thirdwebLogo) },
 ];
 
 const DEFAULT_HEIGHT = 22;

@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { NodeProps, Position } from '@xyflow/react';
 import { Download, Play, FileText, Image as ImageIcon, Video, Music, Box, ExternalLink, Check } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { BaseNode } from './BaseNode';
 import { NodeStatusBadge } from '../status/NodeStatusBadge';
 import type { NodeStatus, Port, PortPosition } from '@/types/computeFlow';
@@ -21,7 +22,7 @@ interface OutputNodeData {
   outputs?: Port[];
 }
 
-const OUTPUT_TYPE_ICONS: Record<OutputType, React.ElementType> = {
+const OUTPUT_TYPE_ICONS: Record<OutputType, LucideIcon> = {
   image: ImageIcon,
   video: Video,
   audio: Music,

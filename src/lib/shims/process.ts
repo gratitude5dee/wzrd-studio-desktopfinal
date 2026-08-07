@@ -5,20 +5,12 @@
 //
 // We provide a tiny global `process` implementation so those references don't crash.
 
-/* eslint-disable no-var */
-declare global {
-  // `var` is intentional: this is a global provided at runtime.
-  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-  var process:
-    | {
-        env?: Record<string, string | undefined>;
-        cwd?: () => string;
-      }
-    | undefined;
-}
-/* eslint-enable no-var */
+type ProcessShim = {
+  env?: Record<string, string | undefined>;
+  cwd?: () => string;
+};
 
-const g = globalThis as unknown as { process?: any };
+const g = globalThis as unknown as { process?: ProcessShim };
 
 g.process ??= {};
 g.process.env ??= {};

@@ -18,7 +18,8 @@ import {
   toSlug,
   useCharacterCreationStore,
 } from '@/lib/stores/character-creation-store';
-import { createBlueprint } from '@/services/characterBlueprintService';
+import { createBlueprint, generateCharacterImage } from '@/services/characterBlueprintService';
+import { CHARACTER_PRESETS, takePresetStarter, type CharacterPreset } from './characterPresets';
 import { TraitGrid } from './TraitGrid';
 import {
   AGE_OPTIONS,
@@ -76,6 +77,9 @@ export function CharacterBuilder() {
   } = store;
 
   const [showStepNav, setShowStepNav] = useState(true);
+  const [starterPreset, setStarterPreset] = useState<CharacterPreset | null>(() => takePresetStarter());
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatingPortrait, setGeneratingPortrait] = useState(false);
 
   const promptFragment = useMemo(
     () => buildPromptFragment(draftTraits, draftFaceDetails, draftBodyDetails, draftStyleDetails),
@@ -83,6 +87,39 @@ export function CharacterBuilder() {
   );
 
   const currentStepIndex = BUILDER_STEPS.findIndex((s) => s.id === currentStep);
+
+  const starterImageUrl = generatedImageUrl ?? starterPreset?.imageUrl ?? null;
+
+  const handlePresetSelect = useCallback((preset: CharacterPreset) => {
+    if (starterPreset?.id === preset.id) {
+      setStarterPreset(null);
+      return;
+    }
+    updateDraftTraits(preset.traits);
+    updateDraftStyleDetails(preset.styleDetails);
+    setStarterPreset(preset);
+  }, [starterPreset, updateDraftTraits, updateDraftStyleDetails]);
+
+  const handleGeneratePortrait = useCallback(async () => {
+    if (!promptFragment.trim()) {
+      toast.error('Add some traits or style details first.');
+      return;
+    }
+    setGeneratingPortrait(true);
+    try {
+      const url = await generateCharacterImage(promptFragment);
+      if (url) {
+        setGeneratedImageUrl(url);
+        toast.success('Portrait generated.');
+      } else {
+        toast.error('Portrait generation did not return an image.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to generate portrait.');
+    } finally {
+      setGeneratingPortrait(false);
+    }
+  }, [promptFragment]);
   const isFirst = currentStepIndex === 0;
   const isLast = currentStepIndex === BUILDER_STEPS.length - 1;
 
@@ -104,6 +141,16 @@ export function CharacterBuilder() {
         bodyDetails: draftBodyDetails,
         styleDetails: draftStyleDetails,
         promptFragment,
+        imageUrl: starterImageUrl,
+        thumbnailUrl: starterImageUrl,
+        referenceImages: starterImageUrl
+          ? [{
+              imageUrl: starterImageUrl,
+              label: generatedImageUrl ? 'Generated portrait' : `Preset starter: ${starterPreset?.name}`,
+              generationRole: 'primary',
+              isPrimary: true,
+            }]
+          : [],
       });
 
       addBlueprint(blueprint);
@@ -123,6 +170,9 @@ export function CharacterBuilder() {
     draftBodyDetails,
     draftStyleDetails,
     promptFragment,
+    starterImageUrl,
+    generatedImageUrl,
+    starterPreset,
     setGenerating,
     addBlueprint,
     resetDraft,
@@ -245,7 +295,14 @@ export function CharacterBuilder() {
           </div>
         );
       case 'review':
-        return <ReviewPanel promptFragment={promptFragment} />;
+        return (
+          <ReviewPanel
+            promptFragment={promptFragment}
+            starterImageUrl={starterImageUrl}
+            generatingPortrait={generatingPortrait}
+            onGeneratePortrait={handleGeneratePortrait}
+          />
+        );
       default:
         return null;
     }
@@ -289,6 +346,40 @@ export function CharacterBuilder() {
         {draftName.trim() && (
           <p className="mt-1.5 text-xs text-zinc-500">
             @mention slug: <span className="text-lime-300/70">@{toSlug(draftName)}</span>
+          </p>
+        )}
+      </div>
+
+      {/* Preset starters */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">
+          Preset Starters
+        </label>
+        <div className="flex flex-wrap gap-3">
+          {CHARACTER_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => handlePresetSelect(preset)}
+              aria-label={`Use preset ${preset.name}`}
+              aria-pressed={starterPreset?.id === preset.id}
+              className={cn(
+                'group w-24 overflow-hidden rounded-xl border text-left transition-all',
+                starterPreset?.id === preset.id
+                  ? 'border-lime-300/60 shadow-[0_0_20px_rgba(163,230,53,0.15)]'
+                  : 'border-white/10 hover:border-white/25',
+              )}
+            >
+              <div className="aspect-square w-full bg-zinc-900">
+                <img src={preset.imageUrl} alt={preset.alt} className="h-full w-full object-cover" loading="lazy" />
+              </div>
+              <p className="truncate px-2 py-1.5 text-[10px] font-semibold text-zinc-300">{preset.name}</p>
+            </button>
+          ))}
+        </div>
+        {starterPreset && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Seeding from <span className="text-lime-300/70">{starterPreset.name}</span> — traits and style applied.
           </p>
         )}
       </div>
@@ -405,7 +496,17 @@ export function CharacterBuilder() {
 // ReviewPanel — Final summary before save
 // ---------------------------------------------------------------------------
 
-function ReviewPanel({ promptFragment }: { promptFragment: string }) {
+function ReviewPanel({
+  promptFragment,
+  starterImageUrl,
+  generatingPortrait,
+  onGeneratePortrait,
+}: {
+  promptFragment: string;
+  starterImageUrl: string | null;
+  generatingPortrait: boolean;
+  onGeneratePortrait: () => void;
+}) {
   const {
     draftName,
     draftKind,
@@ -491,6 +592,47 @@ function ReviewPanel({ promptFragment }: { promptFragment: string }) {
           <p className="text-sm leading-relaxed text-white">{promptFragment}</p>
         </div>
       )}
+
+      {/* Portrait preview + generation */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
+          Character Portrait
+        </p>
+        <div className="flex items-center gap-4">
+          <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-zinc-900">
+            {starterImageUrl ? (
+              <img src={starterImageUrl} alt="Character portrait" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-600">
+                No image
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onGeneratePortrait}
+              disabled={generatingPortrait}
+              className={cn(
+                'flex items-center gap-2 rounded-2xl border px-4 py-2 text-xs font-semibold transition-all',
+                generatingPortrait
+                  ? 'cursor-not-allowed border-lime-300/20 bg-lime-300/5 text-zinc-500'
+                  : 'border-lime-300/40 bg-lime-300/10 text-white hover:bg-lime-300/20',
+              )}
+            >
+              {generatingPortrait ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5 text-lime-300" />
+              )}
+              {starterImageUrl ? 'Regenerate Portrait' : 'Generate Portrait'}
+            </button>
+            <p className="text-[10px] text-zinc-500">
+              Uses your traits and style to generate a portrait. Preset starter images are used until you generate.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

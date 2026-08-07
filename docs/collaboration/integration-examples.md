@@ -9,7 +9,7 @@ This guide shows how to integrate the collaboration system into your existing pa
 ## 📄 Studio Page Integration
 
 ```tsx
-// src/pages/StudioPage.tsx
+// src/legacy-pages/StudioPage.tsx
 import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useRealtimeCollaboration } from "@/hooks/useCollaboration";
@@ -95,7 +95,7 @@ export const StudioPage = () => {
 ## 🎨 Editor Page Integration
 
 ```tsx
-// src/pages/EditorPage.tsx
+// src/legacy-pages/EditorPage.tsx
 import { useRealtimeCollaboration } from "@/hooks/useCollaboration";
 import { RemoteCursors } from "@/components/collaboration/RemoteCursor";
 import { useComments } from "@/hooks/useCollaboration";
@@ -146,7 +146,7 @@ export const EditorPage = () => {
 ## 🖼️ Kanvas Page Integration
 
 ```tsx
-// src/pages/KanvasPage.tsx
+// src/legacy-pages/KanvasPage.tsx
 import { useRealtimeCollaboration } from "@/hooks/useCollaboration";
 import { RemoteCursors } from "@/components/collaboration/RemoteCursor";
 import { collaborationService } from "@/services/collaborationService";
@@ -365,7 +365,7 @@ export const ActivityFeed: React.FC<{ projectId: string }> = ({ projectId }) => 
 ## 🔗 Share Link Access Page
 
 ```tsx
-// src/pages/ShareLinkAccessPage.tsx
+// src/legacy-pages/ShareLinkAccessPage.tsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { collaborationService } from "@/services/collaborationService";
@@ -468,7 +468,7 @@ export const ShareLinkAccessPage = () => {
 ## 📧 Accept Invitation Page
 
 ```tsx
-// src/pages/AcceptInvitationPage.tsx
+// src/legacy-pages/AcceptInvitationPage.tsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { collaborationService } from "@/services/collaborationService";

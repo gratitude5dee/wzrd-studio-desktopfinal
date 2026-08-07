@@ -13,6 +13,7 @@ import {
 	analyzeTimelineForExport,
 	type ExportAnalysis,
 } from "./export-analysis";
+import { useProjectStore } from "@qcut-app/stores/project-store";
 
 // Import extracted modules
 import type {
@@ -545,6 +546,7 @@ export class CLIExportEngine extends ExportEngine {
 			wordFilterSegments,
 			videoSources,
 			videoInput,
+			projectId: useProjectStore.getState().activeProject?.id,
 		});
 
 		logExportConfiguration(exportOptions, {

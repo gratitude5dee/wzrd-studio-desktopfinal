@@ -42,6 +42,7 @@ import type {
 	ProviderSubmitResult,
 } from "../ai-video/core/provider-types";
 import { estimateCreditCost } from "../credit-costs";
+import { readPublicEnv } from "@/lib/env";
 
 const IMAROUTER_API_BASE = "https://api.imarouter.com";
 const MISSING_CREDENTIALS_MESSAGE =
@@ -57,8 +58,7 @@ interface PendingDeduction {
 const pendingRelayDeductions = new Map<string, PendingDeduction>();
 
 async function getApiKey(): Promise<string | undefined> {
-	const envKey = (import.meta.env as Record<string, string | undefined>)
-		.VITE_IMAROUTER_API_KEY;
+	const envKey = readPublicEnv("IMAROUTER_API_KEY", ["VITE_IMAROUTER_API_KEY"]);
 	if (envKey) return envKey;
 	if (cachedKey) return cachedKey;
 

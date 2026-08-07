@@ -320,8 +320,8 @@ export default function ImageStudioSection({
       );
     }
     return (
-      <div className="px-12 py-8">
-        <div className="columns-2 md:columns-4 lg:columns-5 gap-4 space-y-4">
+      <div className="px-4 md:px-12 py-8">
+        <div className="columns-2 gap-4 space-y-4 md:columns-4 lg:columns-5">
           {displayJobs.map((job) => {
             const url = getJobPrimaryUrl(job);
             if (!url) return null;
@@ -643,7 +643,7 @@ export default function ImageStudioSection({
           {renderCarousel()}
           {/* Recent creations masonry */}
           {completedJobs.length > 0 && (
-            <div className="px-12 py-16">
+            <div className="px-4 md:px-12 py-16">
               <KanvasSectionHeader
                 className="mb-6"
                 eyebrow="Gallery"

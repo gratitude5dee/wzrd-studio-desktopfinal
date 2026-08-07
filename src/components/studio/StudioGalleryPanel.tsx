@@ -14,6 +14,7 @@ import {
   Wand2,
   Inbox,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import { Button } from '@/components/ui/button';
@@ -87,7 +88,7 @@ export const StudioGalleryPanel: React.FC<StudioGalleryPanelProps> = ({
     });
   }, [galleryItems, activeFilter]);
 
-  const filterTabs: { id: FilterTab; label: string; icon: React.ElementType }[] = [
+  const filterTabs: { id: FilterTab; label: string; icon: LucideIcon }[] = [
     { id: 'all', label: 'All', icon: Images },
     { id: 'images', label: 'Images', icon: ImageIcon },
     { id: 'videos', label: 'Videos', icon: Video },

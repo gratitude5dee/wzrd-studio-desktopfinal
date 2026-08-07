@@ -419,7 +419,51 @@ const transcriptionGraceful =
 	createGracefulNamespace<PlatformTranscriptionAPI>();
 const falGraceful = createGracefulNamespace<PlatformFalAPI>();
 const geminiChatGraceful = createGracefulNamespace<PlatformGeminiChatAPI>();
-const mediaImportGraceful = createGracefulNamespace<PlatformMediaImportAPI>();
+const mediaImportGraceful: PlatformMediaImportAPI = {
+	async import() {
+		return null as any;
+	},
+	async validateSymlink() {
+		return null as any;
+	},
+	async locateOriginal() {
+		return null;
+	},
+	async relinkMedia() {
+		return null as any;
+	},
+	async remove() {
+		return null as any;
+	},
+	async checkSymlinkSupport() {
+		return null as any;
+	},
+	async getMediaPath() {
+		return null as any;
+	},
+	async cacheRemoteMedia(options: {
+		url: string;
+		operationId: string;
+		name?: string;
+	}) {
+		try {
+			const response = await fetch(options.url, { mode: "cors" });
+			if (!response.ok) return null;
+			const blob = await response.blob();
+			const mediaUrl = URL.createObjectURL(blob);
+			const urlName = new URL(options.url).pathname.split("/").pop();
+			return {
+				name: options.name || urlName || options.operationId,
+				path: mediaUrl,
+				size: blob.size,
+				mimeType: blob.type || undefined,
+				mediaUrl,
+			};
+		} catch {
+			return null;
+		}
+	},
+};
 
 // ---------------------------------------------------------------------------
 // Desktop-only stubs (throw PlatformUnsupportedError)

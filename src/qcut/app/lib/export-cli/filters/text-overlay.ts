@@ -62,7 +62,7 @@ export function convertTextElementToDrawtext(
 	// Add font parameter (platform-specific)
 	if (fontConfig.useFontconfig) {
 		filterParams.push(`font='${fontConfig.fontName}'`);
-	} else {
+	} else if ("fontPath" in fontConfig) {
 		filterParams.push(`fontfile=${escapePathForFFmpeg(fontConfig.fontPath)}`);
 	}
 

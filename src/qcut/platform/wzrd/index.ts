@@ -25,6 +25,7 @@ export function createWzrdAdapter(): PlatformAPI {
 		return base;
 	}
 
+	const wzrdDesktop = (window as any).wzrdDesktop as any;
 	const wzrdQcut = (window as any).wzrdQcut as any;
 
 	const hasCapability = (cap: PlatformCapability) => {
@@ -59,6 +60,16 @@ export function createWzrdAdapter(): PlatformAPI {
 				} catch {
 					return null;
 				}
+			},
+		},
+
+		mediaImport: {
+			...base.mediaImport,
+			async cacheRemoteMedia(options) {
+				if (typeof wzrdDesktop?.cacheRemoteMedia !== "function") {
+					return base.mediaImport.cacheRemoteMedia?.(options) ?? null;
+				}
+				return await wzrdDesktop.cacheRemoteMedia(options);
 			},
 		},
 

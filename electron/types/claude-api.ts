@@ -52,6 +52,8 @@ export type EditorEvent = {
 	label?: string;
 	value?: string | number | boolean | null;
 	metadata?: Record<string, unknown>;
+	source?: string;
+	correlationId?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -70,11 +72,18 @@ export enum StateSection {
 
 export type EditorStateRequest = {
 	include?: Array<StateSection>;
+	media?: {
+		includeThumbnails?: boolean;
+		[key: string]: unknown;
+	};
+	[key: string]: unknown;
 };
 
 export type ProjectMetadataSnapshot = {
-	projectId: string | null;
+	projectId?: string | null;
+	id?: string;
 	name: string | null;
+	[key: string]: unknown;
 };
 
 export type TimelineSnapshotTrack = {
@@ -86,26 +95,53 @@ export type TimelineSnapshotTrack = {
 };
 
 export type MediaStateSnapshotItem = {
-	id: string;
-	name: string;
-	type: string;
+	id?: string;
+	name?: string;
+	type?: string;
 	url?: string;
 	localPath?: string;
+	[key: string]: unknown;
 };
 
 export type ModalSnapshotItem = {
-	id: string;
-	type: string;
-	open: boolean;
+	id?: string;
+	type?: string;
+	open?: boolean;
+	[key: string]: unknown;
 };
 
 export type BlockerSnapshotItem = {
-	id: string;
-	reason: string;
+	id?: string;
+	reason?: string;
+	kind?: string;
+	[key: string]: unknown;
+};
+
+export type EditorStateSnapshotState = {
+	timeline?: {
+		tracks?: TimelineSnapshotTrack[];
+		selection?: unknown;
+		playhead?: unknown;
+		autoSave?: unknown;
+		history?: unknown;
+		[key: string]: unknown;
+	};
+	media?: {
+		items?: MediaStateSnapshotItem[];
+		counts?: Record<string, number>;
+		isLoading?: boolean;
+		hasInitialized?: boolean;
+		[key: string]: unknown;
+	};
+	editor?: Record<string, unknown>;
+	project?: Record<string, unknown>;
+	[key: string]: unknown;
 };
 
 export type EditorStateSnapshot = {
 	version: number;
+	timestamp?: number;
+	state: EditorStateSnapshotState;
 	project?: ProjectMetadataSnapshot;
 	timeline?: {
 		tracks: TimelineSnapshotTrack[];
@@ -120,6 +156,7 @@ export type EditorStateSnapshot = {
 		blockers?: BlockerSnapshotItem[];
 	};
 	meta?: Record<string, unknown>;
+	[key: string]: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -153,11 +190,149 @@ export interface ClaudeElement {
 	sourceId?: string;
 	sourceName?: string;
 	mediaId?: string;
+	trackId?: string;
+	name?: string;
 	content?: string;
+	text?: string;
+	language?: string;
 	markdownContent?: string;
 	style?: Record<string, unknown>;
 	props?: Record<string, unknown>;
 	effects?: string[];
 	trimStart?: number;
 	trimEnd?: number;
+	x?: number;
+	y?: number;
+	width?: number;
+	height?: number;
+	rotation?: number;
+	opacity?: number;
+	backgroundColor?: string;
+	textColor?: string;
+	stickerId?: string;
+	componentId?: string;
+	componentPath?: string;
+	folderPath?: string;
+	[key: string]: unknown;
 }
+
+export type ClaudeTrackElement = ClaudeElement;
+export type ClaudeMediaElement = ClaudeElement;
+export type ClaudeTextElement = ClaudeElement;
+export type ClaudeCaptionElement = ClaudeElement;
+export type ClaudeMarkdownElement = ClaudeElement;
+export type ClaudeRemotionElement = ClaudeElement;
+export type ClaudeStickerElement = ClaudeElement;
+
+export type ClaudeBatchAddElementRequest = Partial<ClaudeElement> & {
+	trackId: string;
+	type: string;
+	startTime: number;
+	duration: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchResultItem = {
+	index: number;
+	success: boolean;
+	elementId?: string;
+	error?: string;
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchAddResponse = {
+	added: ClaudeBatchResultItem[];
+	failedCount: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchUpdateItemRequest = {
+	elementId: string;
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchUpdateResponse = {
+	updatedCount: number;
+	failedCount: number;
+	results: ClaudeBatchResultItem[];
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchDeleteItemRequest = {
+	trackId: string;
+	elementId: string;
+	[key: string]: unknown;
+};
+
+export type ClaudeBatchDeleteResponse = {
+	deletedCount: number;
+	failedCount: number;
+	results: ClaudeBatchResultItem[];
+	[key: string]: unknown;
+};
+
+export type ClaudeArrangeRequest = {
+	trackId: string;
+	mode?: "manual" | "spaced" | string;
+	order?: string[];
+	startOffset?: number;
+	gap?: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeArrangeResponse = {
+	arranged: Array<{ elementId: string; newStartTime: number }>;
+	[key: string]: unknown;
+};
+
+export type ClaudeMoveRequest = {
+	elementId: string;
+	targetTrackId?: string;
+	startTime?: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeSelectionItem = {
+	trackId?: string;
+	elementId: string;
+	[key: string]: unknown;
+};
+
+export type ClaudeRangeDeleteRequest = {
+	trackId?: string;
+	startTime: number;
+	endTime: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeRangeDeleteResponse = {
+	deletedCount: number;
+	[key: string]: unknown;
+};
+
+export type ClaudeSplitResponse = {
+	success: boolean;
+	[key: string]: unknown;
+};
+
+export type BatchCutResponse = {
+	success: boolean;
+	[key: string]: unknown;
+};
+
+export type MediaFile = {
+	id: string;
+	name: string;
+	type?: string;
+	path?: string;
+	url?: string;
+	size?: number;
+	[key: string]: unknown;
+};
+
+export type ProjectSettings = Record<string, unknown>;
+export type ProjectStats = Record<string, unknown>;
+export type ExportPreset = Record<string, unknown>;
+export type ExportRecommendation = Record<string, unknown>;
+export type ErrorReport = Record<string, unknown>;
+export type DiagnosticResult = Record<string, unknown>;

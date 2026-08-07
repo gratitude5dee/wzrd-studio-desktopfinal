@@ -99,7 +99,7 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
 
   const style = getLyricStyle(lyricStyleId);
   const lines = captionsToLines(captions);
-  const segments = buildSegments(backgroundClips, cutMarkers, durationMs);
+  const segments = buildSegments(backgroundClips, noCuts ? [] : cutMarkers, durationMs);
 
   // ── Preload all video clips ──
   const clipSegments: ClipSegment[] = [];

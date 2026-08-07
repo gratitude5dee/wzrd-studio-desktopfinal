@@ -1,7 +1,10 @@
 function bytesToHex(bytes: ArrayBuffer): string {
-  return [...new Uint8Array(bytes)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  const view = new Uint8Array(bytes);
+  let hex = '';
+  for (let index = 0; index < view.length; index += 1) {
+    hex += view[index].toString(16).padStart(2, '0');
+  }
+  return hex;
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

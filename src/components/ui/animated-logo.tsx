@@ -33,17 +33,28 @@ export function AnimatedLogo({
   useEffect(() => {
     if (!autoplay) return;
 
+    let isMounted = true;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, ms);
+        timeouts.push(timeout);
+      });
+
     const startAnimation = async () => {
       // Wait for delay
       if (delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await wait(delay);
+        if (!isMounted) return;
       }
 
       // Stage 1: Particle Formation
       setAnimationStage('particles');
       
       // Stage 2: Digital Materialization
-      setTimeout(() => {
+      const materializationTimeout = setTimeout(() => {
+        if (!isMounted) return;
         setAnimationStage('materialization');
         logoControls.start({
           opacity: [0, 0.3, 1],
@@ -60,9 +71,11 @@ export function AnimatedLogo({
           }
         });
       }, 800);
+      timeouts.push(materializationTimeout);
 
       // Stage 3: Brand Identity Reveal
-      setTimeout(() => {
+      const completeTimeout = setTimeout(() => {
+        if (!isMounted) return;
         setAnimationStage('complete');
         if (showVersion) {
           badgeControls.start({
@@ -77,9 +90,17 @@ export function AnimatedLogo({
           });
         }
       }, 1600);
+      timeouts.push(completeTimeout);
     };
 
     startAnimation();
+
+    return () => {
+      isMounted = false;
+      timeouts.forEach(clearTimeout);
+      logoControls.stop();
+      badgeControls.stop();
+    };
   }, [autoplay, delay, logoControls, badgeControls, showVersion]);
 
   // Particle animation variants

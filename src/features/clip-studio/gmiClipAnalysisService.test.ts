@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeVideoWithGmiGemini, buildGmiClipAnalysisMessages } from './gmiClipAnalysisService';
+import {
+  analyzeVideoWithGmiGemini,
+  buildGmiClipAnalysisMessages,
+  hasRequiredAnalysisSourceInfo,
+  MISSING_ANALYSIS_SOURCE_INFO_MESSAGE,
+} from './gmiClipAnalysisService';
 import { DEFAULT_GMI_GEMINI_SETTINGS } from './settings';
 import type { GmiClipAnalysisInput } from './types';
 
@@ -24,6 +29,36 @@ const input: GmiClipAnalysisInput = {
 };
 
 describe('GMI clip analysis service', () => {
+  it('requires a positive duration or a YouTube URL before analysis', async () => {
+    expect(hasRequiredAnalysisSourceInfo(input.source)).toBe(true);
+    expect(
+      hasRequiredAnalysisSourceInfo({ ...input.source, durationSeconds: undefined, url: 'https://youtu.be/demo' }),
+    ).toBe(true);
+    expect(
+      hasRequiredAnalysisSourceInfo({ ...input.source, durationSeconds: undefined, url: 'https://example.com/video' }),
+    ).toBe(false);
+    expect(hasRequiredAnalysisSourceInfo({ ...input.source, durationSeconds: Number.NaN })).toBe(false);
+    expect(hasRequiredAnalysisSourceInfo({ ...input.source, durationSeconds: 0 })).toBe(false);
+
+    await expect(
+      analyzeVideoWithGmiGemini(
+        { ...input, source: { ...input.source, durationSeconds: undefined } },
+        { invokeFunction: async () => ({ data: {}, error: null }) } as never,
+      ),
+    ).rejects.toThrow(MISSING_ANALYSIS_SOURCE_INFO_MESSAGE);
+  });
+
+  it('sends sourceMeta.youtubeUrl for YouTube sources', () => {
+    const messages = buildGmiClipAnalysisMessages({
+      ...input,
+      source: { ...input.source, type: 'youtube', url: 'https://youtu.be/demo', durationSeconds: undefined },
+    });
+    const serialized = JSON.stringify(messages);
+
+    expect(serialized).toContain('youtubeUrl');
+    expect(serialized).toContain('https://youtu.be/demo');
+  });
+
   it('uses the editable viral finder prompt as the system message', () => {
     const customPrompt = 'Find only explosive crowd moments and keep every answer as JSON.';
     const messages = buildGmiClipAnalysisMessages({

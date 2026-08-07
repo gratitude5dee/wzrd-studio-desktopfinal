@@ -64,6 +64,46 @@ function captionGroupToLine(words: LyricCaption[]): CaptionLine {
   };
 }
 
+/**
+ * Re-base captions onto the render timeline. Template lyric words are stored
+ * relative to the source audio, so words are shifted by the selection start
+ * and clamped to the [0, durationMs] window; words fully outside are dropped.
+ */
+export function offsetCaptionsToSelection(
+  captions: LyricCaption[],
+  selectionStartMs: number,
+  durationMs: number
+): LyricCaption[] {
+  if (durationMs <= 0) return [];
+  return captions
+    .map((caption) => ({
+      ...caption,
+      startMs: caption.startMs - selectionStartMs,
+      endMs: caption.endMs - selectionStartMs,
+    }))
+    .filter((caption) => caption.endMs > 0 && caption.startMs < durationMs)
+    .map((caption) => ({
+      ...caption,
+      startMs: Math.max(0, caption.startMs),
+      endMs: Math.min(durationMs, caption.endMs),
+    }));
+}
+
+/**
+ * Re-base cut markers onto the render timeline: shift by the selection start
+ * and drop markers that fall outside the (0, durationMs) window.
+ */
+export function offsetCutMarkersToSelection(
+  markers: CutMarker[],
+  selectionStartMs: number,
+  durationMs: number
+): CutMarker[] {
+  if (durationMs <= 0) return [];
+  return markers
+    .map((marker) => ({ ...marker, timestampMs: marker.timestampMs - selectionStartMs }))
+    .filter((marker) => marker.timestampMs > 0 && marker.timestampMs < durationMs);
+}
+
 export function snapMarkerMs(valueMs: number): number {
   return Math.max(0, Math.round(valueMs / SNAP_MS) * SNAP_MS);
 }
@@ -191,6 +231,35 @@ export function moveTimelineClip(
     if (s.slotIndex === fromIndex) return { ...s, clipId: toClip };
     if (s.slotIndex === toIndex) return { ...s, clipId: fromClip };
     return s;
+  });
+}
+
+/** One auto-generated remix variant: a seed plus a fully-populated slot layout. */
+export interface RemixVersion {
+  seed: number;
+  slots: RemixTimelineSlot[];
+}
+
+/**
+ * Deterministically generate `count` remix variants. Each variant shuffles
+ * the footage library with a distinct seed and fills every timeline slot.
+ */
+export function generateRemixVersions(
+  assets: FootageAsset[],
+  durationMs: number,
+  cutMarkers: Array<{ timestampMs: number }> = [],
+  count = 10,
+  baseSeed = 1
+): RemixVersion[] {
+  if (assets.length === 0 || durationMs <= 0 || count <= 0) return [];
+  return Array.from({ length: count }, (_, i) => {
+    const seed = baseSeed + i * 7919;
+    const shuffled = seededShuffle(assets, seed);
+    const slots = buildRemixTimelineSlots(durationMs, cutMarkers).map((slot, idx) => ({
+      ...slot,
+      clipId: shuffled[idx % shuffled.length]?.id ?? null,
+    }));
+    return { seed, slots };
   });
 }
 

@@ -10,7 +10,7 @@ WZRD’s `/projects/:projectId/editor` route now mounts the vendored **QCut** ed
 ## Architecture
 
 ### Key entry points
-- `src/pages/EditorPage.tsx`: host route entry; mounts `<QCutEditor/>` or legacy editor when `?legacy=1`.
+- `src/legacy-pages/EditorPage.tsx`: host route entry; mounts `<QCutEditor/>` or legacy editor when `?legacy=1`.
 - `src/qcut/QCutEditor.tsx`: QCut editor mount + platform init + project loading.
 
 ### Platform adapter

@@ -38,7 +38,7 @@ export function useCustomCursor() {
   const [cursorState, setCursorState] = useState<CursorState>(initialState);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMoveTimeRef = useRef<number>(Date.now());
-  const requestRef = useRef<number>(); // For requestAnimationFrame
+  const requestRef = useRef<number | undefined>(undefined); // For requestAnimationFrame
 
   // --- Mouse Move Handler ---
   const handleMouseMove = useCallback((event: MouseEvent) => {

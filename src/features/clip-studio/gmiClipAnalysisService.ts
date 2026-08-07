@@ -3,6 +3,7 @@ import { DEFAULT_CLIPPER_ANALYSIS_PROMPT } from './settings';
 import { enforceUniqueClipCandidates } from './candidateUniqueness';
 import { gmiGeminiClient, textPart, type SupabaseFunctionInvoker } from './gmiGeminiClient';
 import { normalizeClipCandidates } from './validation';
+import { isLikelyYoutubeUrl } from './youtubeImport';
 import type { AnalysisContextPackage, ClipCandidateSeed, GmiClipAnalysisInput, GmiClipAnalysisResult, YouTubeViewmapPeak } from './types';
 
 function compactTranscript(input: GmiClipAnalysisInput): string {
@@ -25,6 +26,18 @@ function compactTranscript(input: GmiClipAnalysisInput): string {
     .join('\n');
 }
 
+export function resolveAnalysisYoutubeUrl(source: GmiClipAnalysisInput['source']): string | undefined {
+  return source.url && isLikelyYoutubeUrl(source.url) ? source.url : undefined;
+}
+
+export function hasRequiredAnalysisSourceInfo(source: GmiClipAnalysisInput['source']): boolean {
+  const duration = source.durationSeconds;
+  return (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) || Boolean(resolveAnalysisYoutubeUrl(source));
+}
+
+export const MISSING_ANALYSIS_SOURCE_INFO_MESSAGE =
+  'Viral analysis needs the video duration or a YouTube source URL. Wait for the video preview to load its metadata, or import the source from a YouTube link, then run analysis again.';
+
 function sourceMetadata(input: GmiClipAnalysisInput) {
   const source = input.source;
   return {
@@ -34,6 +47,10 @@ function sourceMetadata(input: GmiClipAnalysisInput) {
     url: source.url,
     creator: source.creator,
     durationSeconds: source.durationSeconds,
+    durationSec: source.durationSeconds,
+    sourceMeta: {
+      youtubeUrl: resolveAnalysisYoutubeUrl(source),
+    },
     width: source.width,
     height: source.height,
     fps: source.fps,
@@ -180,6 +197,9 @@ export async function analyzeVideoWithGmiGemini(
   input: GmiClipAnalysisInput,
   options: { fetchImpl?: typeof fetch; invokeFunction?: SupabaseFunctionInvoker } = {},
 ): Promise<GmiClipAnalysisResult> {
+  if (!hasRequiredAnalysisSourceInfo(input.source)) {
+    throw new Error(MISSING_ANALYSIS_SOURCE_INFO_MESSAGE);
+  }
   const messages = buildGmiClipAnalysisMessages(input);
   const response = await gmiGeminiClient(input.settings, messages, options);
   const payload = response.json && typeof response.json === 'object' ? (response.json as Record<string, unknown>) : {};

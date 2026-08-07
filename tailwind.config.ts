@@ -34,7 +34,23 @@ export default {
 				'text-secondary': 'hsl(var(--text-secondary))',
 				'text-tertiary': 'hsl(var(--text-tertiary))',
 				'text-disabled': 'hsl(var(--text-disabled))',
+				// WZRD Creator OS semantic contract. New surfaces use these.
+				'surface-canvas': 'hsl(var(--surface-canvas))',
+				'surface-raised': 'hsl(var(--surface-raised))',
+				'accent-air': 'hsl(var(--accent-air))',
+				'accent-ember': 'hsl(var(--accent-ember))',
+				'accent-mineral': 'hsl(var(--accent-mineral))',
+				'text-muted': 'hsl(var(--text-muted))',
+				'line-subtle': 'hsl(var(--line-subtle))',
+				'status-success': 'hsl(var(--status-success))',
+				'status-warning': 'hsl(var(--status-warning))',
+				'status-danger': 'hsl(var(--status-danger))',
+				focus: 'hsl(var(--focus))',
+				// Reserved: defined for future work, no surface consumes them yet.
+				'accent-water': 'hsl(var(--accent-water))',
+				'accent-fire': 'hsl(var(--accent-fire))',
 				'accent-teal': 'hsl(var(--accent-teal))',
+				/** @deprecated misnamed - resolves to coral #ff6b4a. Use accent-ember. */
 				'accent-purple': 'hsl(var(--accent-purple))',
 				'accent-amber': 'hsl(var(--accent-amber))',
 				'accent-orange': 'hsl(var(--accent-orange))',
@@ -109,6 +125,7 @@ export default {
 				'refined-pink': 'hsl(var(--refined-pink))',
 				'surface-dark': 'hsl(var(--surface-dark))',
 				'surface-light': 'hsl(var(--surface-light))',
+				/** @deprecated legacy Odyssey palette; do not use in new surfaces. */
 				cosmic: {
 					void: 'hsl(var(--cosmic-void))',
 					nebula: 'hsl(var(--nebula-purple))',
@@ -118,6 +135,7 @@ export default {
 					temporal: 'hsl(var(--temporal-orange))',
 					shadow: 'hsl(var(--void-shadow))'
 				},
+				/** @deprecated legacy glassmorphism palette; do not use in new surfaces. */
 				glass: {
 					primary: 'hsl(var(--glass-primary))',
 					secondary: 'hsl(var(--glass-secondary))',
@@ -170,7 +188,22 @@ export default {
 				// Kanvas design system display face
 				'kanvas-display': ['var(--kanvas-font-display)', 'Inter', 'system-ui', 'sans-serif'],
 			},
+			spacing: {
+				// WZRD spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48.
+				'wzrd-1': '0.25rem',
+				'wzrd-2': '0.5rem',
+				'wzrd-3': '0.75rem',
+				'wzrd-4': '1rem',
+				'wzrd-6': '1.5rem',
+				'wzrd-8': '2rem',
+				'wzrd-12': '3rem',
+			},
 			borderRadius: {
+				// WZRD radii: 6 controls / 10 cards / 14 panels; pill for chips only.
+				'wzrd-sm': '6px',
+				'wzrd-md': '10px',
+				'wzrd-lg': '14px',
+				'wzrd-chip': '999px',
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)',
@@ -191,6 +224,10 @@ export default {
 			},
 			transitionDuration: {
 				'std': '300ms',
+				// WZRD motion: controls 160-240ms, reveals ~250ms, transform/opacity only.
+				'wzrd-control': '180ms',
+				'wzrd-control-slow': '240ms',
+				'wzrd-reveal': '250ms',
 			},
 			transitionTimingFunction: {
 				'std': 'cubic-bezier(0.4, 0, 0.2, 1)',

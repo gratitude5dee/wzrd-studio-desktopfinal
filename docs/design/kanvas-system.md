@@ -94,10 +94,26 @@ primitive with an optional prop rather than forking it.
   (`PixelLayer`, `PixelCard`) with a `wzrd` orange variant; renders null under
   `prefers-reduced-motion` and on `(hover: none)` pointers.
 
+## Navigation
+
+Kanvas does not own a navigation list. `KANVAS_NAV_ITEMS` in
+`src/components/home/navigation.ts` (the Kanvas group of the five-group Creator
+OS IA) is the single source of truth for the studio entries plus Lyrics, and is
+consumed by `KanvasSidebar`, the Kanvas header pill slider, and the mobile
+bottom nav. `kanvasStudioFromNavItem(item)` maps an entry back to its
+`KanvasStudio`, or returns null for routed entries such as Lyrics.
+
+The Kanvas rail follows the shell's sidebar behaviour contract: persistent (not
+hover-revealed), keyboard-operable, `focus-visible` rings from `--focus`,
+`aria-current="page"` on the active entry, and 44px targets. See
+[DESIGN.md](../../DESIGN.md) for the semantic token contract those surfaces
+share.
+
 ## Rules of engagement
 
-- Never hardcode studio names; use labels from `src/features/kanvas/helpers.ts`
-  (`KANVAS_STUDIO_META`).
+- Never hardcode studio names or studio lists; use `KANVAS_NAV_ITEMS` for
+  navigation and labels from `src/features/kanvas/helpers.ts`
+  (`KANVAS_STUDIO_META`) elsewhere.
 - Do not modify `src/features/kanvas/**`, `src/integrations/**`, generation
   payloads, or EditCanvas math from design-system work.
 - Token sweep: `src/components/kanvas` and `src/pages/Kanvas*` must contain no

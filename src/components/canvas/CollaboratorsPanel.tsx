@@ -3,6 +3,8 @@ import { Users, UserPlus, X, Crown, Eye, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DitherAvatar } from '@/components/dither-kit';
+import { ditherBloom } from '@/lib/ditherTheme';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import type { PresenceUser } from '@/hooks/usePresence';
@@ -88,8 +90,12 @@ export function CollaboratorsPanel({ projectId, onlineUsers }: CollaboratorsPane
                   <div className="relative">
                     <Avatar className="w-8 h-8">
                       <AvatarImage src={user.avatarUrl} />
-                      <AvatarFallback>
-                        {user.username.slice(0, 2).toUpperCase()}
+                      <AvatarFallback className="bg-transparent">
+                        <DitherAvatar
+                          name={user.username}
+                          bloom={ditherBloom.dashboard}
+                          className="h-full w-full"
+                        />
                       </AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />

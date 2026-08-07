@@ -1,6 +1,8 @@
 
 import { Trophy, Award } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DitherAvatar } from "@/components/dither-kit";
+import { ditherBloom } from "@/lib/ditherTheme";
 
 interface JudgeProps {
   name: string;
@@ -19,7 +21,13 @@ const JudgeCard = ({ name, company, role, imageUrl, color }: JudgeProps) => {
       <div className={`relative mb-4 p-1 rounded-full ring-2 ${ringColor} bg-[#191F2E]`}>
         <Avatar className="h-24 w-24">
           <AvatarImage src={imageUrl} alt={name} />
-          <AvatarFallback>{name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+          <AvatarFallback className="bg-transparent">
+            <DitherAvatar
+              name={name}
+              bloom={ditherBloom.marketing}
+              className="h-full w-full"
+            />
+          </AvatarFallback>
         </Avatar>
       </div>
       <h3 className="text-xl font-semibold text-white mb-1">{name}</h3>

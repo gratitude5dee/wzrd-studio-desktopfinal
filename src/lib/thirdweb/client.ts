@@ -1,11 +1,17 @@
 import { createThirdwebClient } from "thirdweb";
 import type { ThirdwebClient } from "thirdweb";
 import { supabase } from "@/integrations/supabase/client";
+import { readPublicEnv } from "@/lib/env";
 
 let thirdwebClientInstance: ThirdwebClient | null = null;
 let clientIdPromise: Promise<string> | null = null;
 
 async function fetchClientId(): Promise<string> {
+  const envClientId = readPublicEnv("THIRDWEB_CLIENT_ID", ["VITE_THIRDWEB_CLIENT_ID"]);
+  if (envClientId) {
+    return envClientId;
+  }
+
   const { data, error } = await supabase.functions.invoke('get-thirdweb-config');
   
   if (error || !data?.clientId) {

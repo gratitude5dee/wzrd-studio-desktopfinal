@@ -39,28 +39,28 @@ const lazyWithRetry = <T extends { default: React.ComponentType<Record<string, n
     }
   });
 
-const Home = lazyWithRetry(() => import('@/pages/Home'));
-const SettingsBillingPage = lazyWithRetry(() => import('@/pages/SettingsBillingPage'));
-const SettingsBillingDocsPage = lazyWithRetry(() => import('@/pages/SettingsBillingDocsPage'));
-const ProjectSetup = lazyWithRetry(() => import('@/pages/ProjectSetup'));
-const StudioPage = lazyWithRetry(() => import('@/pages/StudioPage'));
-const LearningStudioPage = lazyWithRetry(() => import('@/pages/LearningStudioPage'));
-const StoryboardPage = lazyWithRetry(() => import('@/pages/StoryboardPage'));
-const ProjectObservabilityPage = lazyWithRetry(() => import('@/pages/ProjectObservabilityPage'));
-const DirectorCutPage = lazyWithRetry(() => import('@/pages/DirectorCutPage'));
-const EditorPage = lazyWithRetry(() => import('@/pages/EditorPage'));
-const Storyboard = lazyWithRetry(() => import('@/pages/Storyboard'));
-const ShotEditor = lazyWithRetry(() => import('@/pages/ShotEditor'));
-const KanvasPage = lazyWithRetry(() => import('@/pages/KanvasPage'));
-const KanvasLyrics = lazyWithRetry(() => import('@/pages/KanvasLyrics'));
-const KanvasRemix = lazyWithRetry(() => import('@/pages/KanvasRemix'));
-const KanvasRemixJobs = lazyWithRetry(() => import('@/pages/KanvasRemixJobs'));
-const Clipper = lazyWithRetry(() => import('@/pages/Clipper'));
-const Sourcify = lazyWithRetry(() => import('@/pages/Sourcify'));
-const Postz = lazyWithRetry(() => import('@/pages/Postz'));
-const AssetsPage = lazyWithRetry(() => import('@/pages/AssetsPage'));
-const IPVault = lazyWithRetry(() => import('@/pages/IPVault'));
-const NotFound = lazyWithRetry(() => import('@/pages/NotFound'));
+const Home = lazyWithRetry(() => import('@/legacy-pages/Home'));
+const SettingsPage = lazyWithRetry(() => import('@/legacy-pages/SettingsPage'));
+const SettingsBillingPage = lazyWithRetry(() => import('@/legacy-pages/SettingsBillingPage'));
+const SettingsBillingDocsPage = lazyWithRetry(() => import('@/legacy-pages/SettingsBillingDocsPage'));
+const ProjectSetup = lazyWithRetry(() => import('@/legacy-pages/ProjectSetup'));
+const StudioPage = lazyWithRetry(() => import('@/legacy-pages/StudioPage'));
+const LearningStudioPage = lazyWithRetry(() => import('@/legacy-pages/LearningStudioPage'));
+const StoryboardPage = lazyWithRetry(() => import('@/legacy-pages/StoryboardPage'));
+const ProjectObservabilityPage = lazyWithRetry(() => import('@/legacy-pages/ProjectObservabilityPage'));
+const DirectorCutPage = lazyWithRetry(() => import('@/legacy-pages/DirectorCutPage'));
+const EditorPage = lazyWithRetry(() => import('@/legacy-pages/EditorPage'));
+const Storyboard = lazyWithRetry(() => import('@/legacy-pages/Storyboard'));
+const ShotEditor = lazyWithRetry(() => import('@/legacy-pages/ShotEditor'));
+const KanvasPage = lazyWithRetry(() => import('@/legacy-pages/KanvasPage'));
+const KanvasLyrics = lazyWithRetry(() => import('@/legacy-pages/KanvasLyrics'));
+const KanvasRemix = lazyWithRetry(() => import('@/legacy-pages/KanvasRemix'));
+const KanvasRemixJobs = lazyWithRetry(() => import('@/legacy-pages/KanvasRemixJobs'));
+const Clipper = lazyWithRetry(() => import('@/legacy-pages/Clipper'));
+const Sourcify = lazyWithRetry(() => import('@/legacy-pages/Sourcify'));
+const Postz = lazyWithRetry(() => import('@/legacy-pages/Postz'));
+const IPVault = lazyWithRetry(() => import('@/legacy-pages/IPVault'));
+const NotFound = lazyWithRetry(() => import('@/legacy-pages/NotFound'));
 
 const CursorWrapper = () => {
   const { isLoading } = useCursorLoading();
@@ -137,10 +137,8 @@ const AuthenticatedRoutes = () => {
                     path="/projects/:projectId/studio"
                     element={<ProtectedRoute><ProtectedProjectRoute><StudioPage /></ProtectedProjectRoute></ProtectedRoute>}
                   />
-                  <Route
-                    path={appRoutes.assets}
-                    element={<ProtectedRoute><AssetsPage /></ProtectedRoute>}
-                  />
+                  {/* Legacy Asset Store surface folded into IP Vault. */}
+                  <Route path={appRoutes.assets} element={<Navigate to={appRoutes.ipVault} replace />} />
                   <Route
                     path={appRoutes.ipVault}
                     element={<ProtectedRoute><IPVault /></ProtectedRoute>}
@@ -179,6 +177,10 @@ const AuthenticatedRoutes = () => {
                   <Route
                     path="/credits"
                     element={<ProtectedRoute><Navigate to={appRoutes.settings.billing} replace /></ProtectedRoute>}
+                  />
+                  <Route
+                    path={appRoutes.settings.root}
+                    element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}
                   />
                   <Route
                     path={appRoutes.settings.billing}

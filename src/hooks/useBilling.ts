@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDesktopBillingReturnUrls, getDesktopDeepLink, openExternalUrl } from '@/lib/desktop';
+import { readPublicFlag } from '@/lib/env';
 
 export type BillingMode = 'disabled' | 'test_only' | 'live';
 
@@ -76,6 +77,19 @@ function parseCatalogResponse(data: unknown): BillingCatalogResponse | null {
   };
 }
 
+function createTestBillingCatalog(): BillingCatalogResponse {
+  return {
+    success: true,
+    billing_mode: 'test_only',
+    checkout_available: false,
+    plans: [],
+    credit_packs: [],
+    subscription: null,
+    wallet: null,
+    plan: null,
+  };
+}
+
 export function useBilling() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -88,6 +102,13 @@ export function useBilling() {
       setCatalog(null);
       setIsLoading(false);
       return null;
+    }
+
+    if (readPublicFlag('BYPASS_AUTH_FOR_TESTS', ['VITE_BYPASS_AUTH_FOR_TESTS'])) {
+      const testCatalog = createTestBillingCatalog();
+      setCatalog(testCatalog);
+      setIsLoading(false);
+      return testCatalog;
     }
 
     setIsLoading(true);

@@ -66,6 +66,7 @@ export default defineConfig(({ mode }) => ({
     exclude: [
       "**/node_modules/**",
       "**/dist/**",
+      "e2e/**",
       "tests/e2e/**",
       "tests/performance.spec.ts",
       "playwright.config.test.ts",

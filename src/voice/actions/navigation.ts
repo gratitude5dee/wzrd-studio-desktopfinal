@@ -1,4 +1,4 @@
-import { appRoutes } from '@/lib/routes';
+import { appRoutes, WTR_EXTERNAL_URL } from '@/lib/routes';
 
 import type {
   VoiceActionRegistration,
@@ -133,8 +133,8 @@ export function createGlobalVoiceActions(options: GlobalVoiceActionOptions): Voi
       name: 'open_ip_vault',
       scope: 'global',
       handler: () => {
-        options.navigate(appRoutes.ipVault);
-        return completed('IP Vault is open.', { path: appRoutes.ipVault });
+        window.open(WTR_EXTERNAL_URL, '_blank', 'noopener,noreferrer');
+        return completed('WTR is open in a new tab.', { url: WTR_EXTERNAL_URL });
       },
     },
     {

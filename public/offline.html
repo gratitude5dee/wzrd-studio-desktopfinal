@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05070a" />
+    <link rel="icon" href="/brand/wzrd-icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/wzrd-icon-180.png" sizes="180x180" />
+    <title>WZRD is offline</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #05070a;
+        color: #f2f5fb;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        align-items: center;
+        background:
+          radial-gradient(circle at 50% 28%, rgba(47, 108, 199, 0.24), transparent 34rem),
+          #05070a;
+        display: flex;
+        margin: 0;
+        min-height: 100dvh;
+        padding: max(2rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(2rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+      }
+
+      main {
+        margin: 0 auto;
+        max-width: 32rem;
+        text-align: center;
+      }
+
+      .mark {
+        color: #84b8ff;
+        font-family: Georgia, serif;
+        font-size: clamp(5rem, 22vw, 9rem);
+        font-weight: 700;
+        letter-spacing: -0.16em;
+        line-height: 0.8;
+        margin: 0 0 2.3rem -0.16em;
+        text-shadow: 0 0 2rem rgba(80, 145, 255, 0.42);
+      }
+
+      p { color: #aab8d3; font-size: 0.9rem; line-height: 1.65; margin: 0; }
+      .eyebrow { color: #84b8ff; font-size: 0.7rem; letter-spacing: 0.2em; margin-bottom: 1.25rem; }
+      h1 { font-family: Georgia, serif; font-size: clamp(2.35rem, 10vw, 4.5rem); font-weight: 400; letter-spacing: -0.05em; line-height: 0.94; margin: 0 0 1rem; }
+
+      button {
+        background: #dbe9ff;
+        border: 0;
+        border-radius: 999px;
+        color: #08101f;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        margin-top: 2rem;
+        min-height: 3rem;
+        padding: 0.85rem 1.25rem;
+        text-transform: uppercase;
+      }
+
+      button:focus-visible { outline: 2px solid #84b8ff; outline-offset: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">W</div>
+      <p class="eyebrow">WZRD · OFFLINE</p>
+      <h1>Signal held.</h1>
+      <p>Reconnect to continue into the Creator OS.</p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
