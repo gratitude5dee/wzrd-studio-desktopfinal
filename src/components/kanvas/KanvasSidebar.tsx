@@ -47,6 +47,10 @@ export function KanvasSidebar({ activeStudio, onStudioChange }: KanvasSidebarPro
   };
 
   const handleItemClick = useCallback((item: SidebarNavItem) => {
+    if (item.externalUrl) {
+      window.open(item.externalUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const studio = kanvasStudioFromNavItem(item);
     if (studio) {
       onStudioChange(studio as KanvasStudio);
