@@ -135,7 +135,7 @@ export function CanvasStage({
 
   return (
     <div
-      className="relative flex flex-1 touch-none items-center justify-center overflow-hidden p-3"
+      className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden p-3"
       {...zoom.handlers}
       onPointerDown={(event) => {
         activePointers.current.add(event.pointerId);

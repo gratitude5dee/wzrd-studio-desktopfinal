@@ -18,7 +18,7 @@ export function MiniShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-wzrd-abyss text-wzrd-mist antialiased">
+    <div className="flex h-[100dvh] flex-col bg-wzrd-abyss text-wzrd-mist antialiased">
       {children}
     </div>
   );
