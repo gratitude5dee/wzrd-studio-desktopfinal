@@ -9,19 +9,21 @@ import { fetchArtifact, type ArtifactRecord } from '../lib/mini-api';
 export function ArtifactPage() {
   const { artifactId } = useParams<{ artifactId: string }>();
   const [artifact, setArtifact] = useState<ArtifactRecord | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     if (!artifactId) return undefined;
     let cancelled = false;
     setArtifact(null);
-    setError(null);
+    setNotFound(false);
     fetchArtifact(artifactId)
       .then((record) => {
         if (!cancelled) setArtifact(record);
       })
-      .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Artifact unavailable');
+      .catch(() => {
+        // Ids are unlisted, so a lookup failure and a bad id are the same thing
+        // to the visitor either way.
+        if (!cancelled) setNotFound(true);
       });
     return () => {
       cancelled = true;
@@ -33,8 +35,10 @@ export function ArtifactPage() {
       <MiniHeader title="Artifact" />
 
       <main className="flex flex-1 items-center justify-center p-4">
-        {error ? (
-          <p className="text-[13px] text-wzrd-muted-text">{error}</p>
+        {notFound ? (
+          <p className="text-[13px] text-wzrd-muted-text">
+            This artifact isn&rsquo;t available.
+          </p>
         ) : artifact ? (
           <img
             src={artifact.url}

@@ -97,6 +97,28 @@ describe('largestInnerRect', () => {
     expect(large.height).toBeLessThan(small.height);
   });
 
+  it('keeps the source aspect, so zooming by it leaves no empty corners', () => {
+    for (const [width, height] of [
+      [1200, 800],
+      [675, 380],
+      [800, 800],
+      [400, 900],
+    ]) {
+      for (const degrees of [1, 8, 15, -12]) {
+        const angle = (degrees * Math.PI) / 180;
+        const inner = largestInnerRect(width, height, angle);
+        expect(inner.width / inner.height).toBeCloseTo(width / height);
+
+        // The zoomed source, rotated, must still cover the original frame.
+        const zoom = width / inner.width;
+        const sin = Math.abs(Math.sin(angle));
+        const cos = Math.abs(Math.cos(angle));
+        expect(zoom * width).toBeGreaterThanOrEqual(width * cos + height * sin - 1e-9);
+        expect(zoom * height).toBeGreaterThanOrEqual(width * sin + height * cos - 1e-9);
+      }
+    }
+  });
+
   it('is symmetric in the sign of the angle', () => {
     const positive = largestInnerRect(1000, 800, (7 * Math.PI) / 180);
     const negative = largestInnerRect(1000, 800, (-7 * Math.PI) / 180);

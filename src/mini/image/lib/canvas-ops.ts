@@ -155,8 +155,12 @@ export function straighten(source: Bitmap, degrees: number): HTMLCanvasElement {
 }
 
 /**
- * Largest same-aspect axis-aligned rectangle that fits inside a `width`×`height`
- * rectangle rotated by `angle` radians.
+ * Largest axis-aligned rectangle of the *same aspect* as `width`×`height` that
+ * fits inside that rectangle rotated by `angle` radians.
+ *
+ * A w×h rectangle rotated by θ is contained in an axis-aligned box exactly when
+ * that box covers its bounding box, `(w·cos + h·sin) × (w·sin + h·cos)`. Holding
+ * the aspect fixed, both constraints reduce to a single shrink factor.
  */
 export function largestInnerRect(
   width: number,
@@ -165,22 +169,8 @@ export function largestInnerRect(
 ): { width: number; height: number } {
   const sin = Math.abs(Math.sin(angle));
   const cos = Math.abs(Math.cos(angle));
-  const widthIsLonger = width >= height;
-  const longSide = widthIsLonger ? width : height;
-  const shortSide = widthIsLonger ? height : width;
-
-  if (shortSide <= 2 * sin * cos * longSide || Math.abs(sin - cos) < 1e-10) {
-    const half = 0.5 * shortSide;
-    const a = sin < cos ? half / cos : half / sin;
-    const b = sin < cos ? half / sin : half / cos;
-    return widthIsLonger ? { width: b, height: a } : { width: a, height: b };
-  }
-
-  const cos2a = cos * cos - sin * sin;
-  return {
-    width: (width * cos - height * sin) / cos2a,
-    height: (height * cos - width * sin) / cos2a,
-  };
+  const shrink = cos + Math.max(width / height, height / width) * sin;
+  return { width: width / shrink, height: height / shrink };
 }
 
 function clamp01(value: number): number {

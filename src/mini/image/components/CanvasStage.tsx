@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
-import type { CropRect } from '../lib/canvas-ops';
+import { largestInnerRect, type CropRect } from '../lib/canvas-ops';
 import { resizeRect, type CropHandleId } from '../lib/crop-rect';
 import type { ImageSnapshot } from '../state/useImageEditor';
 
@@ -39,6 +39,26 @@ export function CanvasStage({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState<CropHandleId | null>(null);
   const dragOrigin = useRef<{ x: number; y: number; rect: CropRect } | null>(null);
+
+  // Mirrors the zoom `straighten()` applies, so preview and result agree.
+  const straightenZoom = useMemo(() => {
+    if (!snapshot || !straightenDegrees) return 1;
+    const angle = (straightenDegrees * Math.PI) / 180;
+    return snapshot.width / largestInnerRect(snapshot.width, snapshot.height, angle).width;
+  }, [snapshot, straightenDegrees]);
+
+  const cropRectStyle = useMemo(
+    () =>
+      cropRect
+        ? {
+            left: `${cropRect.x * 100}%`,
+            top: `${cropRect.y * 100}%`,
+            width: `${cropRect.width * 100}%`,
+            height: `${cropRect.height * 100}%`,
+          }
+        : undefined,
+    [cropRect]
+  );
 
   const toNormalized = useCallback((event: PointerEvent | React.PointerEvent) => {
     const frame = frameRef.current;
@@ -125,30 +145,38 @@ export function CanvasStage({
         className="relative max-h-full max-w-full"
         style={{ aspectRatio: `${snapshot.width} / ${snapshot.height}` }}
       >
-        <img
-          src={snapshot.url}
-          alt="Working image"
-          className="h-full w-full select-none object-contain"
-          style={{
-            transform: straightenDegrees ? `rotate(${straightenDegrees}deg)` : undefined,
-            transition: 'transform var(--wzrd-duration-fast) var(--wzrd-ease-standard)',
-          }}
-          draggable={false}
-        />
+        {/* Clipped so the preview shows the same zoomed-in framing as the applied result. */}
+        <div className="h-full w-full overflow-hidden">
+          <img
+            src={snapshot.url}
+            alt="Working image"
+            className="h-full w-full select-none object-contain"
+            style={{
+              transform: straightenDegrees
+                ? `rotate(${straightenDegrees}deg) scale(${straightenZoom})`
+                : undefined,
+              transition: 'transform var(--wzrd-duration-fast) var(--wzrd-ease-standard)',
+            }}
+            draggable={false}
+          />
+        </div>
 
         {cropRect && (
-          <div className="absolute inset-0 overflow-hidden" onPointerDown={startDrag('move')}>
+          <div className="absolute inset-0" onPointerDown={startDrag('move')}>
+            {/* The scrim is a huge outward shadow, so it needs its own clip; the
+             * handle layer must stay unclipped or edge-flush handles get halved. */}
+            <div className="absolute inset-0 overflow-hidden">
+              <div
+                className="absolute shadow-[0_0_0_9999px_rgba(5,7,11,0.62)]"
+                style={cropRectStyle}
+              />
+            </div>
             <div
               className={cn(
-                'absolute touch-none border border-wzrd-mist/90 shadow-[0_0_0_9999px_rgba(5,7,11,0.62)]',
+                'absolute touch-none border border-wzrd-mist/90',
                 dragging && 'border-wzrd-blue'
               )}
-              style={{
-                left: `${cropRect.x * 100}%`,
-                top: `${cropRect.y * 100}%`,
-                width: `${cropRect.width * 100}%`,
-                height: `${cropRect.height * 100}%`,
-              }}
+              style={cropRectStyle}
             >
               {(['nw', 'ne', 'sw', 'se'] as const).map((handle) => (
                 <span
