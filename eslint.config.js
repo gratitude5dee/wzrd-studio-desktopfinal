@@ -49,6 +49,28 @@ export default tseslint.config(
     },
   },
 
+  // Mini-apps may reuse the pure-TS QCut domain modules, but nothing else from
+  // the quarantine (no app components, no platform adapters).
+  {
+    files: ["src/mini/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            "@qcut-app/*",
+            "@qcut/platform-core",
+            "@qcut/platform-web",
+            "src/qcut/app/*",
+            "src/qcut/platform/*",
+            "@/qcut/app/*",
+            "@/qcut/platform/*",
+          ],
+        },
+      ],
+    },
+  },
+
   // Inside `src/qcut/**`, enforce zod3 usage and relax lint rules for vendored code.
   {
     files: ["src/qcut/**/*.{ts,tsx}"],

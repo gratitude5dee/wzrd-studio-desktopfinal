@@ -1,1 +1,6 @@
 project_id = "ixkkrousepsiorwlaycp"
+
+# The Image Editor mini-app is zero-auth: artifacts are unlisted and reads are
+# authorized by knowing the id, so this function must accept anonymous callers.
+[functions.mini-artifacts]
+verify_jwt = false

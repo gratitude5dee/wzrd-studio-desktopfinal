@@ -175,7 +175,33 @@ export default {
 					'accent-soft': 'hsl(var(--kanvas-accent-soft))',
 					'accent-edge': 'hsl(var(--kanvas-accent-edge))',
 					'accent-contrast': 'hsl(var(--kanvas-accent-contrast))'
+				},
+				// WZRD brand palette (parent spec §4.2) — used by the mini-app surfaces.
+				wzrd: {
+					abyss: 'var(--wzrd-abyss)',
+					ink: 'var(--wzrd-ink)',
+					deep: 'var(--wzrd-deep)',
+					blue: 'var(--wzrd-blue)',
+					steel: 'var(--wzrd-steel)',
+					chrome: 'var(--wzrd-chrome)',
+					mist: 'var(--wzrd-mist)',
+					paper: 'var(--wzrd-paper)',
+					hairline: 'var(--wzrd-hairline)',
+					'hairline-strong': 'var(--wzrd-hairline-strong)',
+					'muted-text': 'var(--wzrd-muted-text)'
 				}
+			},
+			transitionDuration: {
+				'wzrd-instant': 'var(--wzrd-duration-instant)',
+				'wzrd-fast': 'var(--wzrd-duration-fast)',
+				'wzrd-base': 'var(--wzrd-duration-base)',
+				'wzrd-slow': 'var(--wzrd-duration-slow)'
+			},
+			transitionTimingFunction: {
+				'wzrd-standard': 'var(--wzrd-ease-standard)',
+				'wzrd-decelerate': 'var(--wzrd-ease-decelerate)',
+				'wzrd-accelerate': 'var(--wzrd-ease-accelerate)',
+				'wzrd-spring': 'var(--wzrd-ease-spring)'
 			},
 			fontFamily: {
 				display: ['var(--font-display)', 'Inter', 'system-ui', 'sans-serif'],
