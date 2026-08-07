@@ -8,6 +8,14 @@
  * For Phase 1+2 we keep this API surface so AI model handlers can compile.
  */
 
-export async function enforceCreditRequirement(_args: unknown): Promise<void> {
-	// no-op
+export type CreditRequirementResult = {
+	allowed: boolean;
+	reason?: string;
+	requiredCredits?: number;
+};
+
+export async function enforceCreditRequirement(
+	_args: unknown
+): Promise<CreditRequirementResult> {
+	return { allowed: true };
 }

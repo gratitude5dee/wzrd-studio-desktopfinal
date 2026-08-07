@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Film, Pencil, Sparkles } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useExportStore } from "@qcut-app/stores/export-store";
 import { useText2ImageStore } from "@qcut-app/stores/ai/text2image-store";
 import type { TProject } from "@qcut-app/types/project";
@@ -37,7 +38,7 @@ export function RecentActivity({ projects }: RecentActivityProps) {
 
 	const items = useMemo(() => {
 		const result: Array<{
-			icon: React.ElementType;
+			icon: LucideIcon;
 			text: string;
 			key: string;
 		}> = [];

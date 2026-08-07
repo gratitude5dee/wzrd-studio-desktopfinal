@@ -1,5 +1,6 @@
 import React from 'react';
 import { Type, Image, Video, BookOpen, Layers, Rows3, Wand2, Music, Box, Globe2, Scissors, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useSmartBlockSuggestions } from '@/hooks/useSmartBlockSuggestions';
@@ -28,7 +29,7 @@ const blockTypes = [
   { type: 'imageEdit' as const, label: 'Layer Editor', icon: Layers, shortcut: 'E' },
 ];
 
-const actionIconByMedia: Record<string, React.ElementType> = {
+const actionIconByMedia: Record<string, LucideIcon> = {
   text: Type,
   image: Image,
   video: Video,

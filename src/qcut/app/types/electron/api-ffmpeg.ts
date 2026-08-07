@@ -2,12 +2,17 @@
  * FFmpeg export operations sub-interface for ElectronAPI.
  */
 
-import type { StickerSource } from "../../../../../electron/ffmpeg-handler";
-import type { FFmpegHealthResult } from "../../../../../electron/ffmpeg/types";
 import type {
 	VideoSourceInput,
 	AudioFileInput,
 } from "../../lib/export/export-engine-cli";
+import type { StickerSourceForFilter } from "../../lib/export-cli/types";
+
+type FFmpegHealthResult = {
+	available: boolean;
+	version?: string;
+	error?: string;
+};
 
 export interface ElectronFFmpegOps {
 	ffmpeg: {
@@ -36,7 +41,7 @@ export interface ElectronFFmpegOps {
 			filterChain?: string;
 			textFilterChain?: string;
 			stickerFilterChain?: string;
-			stickerSources?: StickerSource[];
+			stickerSources?: StickerSourceForFilter[];
 			duration?: number;
 			audioFiles?: AudioFileInput[];
 			useDirectCopy?: boolean;

@@ -5,7 +5,7 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 
-const Login = lazy(() => import('@/pages/Login'));
+const Login = lazy(() => import('@/legacy-pages/Login'));
 
 const LoginRoute = () => {
   return (

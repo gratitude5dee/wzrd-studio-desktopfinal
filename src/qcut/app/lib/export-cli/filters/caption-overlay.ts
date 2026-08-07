@@ -54,7 +54,7 @@ export function convertCaptionElementToDrawtext(
 	// Font
 	if (fontConfig.useFontconfig) {
 		filterParams.push(`font='${fontConfig.fontName}'`);
-	} else {
+	} else if ("fontPath" in fontConfig) {
 		filterParams.push(`fontfile=${escapePathForFFmpeg(fontConfig.fontPath)}`);
 	}
 

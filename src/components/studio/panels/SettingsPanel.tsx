@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -28,7 +29,7 @@ interface SettingsPanelProps {
 
 interface ModelSelectorProps {
   label: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   models: Array<{ id: string; name: string; provider: string; speed?: string; badge?: string; category?: string; workflowType?: string }>;
   selectedId: string;
   onSelect: (id: string) => void;

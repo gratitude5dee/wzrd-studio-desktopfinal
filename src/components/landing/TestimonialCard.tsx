@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
+import { DitherAvatar } from '@/components/dither-kit';
+import { ditherBloom } from '@/lib/ditherTheme';
 import { PixelLayer } from '@/components/effects/PixelLayer';
 
 interface TestimonialCardProps {
@@ -24,24 +26,6 @@ export const TestimonialCard = ({ quote, author, handle, featured = false, delay
     }
   };
 
-  // Generate avatar with initials
-  const initials = author
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase();
-
-  const avatarColors = [
-    'from-purple-500 to-pink-500',
-    'from-blue-500 to-cyan-500',
-    'from-orange-500 to-amber-500',
-    'from-orange-500 to-red-500',
-    'from-violet-500 to-purple-500',
-    'from-orange-400 to-amber-500',
-  ];
-  
-  const colorIndex = author.charCodeAt(0) % avatarColors.length;
-
   return (
     <motion.div
       initial="hidden"
@@ -54,9 +38,11 @@ export const TestimonialCard = ({ quote, author, handle, featured = false, delay
         <PixelLayer variant="wzrd" />
         {/* User info */}
         <div className="flex items-center gap-3 mb-4">
-          <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${avatarColors[colorIndex]} flex items-center justify-center text-white font-bold`}>
-            {initials}
-          </div>
+          <DitherAvatar
+            name={author}
+            bloom={ditherBloom.marketing}
+            className="w-12 h-12 shrink-0 rounded-full overflow-hidden"
+          />
           <div>
             <p className="font-semibold text-white">{author}</p>
             <p className="text-sm text-white/50">{handle}</p>

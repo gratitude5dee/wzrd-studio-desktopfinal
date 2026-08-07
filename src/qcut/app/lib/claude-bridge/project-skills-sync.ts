@@ -1,4 +1,4 @@
-import { platform } from "@qcut/platform-core";
+import { platform, PlatformCapability } from "@qcut/platform-core";
 
 interface SyncProjectSkillsForClaudeInput {
 	projectId: string;
@@ -16,7 +16,15 @@ export function syncProjectSkillsForClaude({
 	projectId,
 }: SyncProjectSkillsForClaudeInput): void {
 	try {
-		const syncForClaude = platform().skills?.syncForClaude;
+		const currentPlatform = platform();
+		if (
+			typeof currentPlatform.hasCapability === "function" &&
+			!currentPlatform.hasCapability(PlatformCapability.Skills)
+		) {
+			return;
+		}
+
+		const syncForClaude = currentPlatform.skills?.syncForClaude;
 		if (!syncForClaude) {
 			return;
 		}

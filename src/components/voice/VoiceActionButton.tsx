@@ -1,5 +1,6 @@
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
+import type { KeyboardEvent, PointerEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -64,8 +65,22 @@ export function VoiceActionButton({
     void onPressEnd();
   }, [onPressEnd, pressed, isActive, onDisconnect]);
 
+  const handlePointerDown = useCallback(
+    (_event: PointerEvent<HTMLButtonElement>) => {
+      start('pointer');
+    },
+    [start],
+  );
+
+  const handlePointerEnd = useCallback(
+    (_event: PointerEvent<HTMLButtonElement>) => {
+      stop();
+    },
+    [stop],
+  );
+
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    (event: KeyboardEvent<HTMLButtonElement>) => {
       if (event.key !== ' ' && event.key !== 'Enter') return;
       event.preventDefault();
       start('keyboard');
@@ -74,7 +89,7 @@ export function VoiceActionButton({
   );
 
   const handleKeyUp = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    (event: KeyboardEvent<HTMLButtonElement>) => {
       if (event.key !== ' ' && event.key !== 'Enter') return;
       event.preventDefault();
       stop();
@@ -102,10 +117,10 @@ export function VoiceActionButton({
         type="button"
         aria-label={isActive ? 'Hold to speak, tap to disconnect' : 'Hold to speak'}
         disabled={disabled}
-        onPointerDown={start}
-        onPointerUp={stop}
-        onPointerCancel={stop}
-        onPointerLeave={stop}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onPointerLeave={handlePointerEnd}
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         className={cn(

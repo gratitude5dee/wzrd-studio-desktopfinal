@@ -64,25 +64,29 @@ function renderMobileDrawer() {
   );
 }
 
-const PRIMARY_NAV_LABELS = [
+const TOP_LEVEL_NAV_LABELS = [
+  'Studio',
+  'Kanvas',
+  'IP Management',
+  'Clip Studio',
+  'Settings',
+];
+
+const toggle = (label: string) => screen.getByRole('button', { name: `Toggle ${label} section` });
+
+const STUDIO_CHILD_LABELS = [
   'All Projects',
   'Shared with me',
   'Community',
   'Favorites',
   'Aura',
-  'Kanvas',
-  'Asset Store',
-  'WTR',
-  'Clip Studio',
-  'Postz',
-  'Settings',
 ];
 
-function getPrimaryNavLabels() {
+function getNavLabels(labels: string[]) {
   return screen
     .getAllByRole('button')
     .map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '')
-    .filter((label) => PRIMARY_NAV_LABELS.includes(label));
+    .filter((label) => labels.includes(label));
 }
 
 describe('home navigation structure', () => {
@@ -104,39 +108,79 @@ describe('home navigation structure', () => {
     });
   });
 
-  it('renders the grouped desktop sidebar structure and navigates from its entries', () => {
+  it('renders exactly the five root groups', () => {
     renderDesktopSidebar();
 
-    expect(getPrimaryNavLabels()).toEqual(PRIMARY_NAV_LABELS);
+    expect(getNavLabels(TOP_LEVEL_NAV_LABELS)).toEqual(TOP_LEVEL_NAV_LABELS);
+    expect(screen.getAllByRole('button', { name: /^Toggle .* section$/ })).toHaveLength(
+      TOP_LEVEL_NAV_LABELS.length,
+    );
+    // Studio owns the active 'all' view, so its subtabs are expanded by default.
+    expect(getNavLabels(STUDIO_CHILD_LABELS)).toEqual(STUDIO_CHILD_LABELS);
+    expect(screen.queryByRole('button', { name: 'Asset Store' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'WTR' })).toBeNull();
+  });
+
+  it('navigates from group children', () => {
+    renderDesktopSidebar();
 
     // Kanvas children are only rendered once the group is expanded.
     expect(screen.queryByRole('button', { name: 'Cinema Studio' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Kanvas' }));
+    fireEvent.click(toggle('Kanvas'));
     fireEvent.click(screen.getByRole('button', { name: 'Cinema Studio' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/kanvas');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clip Studio' }));
+    fireEvent.click(toggle('Clip Studio'));
     fireEvent.click(screen.getByRole('button', { name: 'Sourcify' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/sourcify');
 
+    // Postz now lives under Clip Studio.
     fireEvent.click(screen.getByRole('button', { name: 'Postz' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/postz');
 
-    fireEvent.click(screen.getByRole('button', { name: 'WTR' }));
+    // IP Management holds IP Vault only.
+    expect(screen.queryByRole('button', { name: 'IP Vault' })).toBeNull();
+    fireEvent.click(toggle('IP Management'));
+    fireEvent.click(screen.getByRole('button', { name: 'IP Vault' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(toggle('Settings'));
+    fireEvent.click(screen.getByRole('button', { name: 'Billing' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/billing');
   });
 
-  it('keeps Favorites expanded by default with its empty state', () => {
+  it('navigates to the group landing from the root label', () => {
     renderDesktopSidebar();
 
-    expect(screen.getByText('No favorites yet')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Favorites' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/settings');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Favorites' }));
-    expect(screen.getByRole('button', { name: 'Favorites' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'IP Management' }));
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');
+  });
+
+  it('marks the active child with aria-current', () => {
+    render(
+      <MemoryRouter initialEntries={['/sourcify']}>
+        <SidebarProvider>
+          <Sidebar activeView="sourcify" onViewChange={vi.fn()} />
+        </SidebarProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Sourcify' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Clipper' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('collapses and re-expands the Studio group', () => {
+    renderDesktopSidebar();
+
+    expect(toggle('Studio')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle('Studio'));
+    expect(toggle('Studio')).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(toggle('Studio'));
+    expect(screen.getByRole('button', { name: 'Favorites' })).toBeInTheDocument();
   });
 
   it('expands the group owning the active view so the active child stays visible', () => {
@@ -148,9 +192,10 @@ describe('home navigation structure', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: 'Clip Studio' })).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle('Clip Studio')).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: 'Sourcify' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Kanvas' })).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle('Kanvas')).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle('Studio')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('preserves Clip Studio and Postz nav nodes when active view changes', () => {
@@ -164,7 +209,6 @@ describe('home navigation structure', () => {
     );
 
     const clipStudioButton = screen.getByRole('button', { name: 'Clip Studio' });
-    const postzButton = screen.getByRole('button', { name: 'Postz' });
 
     rerender(
       <MemoryRouter initialEntries={['/home']}>
@@ -175,7 +219,7 @@ describe('home navigation structure', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Clip Studio' })).toBe(clipStudioButton);
-    expect(screen.getByRole('button', { name: 'Postz' })).toBe(postzButton);
+    expect(screen.getByRole('button', { name: 'Postz' })).toBeInTheDocument();
 
     rerender(
       <MemoryRouter initialEntries={['/home']}>
@@ -186,31 +230,34 @@ describe('home navigation structure', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Clip Studio' })).toBe(clipStudioButton);
-    expect(screen.getByRole('button', { name: 'Postz' })).toBe(postzButton);
+    expect(screen.getByRole('button', { name: 'Postz' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('mirrors the grouped structure in the mobile drawer and navigates from it', () => {
     const firstRender = renderMobileDrawer();
 
-    expect(getPrimaryNavLabels()).toEqual(PRIMARY_NAV_LABELS);
+    expect(getNavLabels(TOP_LEVEL_NAV_LABELS)).toEqual(TOP_LEVEL_NAV_LABELS);
+    expect(screen.queryByRole('button', { name: 'Asset Store' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clip Studio' }));
+    fireEvent.click(toggle('Clip Studio'));
     fireEvent.click(screen.getByRole('button', { name: 'Sourcify' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/sourcify');
     firstRender.unmount();
 
     const secondRender = renderMobileDrawer();
+    fireEvent.click(toggle('Clip Studio'));
     fireEvent.click(screen.getByRole('button', { name: 'Postz' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/postz');
     secondRender.unmount();
 
     const thirdRender = renderMobileDrawer();
-    fireEvent.click(screen.getByRole('button', { name: 'WTR' }));
+    fireEvent.click(toggle('IP Management'));
+    fireEvent.click(screen.getByRole('button', { name: 'IP Vault' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');
     thirdRender.unmount();
 
     renderMobileDrawer();
-    fireEvent.click(screen.getByRole('button', { name: 'Kanvas' }));
+    fireEvent.click(toggle('Kanvas'));
     fireEvent.click(screen.getByRole('button', { name: 'Lyrics' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/kanvas/lyrics');
   });

@@ -3,14 +3,15 @@
 // - Allow playback of WZRD desktop protocol media URLs (wzrd://media/...).
 // - Allow Supabase CDN URLs (host derived from VITE_SUPABASE_URL).
 
+import { SUPABASE_URL } from "@/integrations/supabase/config";
+
 const CSP_ALLOWED_HOSTS = new Set(["fal.media", "v3.fal.media", "v3b.fal.media"]);
 
 function getSupabaseHostAllowlist(): Set<string> {
 	const allow = new Set<string>();
 	try {
-		const raw = (import.meta as any)?.env?.VITE_SUPABASE_URL;
-		if (typeof raw === "string" && raw.length > 0) {
-			allow.add(new URL(raw).hostname);
+		if (SUPABASE_URL.length > 0) {
+			allow.add(new URL(SUPABASE_URL).hostname);
 		}
 	} catch {
 		// ignore

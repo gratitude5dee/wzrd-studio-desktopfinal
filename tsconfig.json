@@ -1,7 +1,14 @@
 {
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "allowJs": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "noImplicitAny": false,
+    "noEmit": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
@@ -28,7 +35,8 @@
       ]
     },
     "skipLibCheck": true,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "target": "ES2022"
   },
   "files": [],
   "references": [
@@ -38,5 +46,19 @@
     {
       "path": "./tsconfig.node.json"
     }
+  ],
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/__tests_disabled__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "supabase/functions"
   ]
 }

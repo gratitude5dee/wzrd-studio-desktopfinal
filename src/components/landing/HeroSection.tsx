@@ -6,6 +6,8 @@ import ScrollingPartners from '@/components/landing/ScrollingPartners';
 import { SmartVideo } from '@/components/media/SmartVideo';
 import { heroVideo } from '@/lib/brandMedia';
 import { musicStyleRange } from '@/lib/musicPolishAssets';
+import { DitherGradient } from '@/components/dither-kit';
+import { ditherBloom, ditherColors } from '@/lib/ditherTheme';
 
 interface HeroSectionProps {
   headline?: string;
@@ -40,30 +42,39 @@ export function HeroSection({
   };
 
   return (
-    <section ref={sectionRef} className="relative min-h-[200vh] flex items-start justify-center overflow-hidden">
-      <div className="sticky top-0 min-h-screen w-full flex items-center justify-center">
+    <section ref={sectionRef} className="relative flex min-h-[145vh] items-start justify-center overflow-hidden">
+      <div className="sticky top-0 flex min-h-screen w-full items-center justify-center py-14 md:py-16">
       {/* Gradient accents */}
       <div
         className="absolute inset-0 -z-10"
         style={{
           background: `
-            radial-gradient(ellipse 70% 50% at 50% -10%, rgba(255,107,74,0.15), transparent 70%),
-            radial-gradient(ellipse 40% 30% at 80% 20%, rgba(249,115,22,0.06), transparent 60%),
-            radial-gradient(ellipse 40% 30% at 20% 80%, rgba(139,92,246,0.04), transparent 60%)
+            radial-gradient(ellipse 70% 46% at 50% -10%, rgba(255,107,74,0.16), transparent 70%),
+            radial-gradient(ellipse 34% 28% at 82% 20%, rgba(45,212,191,0.06), transparent 62%),
+            linear-gradient(180deg, rgba(255,255,255,0.02), transparent 42%)
           `,
         }}
       />
 
-      <div className="relative z-10 container mx-auto px-4 py-10 md:py-16 lg:py-20">
+      {/* Dithered wash layered over the radial accents */}
+      <DitherGradient
+        from={ditherColors.primary}
+        direction="up"
+        bloom={ditherBloom.marketing}
+        opacity={0.35}
+        className="pointer-events-none absolute inset-x-0 top-auto bottom-0 -z-10 h-1/2"
+      />
+
+      <div className="relative z-10 container mx-auto px-4">
         <div className="max-w-5xl mx-auto text-center">
           {/* Pill Badge — above editor */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mb-6 md:mb-[50px]"
+            className="mb-6 md:mb-9"
           >
-            <span className="relative inline-flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-1.5 md:py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[10px] md:text-xs font-medium tracking-wide shadow-[0_0_15px_rgba(249,115,22,0.15),0_0_30px_rgba(249,115,22,0.05)]"
+            <span className="relative inline-flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-1.5 md:py-2 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-300 text-[10px] md:text-xs font-medium tracking-wide shadow-[0_0_15px_rgba(249,115,22,0.12),0_0_30px_rgba(45,212,191,0.04)]"
               style={{
                 animation: 'glowStroke 3s ease-in-out infinite',
               }}
@@ -76,20 +87,20 @@ export function HeroSection({
 
           {/* Mock Editor Panel */}
           <motion.div
-            className="relative mb-16 z-20 mx-auto max-w-4xl"
+            className="relative z-20 mx-auto mb-8 max-w-3xl md:mb-9"
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.1 }}
           >
-            <div className="bg-[#0c0c0c] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
+            <div className="bg-[#0c0c0c] border border-white/[0.08] rounded-lg overflow-hidden shadow-2xl shadow-black/60">
               {/* Top Bar */}
               <div className="flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/[0.06]">
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-400 to-red-500" />
                   <span className="text-[11px] text-white/70 font-mono font-bold tracking-wider uppercase">WZRD.studio</span>
                 </div>
-                <span className="text-[10px] text-white/30 font-mono tracking-wide">Project Timeline</span>
-                <div className="flex items-center gap-3">
+                <span className="hidden text-[10px] text-white/30 font-mono tracking-wide sm:inline">Project Timeline</span>
+                <div className="hidden items-center gap-3 sm:flex">
                   <button className="text-[10px] text-white/50 font-mono bg-white/[0.06] hover:bg-white/[0.1] px-3 py-1 rounded-md transition-colors">Export</button>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6),0_0_16px_rgba(52,211,153,0.3)]" />
@@ -98,9 +109,9 @@ export function HeroSection({
                 </div>
               </div>
 
-              <div className="flex" style={{ minHeight: '380px' }}>
+              <div className="flex" style={{ minHeight: 'clamp(240px, 32vw, 340px)' }}>
                 {/* Left Icon Bar */}
-                <div className="w-12 border-r border-white/[0.06] bg-white/[0.02] flex flex-col items-center py-3 gap-1">
+                <div className="hidden w-12 border-r border-white/[0.06] bg-white/[0.02] flex-col items-center py-3 gap-1 sm:flex">
                   {[
                     { icon: Film, active: true },
                     { icon: Music, active: false },
@@ -151,7 +162,7 @@ export function HeroSection({
                 <div className="flex-1 flex flex-col">
                   {/* Preview Window */}
                   <div className="flex-1 p-3">
-                    <div className="bg-black rounded-lg h-full flex items-center justify-center border border-white/[0.05] relative overflow-hidden min-h-[160px]">
+                    <div className="bg-black rounded-lg h-full flex items-center justify-center border border-white/[0.05] relative overflow-hidden min-h-[120px]">
                       <SmartVideo
                         poster={heroVideo.poster}
                         sources={[...heroVideo.sources]}
@@ -194,16 +205,16 @@ export function HeroSection({
                       </motion.div>
 
                       <div className="flex items-center gap-3 px-4 py-1">
-                        <span className="text-[9px] text-white/25 w-12 text-right font-mono shrink-0 uppercase tracking-wide">B-Roll</span>
+                        <span className="text-[9px] text-white/25 w-10 sm:w-12 text-right font-mono shrink-0 uppercase tracking-wide">B-Roll</span>
                         <div className="flex-1 h-7 bg-white/[0.015] rounded relative overflow-hidden">
-                          <div className="absolute left-[5%] top-1 bottom-1 w-[22%] rounded-sm bg-purple-500/25 border border-purple-400/15 hover:bg-purple-500/35 hover:shadow-[0_0_8px_rgba(168,85,247,0.2)] transition-all cursor-pointer" />
-                          <div className="absolute left-[32%] top-1 bottom-1 w-[12%] rounded-sm bg-purple-500/15 border border-purple-400/10 hover:bg-purple-500/25 transition-all cursor-pointer" />
-                          <div className="absolute left-[58%] top-1 bottom-1 w-[18%] rounded-sm bg-purple-500/20 border border-purple-400/12 hover:bg-purple-500/30 hover:shadow-[0_0_8px_rgba(168,85,247,0.15)] transition-all cursor-pointer" />
+                          <div className="absolute left-[5%] top-1 bottom-1 w-[22%] rounded-sm bg-cyan-500/20 border border-cyan-300/15 hover:bg-cyan-500/30 hover:shadow-[0_0_8px_rgba(34,211,238,0.16)] transition-all cursor-pointer" />
+                          <div className="absolute left-[32%] top-1 bottom-1 w-[12%] rounded-sm bg-cyan-500/12 border border-cyan-300/10 hover:bg-cyan-500/22 transition-all cursor-pointer" />
+                          <div className="absolute left-[58%] top-1 bottom-1 w-[18%] rounded-sm bg-cyan-500/16 border border-cyan-300/12 hover:bg-cyan-500/26 hover:shadow-[0_0_8px_rgba(34,211,238,0.12)] transition-all cursor-pointer" />
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3 px-4 py-1">
-                        <span className="text-[9px] text-white/25 w-12 text-right font-mono shrink-0 uppercase tracking-wide">Main</span>
+                        <span className="text-[9px] text-white/25 w-10 sm:w-12 text-right font-mono shrink-0 uppercase tracking-wide">Main</span>
                         <div className="flex-1 h-7 bg-white/[0.015] rounded relative overflow-hidden">
                           <div className="absolute left-[2%] top-1 bottom-1 w-[40%] rounded-sm bg-gradient-to-r from-orange-500/30 to-orange-500/20 border border-orange-400/20 hover:from-orange-500/40 hover:to-orange-500/30 hover:shadow-[0_0_10px_rgba(251,146,60,0.2)] transition-all cursor-pointer">
                             <div className="absolute inset-0 flex items-center justify-center">
@@ -220,7 +231,7 @@ export function HeroSection({
                       </div>
 
                       <div className="flex items-center gap-3 px-4 py-1">
-                        <span className="text-[9px] text-white/25 w-12 text-right font-mono shrink-0 uppercase tracking-wide">Music</span>
+                        <span className="text-[9px] text-white/25 w-10 sm:w-12 text-right font-mono shrink-0 uppercase tracking-wide">Music</span>
                         <div className="flex-1 h-7 bg-white/[0.015] rounded relative overflow-hidden">
                           <div className="absolute left-0 top-1 bottom-1 w-[88%] rounded-sm bg-emerald-500/15 border border-emerald-400/12 hover:bg-emerald-500/25 hover:shadow-[0_0_8px_rgba(52,211,153,0.15)] transition-all cursor-pointer">
                             <div className="absolute inset-0 flex items-center px-1 gap-px overflow-hidden">
@@ -240,7 +251,7 @@ export function HeroSection({
                 </div>
 
                 {/* Director Panel */}
-                <div className="w-44 border-l border-white/[0.06] bg-white/[0.02] flex flex-col">
+                <div className="hidden w-44 border-l border-white/[0.06] bg-white/[0.02] flex-col lg:flex">
                   <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-white/[0.06]">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]" />
                     <span className="text-[10px] text-white/50 font-mono font-semibold tracking-wider uppercase">Director</span>
@@ -278,7 +289,7 @@ export function HeroSection({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5 }}
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight leading-[0.95] mb-4 md:mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60"
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-normal leading-[1.02] mb-3 md:mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60"
           >
             {headline || <>A <em className="font-serif italic not-italic bg-clip-text text-transparent bg-gradient-to-r from-orange-300 to-amber-200" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>music video</em> studio<br />in your pocket.</>}
           </motion.h1>
@@ -288,7 +299,7 @@ export function HeroSection({
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.6 }}
-            className="text-sm sm:text-lg md:text-xl lg:text-2xl text-white/50 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10 px-2 md:px-0"
+            className="text-sm sm:text-base md:text-lg lg:text-xl text-white/50 max-w-xl mx-auto leading-relaxed font-light mb-6 md:mb-7 px-2 md:px-0"
           >
             {subheadline}
           </motion.p>
@@ -298,11 +309,11 @@ export function HeroSection({
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.7 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 mb-8 pb-16 md:pb-0"
+            className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 mb-6 pb-6 md:pb-0"
           >
             <Link
               to="/login?mode=signup"
-              className="group inline-flex items-center gap-2 md:gap-2.5 px-6 md:px-8 py-3 md:py-4 bg-white text-black font-semibold rounded-xl hover:bg-white/90 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(255,255,255,0.15)] transition-all duration-200 text-sm md:text-base w-full sm:w-auto justify-center"
+              className="group inline-flex items-center gap-2 md:gap-2.5 px-6 md:px-8 py-3 md:py-4 bg-white text-black font-semibold rounded-lg hover:bg-white/90 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(255,255,255,0.15)] transition-all duration-200 text-sm md:text-base w-full sm:w-auto justify-center"
             >
               Get Started
               <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -310,7 +321,7 @@ export function HeroSection({
 
             <Link
               to="/demo"
-              className="inline-flex items-center gap-2 md:gap-2.5 px-6 md:px-8 py-3 md:py-4 border border-white/10 text-white/80 font-medium rounded-xl hover:bg-white/[0.05] hover:border-white/20 transition-all duration-200 text-sm md:text-base w-full sm:w-auto justify-center"
+              className="inline-flex items-center gap-2 md:gap-2.5 px-6 md:px-8 py-3 md:py-4 border border-white/10 text-white/80 font-medium rounded-lg hover:bg-white/[0.05] hover:border-white/20 transition-all duration-200 text-sm md:text-base w-full sm:w-auto justify-center"
             >
               <Play className="w-4 h-4" />
               Watch Demo
@@ -323,7 +334,7 @@ export function HeroSection({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.9 }}
-            className="mt-8"
+            className="mt-5 md:mt-7"
           >
             <ScrollingPartners />
           </motion.div>

@@ -501,7 +501,7 @@ function buildEditorStateSnapshot({
  */
 function getClaudeStateBridge(): ClaudeStateRendererBridgeAPI | null {
 	try {
-		const claude = platform().claude as
+		const claude = platform().claude as unknown as
 			| ({ state?: ClaudeStateRendererBridgeAPI } & Record<string, unknown>)
 			| undefined;
 		return claude?.state ?? null;

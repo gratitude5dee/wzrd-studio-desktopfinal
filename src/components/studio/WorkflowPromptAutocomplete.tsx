@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Workflow, Type, Image, Video, Sparkles, Music, Disc3, Mic2, Megaphone, Film } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 
@@ -9,7 +10,7 @@ export interface AutocompleteSuggestion {
   label: string;
   prompt: string;
   category: 'workflow' | 'single-node' | 'action';
-  icon: React.ElementType;
+  icon: LucideIcon;
 }
 
 /** Music-industry workflow starters + general single-node helpers */

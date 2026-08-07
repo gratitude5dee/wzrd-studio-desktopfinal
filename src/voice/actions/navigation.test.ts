@@ -45,8 +45,9 @@ describe('voice navigation actions', () => {
     expect(navigate).toHaveBeenCalledWith('/project-setup');
   });
 
-  it('opens IP Vault through the global shortcut action', async () => {
+  it('opens WTR externally through the global shortcut action', async () => {
     const navigate = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     const actions = createGlobalVoiceActions({
       navigate,
       getLocationPath: () => '/home',
@@ -57,8 +58,10 @@ describe('voice navigation actions', () => {
     await expect(Promise.resolve(openIpVault?.handler({}, {}))).resolves.toMatchObject({
       ok: true,
       status: 'completed',
-      data: { path: '/ip-vault' },
+      data: { url: 'https://wtr.wzrd.tech/app' },
     });
-    expect(navigate).toHaveBeenCalledWith('/ip-vault');
+    expect(openSpy).toHaveBeenCalledWith('https://wtr.wzrd.tech/app', '_blank', 'noopener,noreferrer');
+    expect(navigate).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 });

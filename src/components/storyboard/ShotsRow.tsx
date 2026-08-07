@@ -21,6 +21,8 @@ import { getShotImageCredits, getShotVideoCredits } from '@/lib/constants/credit
 import { useProjectSettingsStore } from '@/store/projectSettingsStore';
 import { ConfirmGenerateDialog } from '@/components/ui/ConfirmGenerateDialog';
 import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
+import { DitherGradient } from '@/components/dither-kit';
+import { ditherBloom, ditherColors } from '@/lib/ditherTheme';
 
 interface ShotConnection {
   id: string;
@@ -512,6 +514,15 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
         ]
       )}
     >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]">
+        <DitherGradient
+          from={isSelected ? ditherColors.secondary : ditherColors.primary}
+          direction="up"
+          bloom={ditherBloom.perf}
+          opacity={isSelected ? 0.1 : 0.06}
+          className="pointer-events-none absolute inset-x-0 top-auto bottom-0 h-1/2 [mask-image:linear-gradient(to_top,black,transparent)]"
+        />
+      </div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="relative">

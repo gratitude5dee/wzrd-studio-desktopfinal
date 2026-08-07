@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   captionsToLines,
+  generateRemixVersions,
   lyricBlocksToCaptions,
   normalizeCutMarkers,
+  offsetCaptionsToSelection,
+  offsetCutMarkersToSelection,
   pickClipsForDuration,
   quoteRemixCredits,
 } from '@/lib/remix-utils';
@@ -73,6 +76,65 @@ describe('remix-utils', () => {
 
     expect(total).toBeGreaterThanOrEqual(12000);
     expect(picked.length).toBeGreaterThan(1);
+  });
+
+  it('offsets captions onto the selection window and clamps them', () => {
+    const captions = offsetCaptionsToSelection(
+      [
+        { text: 'before', startMs: 0, endMs: 900, confidence: 1 },
+        { text: 'straddle', startMs: 800, endMs: 1400, confidence: 1 },
+        { text: 'inside', startMs: 2000, endMs: 2600, confidence: 1 },
+        { text: 'tail', startMs: 15500, endMs: 16400, confidence: 1 },
+        { text: 'after', startMs: 16100, endMs: 16800, confidence: 1 },
+      ],
+      1000,
+      15000
+    );
+
+    expect(captions).toEqual([
+      { text: 'straddle', startMs: 0, endMs: 400, confidence: 1 },
+      { text: 'inside', startMs: 1000, endMs: 1600, confidence: 1 },
+      { text: 'tail', startMs: 14500, endMs: 15000, confidence: 1 },
+    ]);
+  });
+
+  it('offsets cut markers and drops those outside the window', () => {
+    const markers = offsetCutMarkersToSelection(
+      [
+        { id: 'a', timestampMs: 500 },
+        { id: 'b', timestampMs: 4000 },
+        { id: 'c', timestampMs: 16000 },
+        { id: 'd', timestampMs: 20000 },
+      ],
+      1000,
+      15000
+    );
+
+    expect(markers).toEqual([{ id: 'b', timestampMs: 3000 }]);
+  });
+
+  it('generates deterministic remix versions with filled slots', () => {
+    const assets = [createAsset('a', 4000), createAsset('b', 5000), createAsset('c', 6000)];
+    const markers = [{ timestampMs: 5000 }, { timestampMs: 10000 }];
+
+    const versions = generateRemixVersions(assets, 15000, markers, 10, 42);
+
+    expect(versions).toHaveLength(10);
+    for (const version of versions) {
+      expect(version.slots).toHaveLength(3);
+      expect(version.slots.every((slot) => slot.clipId !== null)).toBe(true);
+    }
+    // Distinct seeds produce at least two distinct layouts
+    const layouts = new Set(versions.map((v) => v.slots.map((s) => s.clipId).join(',')));
+    expect(layouts.size).toBeGreaterThan(1);
+    // Deterministic for the same base seed
+    const again = generateRemixVersions(assets, 15000, markers, 10, 42);
+    expect(again).toEqual(versions);
+  });
+
+  it('returns no versions without assets or duration', () => {
+    expect(generateRemixVersions([], 15000, [], 10, 1)).toEqual([]);
+    expect(generateRemixVersions([createAsset('a', 4000)], 0, [], 10, 1)).toEqual([]);
   });
 });
 

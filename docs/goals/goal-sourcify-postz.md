@@ -1,6 +1,6 @@
 # WZRD Studio Desktop Goal Spec: Sourcify And Postz
 
-> Archived 2026-06-10. This goal is complete — `/sourcify` and `/postz` are implemented (see `src/pages/Sourcify.tsx`, `src/pages/Postz.tsx`, routes in `src/app/AuthenticatedRoutes.tsx`). Preserved here for reference; the live `goal.md` at repo root now covers the QCut editor import.
+> Archived 2026-06-10. This goal is complete — `/sourcify` and `/postz` are implemented (see `src/legacy-pages/Sourcify.tsx`, `src/legacy-pages/Postz.tsx`, routes in `src/app/AuthenticatedRoutes.tsx`). Preserved here for reference; the live `goal.md` at repo root now covers the QCut editor import.
 
 ## Objective
 

@@ -24,6 +24,7 @@ import talentFaceWardrobe from '@/assets/generated/music-polish/talent-face-ward
 import talentLeadVocalist from '@/assets/generated/music-polish/talent-lead-vocalist.png';
 import talentMotionStage from '@/assets/generated/music-polish/talent-motion-stage.png';
 import talentVoiceBooth from '@/assets/generated/music-polish/talent-voice-booth.png';
+import { staticAssetUrl } from '@/lib/staticAsset';
 
 export type MusicPolishAsset = {
   src: string;
@@ -35,37 +36,37 @@ export type MusicPolishAsset = {
 export const musicPolishAssets = {
   landing: {
     heroGothicStorm: {
-      src: heroGothicStorm,
+      src: staticAssetUrl(heroGothicStorm),
       alt: 'Hyperreal gothic storm music video still with a silhouetted artist at an iron gate',
       title: 'Gothic Storm Key Art',
       style: 'Monochrome album-film still',
     },
     rooftopChoreography: {
-      src: rooftopChoreography,
+      src: staticAssetUrl(rooftopChoreography),
       alt: 'Hyperreal rooftop view of a choreographed movement sequence in a rain-lit city plaza',
       title: 'Rooftop Choreography',
       style: 'Aerial movement plate',
     },
     animatedRainStreet: {
-      src: animatedRainStreet,
+      src: staticAssetUrl(animatedRainStreet),
       alt: 'Stylized rain street music video frame with a young fictional performer under warm storefront light',
       title: 'Animated Rain Street',
       style: 'Illustrated narrative frame',
     },
     platformDeliveryWall: {
-      src: platformDeliveryWall,
+      src: staticAssetUrl(platformDeliveryWall),
       alt: 'Premium music video delivery wall with export crops, timeline plates, and waveform monitors',
       title: 'Platform Delivery Wall',
       style: 'Distribution control room',
     },
     securityControlRoom: {
-      src: securityControlRoom,
+      src: staticAssetUrl(securityControlRoom),
       alt: 'Secure media operations control room for protected music video assets and audit workflows',
       title: 'Secure Media Ops',
       style: 'Governance room',
     },
     mobileEditorPortrait: {
-      src: mobileEditorPortrait,
+      src: staticAssetUrl(mobileEditorPortrait),
       alt: 'Portrait mobile music video editor interface with lyric plate, waveform, and scene thumbnails',
       title: 'Mobile Editor',
       style: 'Vertical editor plate',
@@ -73,19 +74,19 @@ export const musicPolishAssets = {
   },
   kanvas: {
     stageProductVisual: {
-      src: stageProductVisual,
+      src: staticAssetUrl(stageProductVisual),
       alt: 'Hyperreal product-style music video prop on a black glass stage with coral and cyan lighting',
       title: 'Stage Your Product',
       style: 'Hero prop still',
     },
     aiVisualWall: {
-      src: aiVisualWall,
+      src: staticAssetUrl(aiVisualWall),
       alt: 'Premium visual wall for a music video treatment with generated scene thumbnails and monitor glow',
       title: 'Generate Visuals',
       style: 'Creative wall',
     },
     backgroundReframe: {
-      src: backgroundReframe,
+      src: staticAssetUrl(backgroundReframe),
       alt: 'Music video subject reframed through different controlled stage backgrounds',
       title: 'Change Background',
       style: 'Background reframe',
@@ -93,25 +94,25 @@ export const musicPolishAssets = {
   },
   cinema: {
     castBoard: {
-      src: cinemaCastBoard,
+      src: staticAssetUrl(cinemaCastBoard),
       alt: 'Music video cast and treatment board with fictional performers and visual references',
       title: 'Cast Board',
       style: 'Treatment room',
     },
     soundstage: {
-      src: cinemaSoundstage,
+      src: staticAssetUrl(cinemaSoundstage),
       alt: 'Hyperreal music video soundstage with practical lighting and camera rig',
       title: 'Soundstage',
       style: 'Production suite',
     },
     neonStreet: {
-      src: cinemaNeonStreet,
+      src: staticAssetUrl(cinemaNeonStreet),
       alt: 'Hyperreal neon street performance music video still with controlled cyan rain light',
       title: 'Neon Street',
       style: 'Night performance',
     },
     performanceCloseup: {
-      src: cinemaPerformanceCloseup,
+      src: staticAssetUrl(cinemaPerformanceCloseup),
       alt: 'Hyperreal close-up performance frame with microphone, haze, and coral key light',
       title: 'Performance Close-up',
       style: 'Artist close-up',
@@ -119,25 +120,25 @@ export const musicPolishAssets = {
   },
   lyrics: {
     gothicStorm: {
-      src: lyricsGothicStorm,
+      src: staticAssetUrl(lyricsGothicStorm),
       alt: 'Gothic storm lyric visual plate with chrome title space and rain atmosphere',
       title: 'Gothic Storm',
       style: 'Dark title plate',
     },
     rnbGlass: {
-      src: lyricsRnbGlass,
+      src: staticAssetUrl(lyricsRnbGlass),
       alt: 'Minimal R&B lyric visual plate with black glass, warm coral light, and soft cyan fill',
       title: 'R&B Glass',
       style: 'Minimal glass plate',
     },
     rooftopMotion: {
-      src: lyricsRooftopMotion,
+      src: staticAssetUrl(lyricsRooftopMotion),
       alt: 'Rooftop choreography lyric visual plate with aerial motion paths and city rain',
       title: 'Rooftop Motion',
       style: 'Kinetic lyric plate',
     },
     animatedRain: {
-      src: lyricsAnimatedRain,
+      src: staticAssetUrl(lyricsAnimatedRain),
       alt: 'Animated rain street lyric visual plate with hand-painted atmosphere',
       title: 'Animated Rain',
       style: 'Illustrated lyric plate',
@@ -145,19 +146,19 @@ export const musicPolishAssets = {
   },
   blueprints: {
     vocalist: {
-      src: blueprintVocalist,
+      src: staticAssetUrl(blueprintVocalist),
       alt: 'Fictional vocalist blueprint reference with turntable styling and controlled lighting',
       title: 'Vocalist Anchor',
       style: 'Character reference',
     },
     soundstage: {
-      src: blueprintSoundstage,
+      src: staticAssetUrl(blueprintSoundstage),
       alt: 'Soundstage blueprint reference with lighting positions and premium production detail',
       title: 'Soundstage Anchor',
       style: 'Location reference',
     },
     microphone: {
-      src: blueprintMicrophone,
+      src: staticAssetUrl(blueprintMicrophone),
       alt: 'Chrome microphone prop blueprint reference on black glass with measurement notes',
       title: 'Microphone Anchor',
       style: 'Object reference',
@@ -165,25 +166,25 @@ export const musicPolishAssets = {
   },
   talent: {
     leadVocalist: {
-      src: talentLeadVocalist,
+      src: staticAssetUrl(talentLeadVocalist),
       alt: 'Fictional lead vocalist portrait in a premium music video styling bay',
       title: 'Lead Vocalist',
       style: 'Consent-ready portrait',
     },
     voiceBooth: {
-      src: talentVoiceBooth,
+      src: staticAssetUrl(talentVoiceBooth),
       alt: 'Fictional voice artist recording in a dark premium booth with microphone foreground',
       title: 'Voice Artist',
       style: 'Recording booth',
     },
     motionStage: {
-      src: talentMotionStage,
+      src: staticAssetUrl(talentMotionStage),
       alt: 'Fictional movement performer on a rehearsal capture stage with controlled coral and cyan light',
       title: 'Motion Reference',
       style: 'Capture stage',
     },
     faceWardrobe: {
-      src: talentFaceWardrobe,
+      src: staticAssetUrl(talentFaceWardrobe),
       alt: 'Fictional face model portrait in a dark wardrobe bay with practical mirror light',
       title: 'Face Model',
       style: 'Wardrobe reference',
@@ -191,13 +192,13 @@ export const musicPolishAssets = {
   },
   toolSurfaces: {
     lipsyncProductRead: {
-      src: lipsyncProductRead,
+      src: staticAssetUrl(lipsyncProductRead),
       alt: 'Fictional performer recording a product-read performance setup on a dark music video stage',
       title: 'Performance Product Read',
       style: 'Creator production setup',
     },
     editWorkbench: {
-      src: editWorkbench,
+      src: staticAssetUrl(editWorkbench),
       alt: 'Professional image edit workbench showing a music video frame inpainted on a dark post-production monitor',
       title: 'Edit Workbench',
       style: 'Post-production bay',

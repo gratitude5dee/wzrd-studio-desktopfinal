@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { executeGmiQueueModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { executeGmiQueueModel, isInactiveModelError, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
 import {
   getCatalogModelById,
   listCatalogModels,
@@ -57,6 +57,7 @@ function getModelFamilyKey(modelId: string): string {
 
 async function resolveShotVideoModel(requestedModelId: string): Promise<{
   model: CatalogModel;
+  alternates: CatalogModel[];
   fallbackUsed: boolean;
   fallbackReason?: string;
 }> {
@@ -76,6 +77,9 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
     throw new Error('No compatible GMI Cloud image-driven video model is configured.');
   }
 
+  const alternatesFor = (chosen: CatalogModel): CatalogModel[] =>
+    compatibleModels.filter((model) => model.id !== chosen.id);
+
   const requestedModel = await getCatalogModelById(requestedModelId, {
     mediaType: 'video',
     enabledOnly: false,
@@ -84,6 +88,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
   if (!requestedModel) {
     return {
       model: defaultCompatibleModel,
+      alternates: alternatesFor(defaultCompatibleModel),
       fallbackUsed: true,
       fallbackReason: `unknown_model:${requestedModelId}->default:${defaultCompatibleModel.id}`,
     };
@@ -96,6 +101,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
   ) {
     return {
       model: requestedModel,
+      alternates: alternatesFor(requestedModel),
       fallbackUsed: false,
     };
   }
@@ -112,6 +118,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
   if (sameFamilyCompatibleModel) {
     return {
       model: sameFamilyCompatibleModel,
+      alternates: alternatesFor(sameFamilyCompatibleModel),
       fallbackUsed: true,
       fallbackReason:
         `incompatible_with_image_input:${requestedModel.workflowType}` +
@@ -122,6 +129,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
   if (requestedModel.provider !== 'gmi-cloud') {
     return {
       model: defaultCompatibleModel,
+      alternates: alternatesFor(defaultCompatibleModel),
       fallbackUsed: true,
       fallbackReason: `unsupported_provider:${requestedModel.provider}->default:${defaultCompatibleModel.id}`,
     };
@@ -130,6 +138,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
   if (requestedModel.mediaType !== 'video') {
     return {
       model: defaultCompatibleModel,
+      alternates: alternatesFor(defaultCompatibleModel),
       fallbackUsed: true,
       fallbackReason: `not_video_model:${requestedModel.id}->default:${defaultCompatibleModel.id}`,
     };
@@ -137,6 +146,7 @@ async function resolveShotVideoModel(requestedModelId: string): Promise<{
 
   return {
     model: defaultCompatibleModel,
+    alternates: alternatesFor(defaultCompatibleModel),
     fallbackUsed: true,
     fallbackReason:
       `incompatible_with_image_input:${requestedModel.workflowType}` +
@@ -265,14 +275,86 @@ serve(async (req) => {
       });
 
       // Submit to GMI Cloud queue (single translation inside)
-      const queueResult = await executeGmiQueueModel(
+      let queueResult = await executeGmiQueueModel(
         submission.endpointModelId,
         submission.payload,
         submission.payloadKeys,
       );
 
+      let inactiveModelFallbackReason: string | null = null;
+      if (
+        (!queueResult.success || !queueResult.requestId) &&
+        isInactiveModelError(queueResult.error)
+      ) {
+        const inactiveModelId = submission.modelId;
+        console.warn(
+          `[Shot ${shot_id}] Model ${inactiveModelId} is inactive on GMI Cloud; trying fallback models`,
+        );
+
+        for (const candidate of resolvedModel.alternates) {
+          let candidateSubmission: GmiVideoQueueRequest;
+          try {
+            candidateSubmission = buildGmiVideoQueueRequest(candidate, {
+              imageUrl: image_url,
+              prompt: resolvedPrompt,
+              duration,
+              resolution,
+              fps,
+              generate_audio,
+              camera_motion,
+            });
+          } catch (candidateError: unknown) {
+            console.warn(
+              `[Shot ${shot_id}] Skipping fallback model ${candidate.id}:`,
+              candidateError instanceof Error ? candidateError.message : candidateError,
+            );
+            continue;
+          }
+
+          const candidateResult = await executeGmiQueueModel(
+            candidateSubmission.endpointModelId,
+            candidateSubmission.payload,
+            candidateSubmission.payloadKeys,
+          );
+
+          if (candidateResult.success && candidateResult.requestId) {
+            submission = candidateSubmission;
+            queueResult = candidateResult;
+            inactiveModelFallbackReason = `inactive_model:${inactiveModelId}->fallback:${candidate.id}`;
+            console.warn(`[Shot ${shot_id}] ${inactiveModelFallbackReason}`);
+            break;
+          }
+
+          console.warn(
+            `[Shot ${shot_id}] Fallback model ${candidate.id} failed: ${candidateResult.error}`,
+          );
+        }
+
+        if (!queueResult.success || !queueResult.requestId) {
+          throw new Error(
+            `Video model ${inactiveModelId} is currently inactive on GMI Cloud and no fallback model succeeded. Please try again later or select a different model.`,
+          );
+        }
+      }
+
       if (!queueResult.success || !queueResult.requestId) {
         throw new Error(`GMI queue submission failed: ${queueResult.error}`);
+      }
+
+      if (inactiveModelFallbackReason) {
+        await updateGenerationJob(supabase, videoGenerationJobId, {
+          config: {
+            shot_id,
+            image_url,
+            requested_model_id: requestedModelId,
+            resolved_model_id: submission.modelId,
+            endpoint_model_id: submission.endpointModelId,
+            fallback_used: true,
+            fallback_reason: inactiveModelFallbackReason,
+            normalized_settings: submission.normalizedSettings,
+            normalized_payload: submission.payload,
+          },
+        });
       }
 
       console.log(`[Shot ${shot_id}] GMI request submitted: ${queueResult.requestId}`);
@@ -344,8 +426,8 @@ serve(async (req) => {
           requested_model_id: requestedModelId,
           model_id: submission.modelId,
           endpoint_model_id: submission.endpointModelId,
-          fallback_used: resolvedModel.fallbackUsed,
-          fallback_reason: resolvedModel.fallbackReason,
+          fallback_used: resolvedModel.fallbackUsed || inactiveModelFallbackReason !== null,
+          fallback_reason: inactiveModelFallbackReason ?? resolvedModel.fallbackReason,
           normalized_settings: submission.normalizedSettings,
           normalized_payload: submission.payload,
           storage_path: fileName,
@@ -426,8 +508,8 @@ serve(async (req) => {
           video_url: publicUrl,
           requested_model_id: requestedModelId,
           resolved_model_id: submission.modelId,
-          fallback_used: resolvedModel.fallbackUsed,
-          fallback_reason: resolvedModel.fallbackReason,
+          fallback_used: resolvedModel.fallbackUsed || inactiveModelFallbackReason !== null,
+          fallback_reason: inactiveModelFallbackReason ?? resolvedModel.fallbackReason,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

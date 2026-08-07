@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "shared/generated"] },
+  { ignores: ["dist", ".next", "shared/generated"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -28,10 +28,10 @@ export default tseslint.config(
     },
   },
 
-  // Quarantine boundary: only `src/qcut/**` and `src/pages/EditorPage.tsx` may import vendored QCut code.
+  // Quarantine boundary: only `src/qcut/**` and `src/legacy-pages/EditorPage.tsx` may import vendored QCut code.
   {
     files: ["**/*.{ts,tsx}"],
-    ignores: ["src/qcut/**", "src/pages/EditorPage.tsx"],
+    ignores: ["src/qcut/**", "src/legacy-pages/EditorPage.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",

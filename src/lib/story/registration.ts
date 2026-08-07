@@ -11,7 +11,7 @@ import type { IPVaultItem, IPVaultLicenseProfile } from '@/types/ip-vault';
 
 type StoryCoreSdkRuntime = {
   PILFlavor: any;
-  WIP_TOKEN_ADDRESS: string;
+  WIP_TOKEN_ADDRESS: Address;
 };
 
 let storyCoreSdkRuntimePromise: Promise<StoryCoreSdkRuntime> | null = null;
@@ -20,7 +20,7 @@ async function loadStoryCoreSdkRuntime(): Promise<StoryCoreSdkRuntime> {
   if (!storyCoreSdkRuntimePromise) {
     storyCoreSdkRuntimePromise = import('@story-protocol/core-sdk').then((mod: any) => ({
       PILFlavor: mod.PILFlavor,
-      WIP_TOKEN_ADDRESS: mod.WIP_TOKEN_ADDRESS,
+      WIP_TOKEN_ADDRESS: mod.WIP_TOKEN_ADDRESS as Address,
     }));
   }
   return storyCoreSdkRuntimePromise;

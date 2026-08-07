@@ -265,7 +265,7 @@ function emitClaudeRendererEvent({
 		const payload: EmitPayload = {
 			category,
 			action,
-			data,
+			metadata: data,
 			source,
 			correlationId,
 		};

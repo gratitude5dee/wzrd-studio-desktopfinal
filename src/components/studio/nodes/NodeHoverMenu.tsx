@@ -1,6 +1,7 @@
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Copy, Download, Lock, Play, Trash2, Wand2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import {
   FloraModelMarketplace,
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 export interface NodeHoverActionItem {
   key: string;
-  icon: ElementType;
+  icon: LucideIcon;
   ariaLabel: string;
   onClick?: () => void;
   disabled?: boolean;
@@ -21,7 +22,7 @@ export interface NodeHoverActionItem {
 export interface NodeHoverToolItem {
   key: string;
   label: string;
-  icon: ElementType;
+  icon: LucideIcon;
   onClick?: () => void;
   disabled?: boolean;
   trailing?: ReactNode;

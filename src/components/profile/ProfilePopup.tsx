@@ -4,14 +4,18 @@ import {
   User,
   Settings,
   CreditCard,
-  Users,
   LogOut,
   ChevronRight,
-  Shield,
   Moon,
   Sun,
   Sparkles,
+  Pencil,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { appRoutes } from '@/lib/routes';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/hooks/useTheme';
@@ -27,9 +31,16 @@ interface ProfilePopupProps {
 interface ProfileData {
   full_name?: string | null;
   avatar_url?: string | null;
+  username?: string | null;
+  wallet_address?: string | null;
   workspace?: {
     name?: string | null;
   } | null;
+}
+
+function truncateAddress(address: string): string {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 export const ProfilePopup = ({ isOpen, onClose, anchorEl }: ProfilePopupProps) => {
@@ -38,13 +49,16 @@ export const ProfilePopup = ({ isOpen, onClose, anchorEl }: ProfilePopupProps) =
   const popupRef = useRef<HTMLDivElement>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [credits, setCredits] = useState(0);
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [draftUsername, setDraftUsername] = useState('');
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
     supabase
       .from('profiles')
-      .select('full_name, avatar_url, workspace:workspaces(name)')
+      .select('full_name, avatar_url, username, wallet_address, workspace:workspaces(name)')
       .eq('id', user.id)
       .single()
       .then(({ data }) => setProfile(data as ProfileData));
@@ -84,12 +98,43 @@ export const ProfilePopup = ({ isOpen, onClose, anchorEl }: ProfilePopupProps) =
     onClose();
   };
 
+  const displayName =
+    profile?.username
+    || profile?.full_name
+    || (profile?.wallet_address ? truncateAddress(profile.wallet_address) : null)
+    || 'User';
+
+  const startEditingUsername = () => {
+    setDraftUsername(profile?.username ?? '');
+    setIsEditingUsername(true);
+  };
+
+  const saveUsername = async () => {
+    if (!user) return;
+    const next = draftUsername.trim();
+    if (!next) {
+      toast.error('Username cannot be empty');
+      return;
+    }
+    setIsSavingUsername(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ username: next })
+      .eq('id', user.id);
+    setIsSavingUsername(false);
+    if (error) {
+      toast.error(`Failed to update username: ${error.message}`);
+      return;
+    }
+    setProfile((current) => ({ ...current, username: next }));
+    setIsEditingUsername(false);
+    toast.success('Username updated');
+  };
+
   const menuItems = [
-    { icon: User, label: 'Profile', href: '/settings/profile' },
-    { icon: Settings, label: 'Preferences', href: '/settings/preferences' },
-    { icon: CreditCard, label: 'Plans & Credits', href: '/settings/billing' },
-    { icon: Users, label: 'People & Workspace', href: '/settings/workspace' },
-    { icon: Shield, label: 'Security', href: '/settings/security' },
+    { icon: User, label: 'Profile', href: appRoutes.settings.root },
+    { icon: Settings, label: 'Settings', href: appRoutes.settings.root },
+    { icon: CreditCard, label: 'Plans & Credits', href: appRoutes.settings.billing },
   ];
 
   const containerVariants = {
@@ -140,10 +185,55 @@ export const ProfilePopup = ({ isOpen, onClose, anchorEl }: ProfilePopupProps) =
                 </div>
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="truncate text-sm font-semibold text-white">
-                  {profile?.full_name || 'User'}
-                </h3>
-                <p className="truncate text-xs text-zinc-400">{user?.email}</p>
+                {isEditingUsername ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={draftUsername}
+                      onChange={(event) => setDraftUsername(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void saveUsername();
+                        if (event.key === 'Escape') setIsEditingUsername(false);
+                      }}
+                      placeholder="Username"
+                      aria-label="Username"
+                      autoFocus
+                      className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-800/80 px-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500/60"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveUsername()}
+                      disabled={isSavingUsername}
+                      aria-label="Save username"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-emerald-400 hover:bg-zinc-800"
+                    >
+                      {isSavingUsername ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingUsername(false)}
+                      aria-label="Cancel editing username"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="truncate text-sm font-semibold text-white">{displayName}</h3>
+                    <button
+                      type="button"
+                      onClick={startEditingUsername}
+                      aria-label="Edit username"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-70 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                <p className="truncate text-xs text-zinc-400">
+                  {user?.email}
+                  {profile?.wallet_address ? ` · ${truncateAddress(profile.wallet_address)}` : ''}
+                </p>
               </div>
             </div>
 

@@ -7,16 +7,17 @@ import lumaImg from '@/assets/cards/provider-luma.jpg';
 import stabilityImg from '@/assets/cards/provider-stability.jpg';
 import hailuoImg from '@/assets/cards/provider-hailuo.jpg';
 import wanImg from '@/assets/cards/provider-wan.jpg';
+import { staticAssetUrl } from '@/lib/staticAsset';
 
 const providers = [
-  { name: 'Google', models: ['Gemini 2.5 Flash', 'Imagen 3', 'Veo 2'], image: googleImg },
-  { name: 'OpenAI', models: ['GPT-5', 'GPT-4o Mini', 'GPT Image', 'Sora'], image: openaiImg },
-  { name: 'Runway', models: ['Gen-4 Turbo', 'Runway 4.5', 'Gen-3 Alpha'], image: runwayImg },
-  { name: 'Black Forest Labs', models: ['FLUX.1 Pro', 'FLUX.1 Dev', 'FLUX.1 Schnell'], image: bflImg },
-  { name: 'Luma AI', models: ['Dream Machine', 'Photon', 'Ray 2'], image: lumaImg },
-  { name: 'Stability AI', models: ['SD3.5 Turbo', 'Stable Video', 'SDXL'], image: stabilityImg },
-  { name: 'Hailuo AI', models: ['MiniMax Video', 'Seedance 2', 'Seedream 2'], image: hailuoImg },
-  { name: 'WAN', models: ['WAN 2.6', 'Nanobanana 2', 'WAN-X'], image: wanImg },
+  { name: 'Google', models: ['Gemini 2.5 Flash', 'Imagen 3', 'Veo 2'], image: staticAssetUrl(googleImg) },
+  { name: 'OpenAI', models: ['GPT-5', 'GPT-4o Mini', 'GPT Image', 'Sora'], image: staticAssetUrl(openaiImg) },
+  { name: 'Runway', models: ['Gen-4 Turbo', 'Runway 4.5', 'Gen-3 Alpha'], image: staticAssetUrl(runwayImg) },
+  { name: 'Black Forest Labs', models: ['FLUX.1 Pro', 'FLUX.1 Dev', 'FLUX.1 Schnell'], image: staticAssetUrl(bflImg) },
+  { name: 'Luma AI', models: ['Dream Machine', 'Photon', 'Ray 2'], image: staticAssetUrl(lumaImg) },
+  { name: 'Stability AI', models: ['SD3.5 Turbo', 'Stable Video', 'SDXL'], image: staticAssetUrl(stabilityImg) },
+  { name: 'Hailuo AI', models: ['MiniMax Video', 'Seedance 2', 'Seedream 2'], image: staticAssetUrl(hailuoImg) },
+  { name: 'WAN', models: ['WAN 2.6', 'Nanobanana 2', 'WAN-X'], image: staticAssetUrl(wanImg) },
 ];
 
 export function ModelLibrarySection() {

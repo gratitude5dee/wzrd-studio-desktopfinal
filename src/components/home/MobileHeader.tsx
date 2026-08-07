@@ -2,6 +2,7 @@ import { Menu, Bell } from 'lucide-react';
 import wzrdLogo from '@/assets/wzrd-logo.png';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { cn } from '@/lib/utils';
+import { staticAssetUrl } from '@/lib/staticAsset';
 
 interface MobileHeaderProps {
   onMenuClick: () => void;
@@ -24,7 +25,7 @@ export const MobileHeader = ({ onMenuClick }: MobileHeaderProps) => {
 
       <div className="flex items-center gap-2">
         <img 
-          src={wzrdLogo} 
+          src={staticAssetUrl(wzrdLogo)}
           alt="MOG STUDIO" 
           className="h-8 object-contain"
         />

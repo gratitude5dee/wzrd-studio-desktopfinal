@@ -5,6 +5,25 @@
  * for different environments (Electron app://, HTTP dev, relative paths).
  */
 
+import {
+	isFfmpegWasmAsset,
+	resolveFfmpegWasmAssetUrl,
+} from "@/lib/ffmpeg-web";
+import { isElectron } from "./environment";
+
+async function canFetchResource(
+	url: string,
+	init?: RequestInit
+): Promise<boolean> {
+	try {
+		const response =
+			init === undefined ? await fetch(url) : await fetch(url, init);
+		return response.ok;
+	} catch {
+		return false;
+	}
+}
+
 /**
  * Resolves FFmpeg WebAssembly resource URLs with fallback strategies
  * Tries app:// protocol first, then falls back to HTTP and relative paths
@@ -12,57 +31,38 @@
 export const getFFmpegResourceUrl = async (
 	filename: string
 ): Promise<string> => {
-	// Try app:// protocol first
-	try {
+	if (!isFfmpegWasmAsset(filename)) {
+		throw new Error(`Unsupported FFmpeg resource: ${filename}`);
+	}
+
+	// Try app:// protocol only for the desktop runtime.
+	if (isElectron()) {
 		const appUrl = `app://ffmpeg/${filename}`;
-		const response = await fetch(appUrl);
-		if (response.ok) {
+		if (await canFetchResource(appUrl)) {
 			console.log(`[FFmpeg Utils] ✅ App protocol succeeded for ${filename}`);
 			return appUrl;
 		}
-	} catch (error) {
 		console.warn(
-			`[FFmpeg Utils] ⚠️ App protocol failed for ${filename}:`,
-			error
+			`[FFmpeg Utils] ⚠️ App protocol unavailable for ${filename}, falling back`
 		);
 	}
 
-	// Fallback to app relative (packaged) or HTTP dev server
-	try {
-		const isFileProtocol =
-			typeof window !== "undefined" && window.location.protocol === "file:";
-		const rawBase = import.meta.env.BASE_URL || document.baseURI || "";
-		const baseUrl = rawBase.replace(/\/$/, "");
-		const httpUrl = isFileProtocol
-			? `./ffmpeg/${filename}`
-			: `${baseUrl}/ffmpeg/${filename}`;
-		const response = await fetch(httpUrl);
-		if (response.ok) {
-			console.log(`[FFmpeg Utils] ✅ HTTP fallback succeeded for ${filename}`);
-			return httpUrl;
+	// Packaged desktop builds may load from file:// and need a relative path.
+	if (typeof window !== "undefined" && window.location.protocol === "file:") {
+		const relativeFileUrl = `./ffmpeg/${filename}`;
+		if (await canFetchResource(relativeFileUrl)) {
+			console.log(`[FFmpeg Utils] ✅ File fallback succeeded for ${filename}`);
+			return relativeFileUrl;
 		}
-	} catch (error) {
-		console.warn(
-			`[FFmpeg Utils] ⚠️ HTTP fallback failed for ${filename}:`,
-			error
-		);
 	}
 
-	// Final fallback to public relative path
-	try {
-		const relativeUrl = `/ffmpeg/${filename}`;
-		const response = await fetch(relativeUrl);
-		if (response.ok) {
-			console.log(
-				`[FFmpeg Utils] ✅ Relative path fallback succeeded for ${filename}`
-			);
-			return relativeUrl;
-		}
-	} catch (error) {
-		console.warn(
-			`[FFmpeg Utils] ⚠️ Relative path fallback failed for ${filename}:`,
-			error
+	// Web/Next/Vercel path: same-origin public assets.
+	const sameOriginUrl = resolveFfmpegWasmAssetUrl(filename);
+	if (await canFetchResource(sameOriginUrl, { method: "HEAD" })) {
+		console.log(
+			`[FFmpeg Utils] ✅ Same-origin fallback succeeded for ${filename}`
 		);
+		return sameOriginUrl;
 	}
 
 	throw new Error(`Could not resolve FFmpeg resource: ${filename}`);

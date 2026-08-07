@@ -5,6 +5,7 @@ import {
   Video, Sun, Palette, ArrowUpCircle, ScanFace, RotateCcw, Hand, Undo2, Redo2,
   Download, X, MousePointer2, ChevronDown, Layers,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { imageEditService } from '@/services/imageEditService';
 import type { ImageEditOperation } from '@/types/imageEdit';
@@ -21,7 +22,7 @@ interface FeatureItem {
   id: EditFeature;
   label: string;
   description: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   operation: ImageEditOperation | null;
   badge?: 'TOP' | 'NEW' | 'SOON';
 }
@@ -347,7 +348,7 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
   }
 
   /* ── ACTIVE WORKSPACE (tldraw canvas) ── */
-  const TOOLS: { id: CanvasTool; icon: React.ElementType; label: string }[] = [
+  const TOOLS: { id: CanvasTool; icon: LucideIcon; label: string }[] = [
     { id: 'select', icon: MousePointer2, label: 'Select' },
     { id: 'draw', icon: Paintbrush, label: 'Mask' },
     { id: 'eraser', icon: Eraser, label: 'Eraser' },

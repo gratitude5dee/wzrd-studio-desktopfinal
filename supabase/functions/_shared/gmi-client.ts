@@ -90,6 +90,20 @@ function isPayloadValidationError(errorMessage: string): boolean {
   return /invalid payload parameters/i.test(errorMessage);
 }
 
+/**
+ * Detects GMI provider errors indicating the requested model is inactive,
+ * disabled, or otherwise not accepting requests, e.g.
+ * "model ltx-2-fast-image-to-video is currently inactive and not accepting requests".
+ */
+export function isInactiveModelError(errorMessage: string | undefined | null): boolean {
+  if (!errorMessage) return false;
+  return (
+    /\binactive\b/i.test(errorMessage) ||
+    /not accepting requests/i.test(errorMessage) ||
+    /model\b.*\b(unavailable|deprecated|disabled)\b/i.test(errorMessage)
+  );
+}
+
 function getParameterOptionValues(parameter: Record<string, unknown>): unknown[] {
   const directOptions = asArray(parameter.options)
     .map((entry) => {

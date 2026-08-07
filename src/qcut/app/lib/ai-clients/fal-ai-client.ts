@@ -69,6 +69,7 @@ import {
 	type GenerationResult,
 	type MultiModelGenerationResult,
 } from "./fal-ai-client-internal-types";
+import { readPublicEnv, readPublicFlag } from "@/lib/env";
 
 export type {
 	GenerationSettings,
@@ -91,17 +92,10 @@ class FalAIClient {
 		// Try to get API key from environment variables first
 		try {
 			this.apiKey =
-				import.meta.env.VITE_FAL_API_KEY ||
+				readPublicEnv("FAL_API_KEY", ["VITE_FAL_API_KEY", "VITE_FAL_KEY"]) ||
 				(typeof window !== "undefined" &&
 					(window as any).process?.env?.FAL_API_KEY) ||
 				null;
-
-			// If no env var, try Electron storage asynchronously
-			if (!this.apiKey) {
-				// Assign promise immediately to avoid race condition if ensureApiKey() is called
-				// before the async init starts. Promise creation is synchronous.
-				this.apiKeyInitPromise = this.initApiKeyFromElectron();
-			}
 		} catch (error) {
 			// Silently handle initialization errors during module loading
 			console.warn("[FalAIClient] Constructor error:", error);
@@ -130,7 +124,11 @@ class FalAIClient {
 			);
 		}
 
-		if (!this.apiKey) {
+		if (
+			!this.apiKey &&
+			!readPublicFlag("BYPASS_AUTH_FOR_TESTS", ["VITE_BYPASS_AUTH_FOR_TESTS"]) &&
+			!readPublicFlag("USE_MOCK_ASSETS", ["VITE_USE_MOCK_ASSETS"])
+		) {
 			debugLogger.error(
 				FAL_LOG_COMPONENT,
 				"API_KEY_MISSING",
@@ -144,6 +142,9 @@ class FalAIClient {
 	 * Awaits the Electron storage init if it's in progress.
 	 */
 	private async ensureApiKey(): Promise<string | null> {
+		if (!this.apiKey && !this.apiKeyInitPromise) {
+			this.apiKeyInitPromise = this.initApiKeyFromElectron();
+		}
 		if (this.apiKeyInitPromise) {
 			await this.apiKeyInitPromise;
 			this.apiKeyInitPromise = null;
@@ -334,7 +335,7 @@ class FalAIClient {
 
 		// Determine source of API key
 		let source = "unknown";
-		if (import.meta.env.VITE_FAL_API_KEY) source = "VITE_FAL_API_KEY";
+		if (readPublicEnv("FAL_API_KEY", ["VITE_FAL_API_KEY", "VITE_FAL_KEY"])) source = "VITE_FAL_API_KEY";
 		else if (platform().isElectron) source = "electron_storage";
 		else source = "manually_set";
 

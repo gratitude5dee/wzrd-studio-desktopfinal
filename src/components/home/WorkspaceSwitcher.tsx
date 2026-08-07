@@ -3,6 +3,8 @@ import { ChevronLeft, Plus, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/providers/AuthProvider';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { DitherAvatar } from '@/components/dither-kit';
+import { ditherBloom } from '@/lib/ditherTheme';
 import { cn } from '@/lib/utils';
 import { ShineBorder } from '@/components/ui/shine-border';
 import {
@@ -21,10 +23,6 @@ export const WorkspaceSwitcher = ({ isCollapsed = false }: WorkspaceSwitcherProp
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   
-  const getInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase();
-  };
-
   const userName = user?.email?.split('@')[0] || 'User';
 
   const textVariants = {
@@ -45,8 +43,12 @@ export const WorkspaceSwitcher = ({ isCollapsed = false }: WorkspaceSwitcherProp
           {/* Avatar with ShineBorder on hover */}
           <div className="relative">
             <Avatar className="w-8 h-8 ring-2 ring-transparent group-hover:ring-accent-purple/20 transition-all duration-300">
-              <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-700 text-white text-xs">
-                {user?.email ? getInitials(user.email) : 'U'}
+              <AvatarFallback className="bg-transparent text-white text-xs">
+                <DitherAvatar
+                  name={user?.email ?? 'U'}
+                  bloom={ditherBloom.dashboard}
+                  className="h-full w-full"
+                />
               </AvatarFallback>
             </Avatar>
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full overflow-hidden pointer-events-none">
@@ -110,8 +112,12 @@ export const WorkspaceSwitcher = ({ isCollapsed = false }: WorkspaceSwitcherProp
           <DropdownMenuItem className="flex items-center gap-3 p-2 rounded-lg cursor-pointer" asChild>
             <motion.div whileHover={{ x: 4 }}>
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-700 text-white text-xs font-semibold">
-                  {user?.email ? getInitials(user.email) : 'U'}
+                <AvatarFallback className="bg-transparent text-white text-xs font-semibold">
+                  <DitherAvatar
+                    name={user?.email ?? 'U'}
+                    bloom={ditherBloom.dashboard}
+                    className="h-full w-full"
+                  />
                 </AvatarFallback>
               </Avatar>
               <span className="flex-1 text-sm font-medium">Personal Workspace</span>

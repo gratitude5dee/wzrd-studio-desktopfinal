@@ -52,6 +52,10 @@ type ProgressCallback = (
 	advancedInfo?: AdvancedProgressInfo
 ) => void;
 
+interface ExportEngineOptions {
+	useFFmpegExport?: boolean;
+}
+
 // Export engine for rendering timeline to video
 export class ExportEngine {
 	protected canvas: HTMLCanvasElement;
@@ -83,7 +87,8 @@ export class ExportEngine {
 		settings: ExportSettings,
 		tracks: TimelineTrack[],
 		mediaItems: MediaItem[],
-		totalDuration: number
+		totalDuration: number,
+		options: ExportEngineOptions = {}
 	) {
 		this.canvas = canvas;
 		this.settings = settings;
@@ -92,7 +97,8 @@ export class ExportEngine {
 		this.totalDuration = totalDuration;
 
 		// Check if we should use FFmpeg WASM export
-		this.useFFmpegExport = isFFmpegExportEnabled();
+		this.useFFmpegExport =
+			options.useFFmpegExport ?? isFFmpegExportEnabled();
 		debugLog(
 			`[ExportEngine] Using ${this.useFFmpegExport ? "FFmpeg WASM" : "MediaRecorder"} for export`
 		);

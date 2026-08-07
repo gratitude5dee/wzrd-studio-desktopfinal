@@ -94,7 +94,7 @@ async function signOAuth1(input: {
     "OAuth " +
     Object.keys(oauthParams)
       .sort()
-      .map((key) => `${pct(key)}=\"${pct(oauthParams[key])}\"`)
+      .map((key) => `${pct(key)}="${pct(oauthParams[key])}"`)
       .join(", ")
   );
 }

@@ -4,6 +4,7 @@ import {
   Sparkles, ChevronDown, Image as ImageIcon,
   Video, Wand2, Check, MoreHorizontal, Zap, TrendingUp, Target
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { ImageCountSelector } from './ImageCountSelector';
 import {
   DropdownMenu,
@@ -25,7 +26,7 @@ interface ToolbarModelMeta {
   name: string;
   description: string;
   badge: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   color: string;
   category: 'generation' | 'advanced';
 }

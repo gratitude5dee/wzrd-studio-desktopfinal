@@ -44,15 +44,19 @@ const DEFAULT_PROPS: LyricRemixCompositionProps = {
 function getClipSequence(
   clips: FootageAsset[],
   durationMs: number,
-  cutMarkers: Array<{ timestampMs: number }> = []
+  cutMarkers: Array<{ timestampMs: number }> = [],
+  noCuts = false
 ) {
-  if (clips.length === 0) return [];
+  if (clips.length === 0 || durationMs <= 0) return [];
 
-  // Build boundaries from cut markers (same logic as buildRemixTimelineSlots)
+  // Build boundaries from cut markers (same logic as buildRemixTimelineSlots).
+  // With noCuts the whole duration is a single uncut segment.
   const boundaries = new Set<number>([0, durationMs]);
-  for (const m of cutMarkers) {
-    const t = Math.max(0, Math.min(durationMs, m.timestampMs));
-    boundaries.add(t);
+  if (!noCuts) {
+    for (const m of cutMarkers) {
+      const t = Math.max(0, Math.min(durationMs, m.timestampMs));
+      if (t > 0 && t < durationMs) boundaries.add(t);
+    }
   }
   const sorted = Array.from(boundaries).sort((a, b) => a - b);
 
@@ -78,8 +82,8 @@ export const LyricRemixComposition: React.FC<Partial<LyricRemixCompositionProps>
   const lines = useMemo(() => captionsToLines(props.captions), [props.captions]);
   const activeLine = lines.find((line) => nowMs >= line.startMs && nowMs < line.endMs) ?? null;
   const clipSequence = useMemo(
-    () => getClipSequence(props.backgroundClips, props.durationMs, props.cutMarkers),
-    [props.backgroundClips, props.durationMs, props.cutMarkers]
+    () => getClipSequence(props.backgroundClips, props.durationMs, props.cutMarkers, props.noCuts),
+    [props.backgroundClips, props.durationMs, props.cutMarkers, props.noCuts]
   );
 
   const enter = activeLine

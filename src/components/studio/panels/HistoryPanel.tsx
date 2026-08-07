@@ -14,13 +14,14 @@ import {
   Layers,
   FolderOpen,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useHistoryStore, type HistoryEntry } from '@/store/historyStore';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 
-const TYPE_ICONS: Record<HistoryEntry['type'], React.ElementType> = {
+const TYPE_ICONS: Record<HistoryEntry['type'], LucideIcon> = {
   add_node: Plus,
   delete_node: Minus,
   move_node: Move,

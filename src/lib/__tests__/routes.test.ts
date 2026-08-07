@@ -53,4 +53,17 @@ describe('routes contract', () => {
     expect(isDeferredRoute(appRoutes.deferred.demo)).toBe(true);
     expect(isDeferredRoute(appRoutes.deferred.profile)).toBe(true);
   });
+
+  it('registers the settings root alongside its children', () => {
+    expect(appRoutes.settings.root).toBe('/settings');
+    expect(isRegisteredRoute(appRoutes.settings.root)).toBe(true);
+    expect(getRouteEntry(appRoutes.settings.root)?.category).toBe('core');
+    expect(getRouteEntry(appRoutes.settings.billing)?.category).toBe('core');
+  });
+
+  it('keeps the Asset Store path registered as a legacy redirect', () => {
+    expect(isRegisteredRoute(appRoutes.assets)).toBe(true);
+    expect(getRouteEntry(appRoutes.assets)?.category).toBe('legacy');
+    expect(getRouteEntry(appRoutes.clipStudio)?.category).toBe('legacy');
+  });
 });

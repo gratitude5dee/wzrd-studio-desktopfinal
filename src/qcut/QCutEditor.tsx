@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { initPlatform, platform, PlatformCapability } from "@qcut/platform-core";
 
 import { createWzrdAdapter } from "./platform/wzrd";
+import { createVercelAdapter } from "./platform/vercel";
 
 import { EditorProvider } from "@qcut-app/components/editor-provider";
 import { EditorHeader } from "@qcut-app/components/editor-header";
@@ -41,6 +42,7 @@ import { assetService } from "@/services/assetService";
 import { setWzrdProjectContext } from "./bridge/wzrd-project-context";
 import { installEditorAgentApi } from "./bridge/agent-api";
 import { maybeImportLegacyTimeline } from "./bridge/legacy-importer";
+import { readPublicFlag } from "@/lib/env";
 
 import { useRegisterVoiceActions } from "@/voice/VoiceAgentProvider";
 import type { VoiceActionRegistration, VoiceActionResult } from "@/voice/actions/registry";
@@ -50,13 +52,29 @@ import type { VoiceActionRegistration, VoiceActionResult } from "@/voice/actions
 // ---------------------------------------------------------------------------
 
 let __platformInitialized = false;
+function isNextAppRouterRuntime(): boolean {
+	return (
+		typeof window !== "undefined" &&
+		((window as any).__WZRD_NEXT_APP_ROUTER === true ||
+			typeof (window as any).__NEXT_DATA__ !== "undefined")
+	);
+}
+
 function ensurePlatformInitialized() {
 	if (__platformInitialized) return;
-	initPlatform(createWzrdAdapter());
+	initPlatform(isNextAppRouterRuntime() ? createVercelAdapter() : createWzrdAdapter());
 	__platformInitialized = true;
 }
 
 ensurePlatformInitialized();
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function shouldUseLocalProjectData(projectId: string): boolean {
+	return !isUuid(projectId) && readPublicFlag("BYPASS_AUTH_FOR_TESTS", ["VITE_BYPASS_AUTH_FOR_TESTS"]);
+}
 
 function guessMediaType(asset: {
 	asset_type?: string;
@@ -202,22 +220,28 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 
 		const wzrdProjectId = projectId;
 		const qcutProjectId = `wzrd:${projectId}`;
+		const useLocalProjectData = shouldUseLocalProjectData(wzrdProjectId);
 
-			const ensureProjectTerminalContext = async () => {
-				try {
-					if (!platform().hasCapability(PlatformCapability.ProjectFolder)) {
-						return;
-					}
-					await platform().projectFolder.ensureStructure(qcutProjectId);
-					const root = await platform().projectFolder.getRoot(qcutProjectId);
-					usePtyTerminalStore.getState().setProjectContext({
-						projectId: qcutProjectId,
-						workingDirectory: root,
-					});
-				} catch (e) {
-					debugLog("[WZRD/QCut] Failed to set PTY project context", e);
+		const ensureProjectTerminalContext = async () => {
+			try {
+				if (!platform().hasCapability(PlatformCapability.ProjectFolder)) {
+					return;
 				}
-			};
+				await platform().projectFolder.ensureStructure(qcutProjectId);
+				const root = await platform().projectFolder.getRoot(qcutProjectId);
+				usePtyTerminalStore.getState().setProjectContext({
+					projectId: qcutProjectId,
+					workingDirectory: root,
+				});
+			} catch (e) {
+				debugLog("[WZRD/QCut] Failed to set PTY project context", e);
+			}
+		};
+
+		const maybeImportRemoteTimeline = async () => {
+			if (useLocalProjectData) return;
+			await maybeImportLegacyTimeline({ wzrdProjectId, qcutProjectId });
+		};
 
 		const ensureProjectExists = async (name: string) => {
 			const existing = await storageService.loadProject({ id: qcutProjectId });
@@ -250,6 +274,8 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 		};
 
 		const syncAssetsIntoMediaStore = async () => {
+			if (useLocalProjectData) return;
+
 			try {
 				const assets = await assetService.list({ projectId: wzrdProjectId });
 				if (abortController.signal.aborted) return;
@@ -270,15 +296,11 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 					let url: string | undefined = cdnUrl;
 					let localPath: string | undefined;
 
-					// Desktop: prefer caching remote media for stable playback + CLI export.
+					// Prefer platform-managed caching for stable playback + export.
 					// Images are typically small, so we avoid caching them eagerly.
-					if (
-						type !== "image" &&
-						typeof window !== "undefined" &&
-						(window as any).wzrdDesktop?.cacheRemoteMedia
-					) {
+					if (type !== "image" && platform().mediaImport?.cacheRemoteMedia) {
 						try {
-							const cached = await (window as any).wzrdDesktop.cacheRemoteMedia({
+							const cached = await platform().mediaImport.cacheRemoteMedia({
 								url: cdnUrl,
 								operationId: `qcut-asset-${asset.id}`,
 							});
@@ -364,7 +386,9 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 			inFlightProjectIdRef.current = qcutProjectId;
 			const loadPromise = (async () => {
 				try {
-					const wzrdProject = await projectService.find(wzrdProjectId);
+					const wzrdProject = useLocalProjectData
+						? null
+						: await projectService.find(wzrdProjectId);
 					const desiredName = wzrdProject?.title || "Untitled Project";
 
 					setWzrdProjectContext({
@@ -376,7 +400,7 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 					await ensureProjectExists(desiredName);
 					await loadProject(qcutProjectId);
 					await syncAssetsIntoMediaStore();
-					await maybeImportLegacyTimeline({ wzrdProjectId, qcutProjectId });
+					await maybeImportRemoteTimeline();
 					await ensureProjectTerminalContext();
 				} catch (error) {
 					if (abortController.signal.aborted) return;
@@ -388,7 +412,7 @@ export function QCutEditor({ projectId }: { projectId: string }) {
 							await ensureProjectExists("Untitled Project");
 							await loadProject(qcutProjectId);
 							await syncAssetsIntoMediaStore();
-							await maybeImportLegacyTimeline({ wzrdProjectId, qcutProjectId });
+							await maybeImportRemoteTimeline();
 							await ensureProjectTerminalContext();
 							return;
 						} catch (e) {

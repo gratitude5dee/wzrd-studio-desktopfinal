@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ interface AssetLibraryProps {
   className?: string;
 }
 
-const ASSET_TYPE_ICONS: Record<AssetType, React.ElementType> = {
+const ASSET_TYPE_ICONS: Record<AssetType, LucideIcon> = {
   image: ImageIcon,
   video: Video,
   audio: Music,

@@ -40,6 +40,46 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function getFunctionErrorMessage(error: unknown): Promise<string> {
+  const fallback = getErrorMessage(error);
+  const context = error && typeof error === 'object' && 'context' in error
+    ? (error as { context?: unknown }).context
+    : null;
+
+  if (context && typeof (context as Response).clone === 'function') {
+    try {
+      const response = (context as Response).clone();
+      const contentType = response.headers.get('content-type') ?? '';
+
+      if (contentType.includes('application/json')) {
+        const payload = await response.json();
+        if (payload && typeof payload === 'object') {
+          const message =
+            typeof payload.error === 'string' ? payload.error :
+            typeof payload.message === 'string' ? payload.message :
+            typeof payload.details === 'string' ? payload.details :
+            null;
+
+          if (message) {
+            return message;
+          }
+        }
+      }
+
+      const text = await response.text();
+      if (text.trim()) {
+        return text.trim();
+      }
+    } catch {
+      // Fall through to the SDK message below.
+    }
+  }
+
+  return fallback === 'Edge Function returned a non-2xx status code'
+    ? 'Wallet sign-in could not be completed. Try again or use Google/email.'
+    : fallback;
+}
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -89,8 +129,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return false;
     }
 
+    const walletAddress = thirdwebAccount.address;
+    const walletAddressLower = walletAddress.toLowerCase();
+    const failWalletAuth = (message: string) => {
+      setWalletAuthError(message);
+      failedWalletRef.current = walletAddressLower;
+      return false;
+    };
+
     // If already authenticated with same wallet, skip
-    if (user?.user_metadata?.wallet_address?.toLowerCase() === thirdwebAccount.address.toLowerCase()) {
+    if (user?.user_metadata?.wallet_address?.toLowerCase() === walletAddressLower) {
       return true;
     }
 
@@ -100,7 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     try {
       const timestamp = Date.now();
-      const message = `Sign this message to authenticate with MOG Studio.\n\nWallet: ${thirdwebAccount.address}\nTimestamp: ${timestamp}\n\nThis signature proves you own this wallet and does not authorize any transactions.`;
+      const message = `Sign this message to authenticate with MOG Studio.\n\nWallet: ${walletAddress}\nTimestamp: ${timestamp}\n\nThis signature proves you own this wallet and does not authorize any transactions.`;
 
       // Sign the message using Thirdweb
       let signature: string;
@@ -109,8 +157,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } catch (signError: unknown) {
         const signErrorMessage = getErrorMessage(signError);
         if (signErrorMessage.includes('rejected') || signErrorMessage.includes('denied')) {
-          setWalletAuthError('Signature request was rejected');
-          return false;
+          return failWalletAuth('Signature request was rejected');
         }
         throw signError;
       }
@@ -118,7 +165,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Call the wallet-auth edge function
       const { data, error: fnError } = await supabase.functions.invoke('wallet-auth', {
         body: {
-          walletAddress: thirdwebAccount.address,
+          walletAddress,
           message,
           signature,
           timestamp,
@@ -127,13 +174,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (fnError) {
         console.error('Wallet auth function error:', fnError);
-        setWalletAuthError(fnError.message || 'Failed to authenticate wallet');
-        return false;
+        return failWalletAuth(await getFunctionErrorMessage(fnError));
       }
 
       if (!data?.session) {
-        setWalletAuthError('No session returned from authentication');
-        return false;
+        return failWalletAuth('No session returned from authentication');
       }
 
       // Set the Supabase session
@@ -144,15 +189,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (sessionError) {
         console.error('Error setting session:', sessionError);
-        setWalletAuthError('Failed to establish session');
-        return false;
+        return failWalletAuth('Failed to establish session');
       }
 
+      failedWalletRef.current = null;
       return true;
     } catch (err: unknown) {
       console.error('Wallet authentication error:', err);
-      setWalletAuthError(getErrorMessage(err) || 'Authentication failed');
-      return false;
+      return failWalletAuth(getErrorMessage(err) || 'Authentication failed');
     } finally {
       setIsWalletAuthenticating(false);
     }

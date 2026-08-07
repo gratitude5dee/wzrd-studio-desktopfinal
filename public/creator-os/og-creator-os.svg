@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">WZRD.tech — Creator OS</title>
+  <desc id="desc">A deep blue cloud field behind the WZRD.tech Creator OS mark.</desc>
+  <defs>
+    <radialGradient id="sky" cx="68%" cy="32%" r="74%">
+      <stop offset="0" stop-color="#417fcb"/>
+      <stop offset="0.48" stop-color="#0b356f"/>
+      <stop offset="1" stop-color="#05070a"/>
+    </radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="28"/></filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#sky)"/>
+  <g filter="url(#blur)" fill="#dce6f2" opacity="0.44">
+    <ellipse cx="220" cy="430" rx="280" ry="94"/>
+    <ellipse cx="780" cy="474" rx="350" ry="110"/>
+    <ellipse cx="1040" cy="182" rx="230" ry="82" opacity="0.45"/>
+  </g>
+  <rect x="28" y="28" width="1144" height="574" fill="none" stroke="#dce6f2" stroke-opacity="0.35"/>
+  <text x="82" y="105" fill="#dce6f2" font-family="monospace" font-size="20" letter-spacing="5">WZRD.TECH / 001</text>
+  <text x="82" y="338" fill="#f1ebdd" font-family="Georgia, serif" font-size="128" letter-spacing="-8">Creator</text>
+  <text x="780" y="338" fill="#8cc8ff" font-family="monospace" font-size="70" letter-spacing="-6">OS</text>
+  <text x="84" y="410" fill="#dce6f2" font-family="Georgia, serif" font-size="34">A living system for the people who turn passing signals into culture.</text>
+  <text x="84" y="538" fill="#8cc8ff" font-family="monospace" font-size="22" letter-spacing="4">AIR · STUDIO · EARTH · ZAP</text>
+</svg>

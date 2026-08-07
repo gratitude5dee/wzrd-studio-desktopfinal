@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod3";
 
 import { PanelView } from "@qcut-app/types/panel";
 import { TIMELINE_CONSTANTS } from "@qcut-app/constants/timeline-constants";
@@ -13,6 +13,7 @@ import { useCaptionsStore } from "@qcut-app/stores/captions-store";
 import { useEffectsStore } from "@qcut-app/stores/ai/effects-store";
 
 import type { TrackType } from "@qcut-app/types/timeline";
+import type { SelectedElement } from "@qcut-app/stores/timeline/types";
 type CommandSource = "renderer" | "mcp";
 
 type CommandLogEntry = {
@@ -81,12 +82,18 @@ type CommandResult<T = unknown> =
 	| { ok: true; result: T }
 	| { ok: false; error: string; code?: string };
 
+type CommandFailure = Extract<CommandResult, { ok: false }>;
+
 function ok<T>(result: T): CommandResult<T> {
 	return { ok: true, result };
 }
 
 function err(message: string, code?: string): CommandResult {
 	return { ok: false, error: message, code };
+}
+
+function isCommandFailure(result: CommandResult): result is CommandFailure {
+	return "error" in result;
 }
 
 function guessMediaTypeFromUrl(rawUrl: string): "image" | "video" | "audio" {
@@ -258,17 +265,29 @@ async function executeLogged(
 	try {
 		checkRateLimitOrThrow();
 		const result = await executeInternal(command, args);
-		pushCommandLog({
-			id: logId,
-			ts: started,
-			source,
-			command,
-			args,
-			ok: result.ok,
-			code: result.ok ? undefined : result.code,
-			error: result.ok ? undefined : result.error,
-			durationMs: Date.now() - started,
-		});
+		if (isCommandFailure(result)) {
+			pushCommandLog({
+				id: logId,
+				ts: started,
+				source,
+				command,
+				args,
+				ok: false,
+				code: result.code,
+				error: result.error,
+				durationMs: Date.now() - started,
+			});
+		} else {
+			pushCommandLog({
+				id: logId,
+				ts: started,
+				source,
+				command,
+				args,
+				ok: true,
+				durationMs: Date.now() - started,
+			});
+		}
 		return result;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -621,7 +640,11 @@ async function executeInternal(command: EditorCommandName, args: unknown): Promi
 			case "selectElements": {
 				const parsed = selectElementsSchema.parse(args ?? {});
 				requireActiveProjectId();
-				useTimelineStore.getState().setSelectedElements(parsed.elements);
+				const elements: SelectedElement[] = parsed.elements.map((element) => ({
+					trackId: element.trackId,
+					elementId: element.elementId,
+				}));
+				useTimelineStore.getState().setSelectedElements(elements);
 				return ok({ count: parsed.elements.length });
 			}
 
@@ -748,20 +771,20 @@ export function installEditorAgentApi({ projectId }: { projectId: string }) {
 				}
 
 				const result = await executeLogged(command, args, { source: "mcp" });
-				if (result.ok) {
+				if (isCommandFailure(result)) {
+					wzrdQcut?.agentCommand?.respond?.({
+						requestId,
+						ok: false,
+						error: result.error,
+						code: result.code,
+					});
+				} else {
 					wzrdQcut?.agentCommand?.respond?.({
 						requestId,
 						ok: true,
 						result: result.result,
 					});
-					return;
 				}
-				wzrdQcut?.agentCommand?.respond?.({
-					requestId,
-					ok: false,
-					error: result.error,
-					code: result.code,
-				});
 			});
 		} catch {
 			unsubscribe = null;

@@ -49,6 +49,17 @@ describe("syncProjectSkillsForClaude", () => {
 		}).not.toThrow();
 	});
 
+	it("skips sync quietly when skills capability is unsupported", () => {
+		const warningSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		initPlatform(createWebAdapter());
+
+		expect(() => {
+			syncProjectSkillsForClaude({ projectId: "project-web" });
+		}).not.toThrow();
+		expect(warningSpy).not.toHaveBeenCalled();
+	});
+
 	it("warns when sync promise rejects", async () => {
 		const warningSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 

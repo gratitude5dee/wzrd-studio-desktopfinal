@@ -295,6 +295,17 @@ export interface PlatformMediaImportAPI {
 	remove(projectId: string, mediaId: string): Promise<boolean>;
 	checkSymlinkSupport(): Promise<boolean>;
 	getMediaPath(projectId: string): Promise<string>;
+	cacheRemoteMedia?(options: {
+		url: string;
+		operationId: string;
+		name?: string;
+	}): Promise<{
+		name: string;
+		path: string;
+		size?: number;
+		mimeType?: string;
+		mediaUrl?: string;
+	} | null>;
 }
 
 // ---------------------------------------------------------------------------

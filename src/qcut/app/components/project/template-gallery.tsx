@@ -1,4 +1,5 @@
 import { Film, MonitorPlay, Package, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { CanvasSize } from "@qcut-app/types/editor";
 
 interface ProjectTemplate {
@@ -6,7 +7,7 @@ interface ProjectTemplate {
 	name: string;
 	description: string;
 	hint: string;
-	icon: React.ElementType;
+	icon: LucideIcon;
 	canvasSize: CanvasSize;
 	aspectLabel: string;
 }

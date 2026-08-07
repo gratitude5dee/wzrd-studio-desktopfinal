@@ -4,8 +4,9 @@ import {
 	parametersToCSSFilters,
 	mergeEffectParameters,
 } from "@qcut-app/lib/effects/effects-utils";
+import type { EffectInstance } from "@qcut-app/types/effects";
 
-const EMPTY_EFFECTS: readonly never[] = [];
+const EMPTY_EFFECTS: readonly EffectInstance[] = [];
 
 /** Compute the aggregate CSS filter string for an element's enabled effects. */
 export function useEffectsRendering(elementId: string | null, enabled = false) {

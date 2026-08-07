@@ -1,13 +1,7 @@
 {
-  "framework": "vite",
-  "installCommand": "bun install",
-  "buildCommand": "bun run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/og/[id].ts": { "memory": 1024, "maxDuration": 15 }
-  },
-  "rewrites": [
-    { "source": "/a/:id", "destination": "/api/a/:id" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "framework": "nextjs",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "bun run web:build",
+  "devCommand": "bun run web:dev",
+  "bunVersion": "1.x"
 }

@@ -82,20 +82,44 @@ const TEMPLATES = [
     label: "PRODUCTION TYPE",
     title: "General",
     asset: musicPolishAssets.talent.voiceBooth,
+    script: "Hey everyone — quick update from the studio. Here's what we've been working on this week.",
   },
   {
     id: "selfie",
     label: "CAMERA STYLE",
     title: "Selfie",
     asset: musicPolishAssets.talent.leadVocalist,
+    script: "Okay so I have to tell you about this — I wasn't expecting it, but it completely changed my routine.",
   },
   {
     id: "selling",
     label: "CONTENT TYPE",
     title: "Selling",
     asset: musicPolishAssets.toolSurfaces.lipsyncProductRead,
+    script: "This is the one product I keep coming back to. Three reasons why — and the last one surprised me.",
   },
-] satisfies Array<{ id: string; label: string; title: string; asset: MusicPolishAsset }>;
+  {
+    id: "testimonial",
+    label: "CONTENT TYPE",
+    title: "Testimonial",
+    asset: musicPolishAssets.talent.faceWardrobe,
+    script: "I was skeptical at first, honestly. But after two weeks I noticed the difference — here's my experience.",
+  },
+  {
+    id: "performance",
+    label: "CAMERA STYLE",
+    title: "Performance",
+    asset: musicPolishAssets.cinema.performanceCloseup,
+    script: "Tonight's set means everything. This next track goes out to everyone who stayed with us from day one.",
+  },
+  {
+    id: "street",
+    label: "PRODUCTION TYPE",
+    title: "Street Interview",
+    asset: musicPolishAssets.cinema.neonStreet,
+    script: "We're out here asking people one question — what's the one song you can't stop playing right now?",
+  },
+] satisfies Array<{ id: string; label: string; title: string; asset: MusicPolishAsset; script: string }>;
 
 /* ─── Voice Types ────────────────────────────────────── */
 
@@ -547,7 +571,7 @@ function UGCTemplates({
               )}
 
               {/* Text */}
-              <div className="absolute bottom-6 left-6 z-10">
+              <div className="absolute bottom-6 left-6 right-6 z-10 text-left">
                 <p className={cn(
                   "text-[10px] uppercase tracking-[0.3em] font-bold mb-2",
                   selected ? "text-kanvas-accent" : "text-kanvas-text-muted"
@@ -556,6 +580,9 @@ function UGCTemplates({
                 </p>
                 <p className="text-3xl font-black text-kanvas-text-primary font-kanvas-display tracking-tight">
                   {tpl.title}
+                </p>
+                <p className="mt-2 text-xs italic leading-relaxed text-kanvas-text-secondary line-clamp-2">
+                  “{tpl.script}”
                 </p>
               </div>
             </button>

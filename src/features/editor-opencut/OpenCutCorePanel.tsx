@@ -16,7 +16,7 @@ import {
   Trash2,
   Waves,
 } from 'lucide-react';
-import type { ElementType } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ interface OpenCutCorePanelProps {
 
 interface CoreCommand {
   label: string;
-  icon: ElementType;
+  icon: LucideIcon;
   onRun: () => number;
   emptyMessage: string;
   disabled?: boolean;

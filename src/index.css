@@ -362,6 +362,28 @@
     --kanvas-rail-width: 336px;
     --kanvas-rail-width-compact: 300px;
     --kanvas-font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+
+    /* ------------------------------------------------------------------
+     * WZRD Creator OS semantic contract (light)
+     * HSL triplets so Tailwind can compose them via hsl(var(--x) / <alpha>).
+     * Accent hues are darkened here so text/icons keep WCAG AA against
+     * --surface-canvas; the dark theme carries the canonical brand hexes.
+     * ------------------------------------------------------------------ */
+    --surface-canvas: 240 10% 96%;
+    --surface-raised: 0 0% 100%;
+    --accent-air: 209 72% 34%;      /* AA-safe stand-in for #8cc8ff */
+    --accent-ember: 12 78% 38%;     /* AA-safe stand-in for #f06a47 */
+    --accent-mineral: 46 22% 30%;   /* AA-safe stand-in for #b8b096 */
+    --text-muted: 220 10% 42%;
+    --line-subtle: 240 20% 85%;
+    --status-success: 152 62% 27%;
+    --status-warning: 33 92% 30%;
+    --status-danger: 0 72% 40%;
+    --focus: 209 72% 34%;
+
+    /* Reserved: not consumed by any surface yet. */
+    --accent-water: 199 82% 32%;
+    --accent-fire: 8 80% 38%;
   }
 
   .dark {
@@ -472,6 +494,30 @@
     --kanvas-rail-width: 336px;
     --kanvas-rail-width-compact: 300px;
     --kanvas-font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+
+    /* ------------------------------------------------------------------
+     * WZRD Creator OS semantic contract (dark - canonical)
+     * Contrast against --surface-canvas (#0a0a0a):
+     *   text-primary 18.3:1 - text-secondary 7.3:1 - text-muted 4.8:1
+     *   accent-air 12.6:1 - accent-ember 6.4:1 - accent-mineral 9.1:1
+     * accent-ember also clears 6.8:1 with black foreground, so it is safe
+     * as a filled control background.
+     * ------------------------------------------------------------------ */
+    --surface-canvas: 0 0% 4%;      /* #0a0a0a */
+    --surface-raised: 0 0% 7%;      /* #121212 */
+    --accent-air: 209 100% 77%;     /* #8cc8ff */
+    --accent-ember: 12 85% 61%;     /* #f06a47 */
+    --accent-mineral: 46 19% 66%;   /* #b8b096 */
+    --text-muted: 220 8% 52%;
+    --line-subtle: 228 10% 18%;
+    --status-success: 152 55% 52%;
+    --status-warning: 38 92% 62%;
+    --status-danger: 0 72% 62%;
+    --focus: 209 100% 77%;
+
+    /* Reserved: not consumed by any surface yet. */
+    --accent-water: 199 89% 62%;
+    --accent-fire: 8 85% 58%;
   }
 }
 
@@ -776,6 +822,16 @@ body::after {
   .animate-fade-in-up,
   .animate-scale-in {
     animation: none;
+  }
+
+  /* Global honor of the OS preference: nothing loops, nothing travels. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
