@@ -268,7 +268,12 @@ export function ImageEditorPage() {
         </p>
       )}
 
-      <SendButton enabled={Boolean(snapshot)} pending={sending} onSend={() => void send()} />
+      <SendButton
+        hasImage={Boolean(snapshot)}
+        pending={sending}
+        onSend={() => void send()}
+        onPickFile={(file) => void editor.importFile(file)}
+      />
 
       <UndoFilmstrip
         open={filmstripOpen}
