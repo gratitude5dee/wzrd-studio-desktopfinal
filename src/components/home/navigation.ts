@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { appRoutes } from '@/lib/routes';
+import { appRoutes, WTR_EXTERNAL_URL } from '@/lib/routes';
 import { KANVAS_STUDIO_ORDER, KANVAS_STUDIO_META } from '@/features/kanvas/helpers';
 import { KANVAS_STUDIO_ICONS } from '@/features/kanvas/studioIcons';
 
@@ -127,6 +127,7 @@ const IP_MANAGEMENT_GROUP: SidebarNavGroup = {
   path: appRoutes.ipVault,
   children: [
     { id: 'ip-vault', label: 'IP Vault', icon: ShieldCheck, isRoute: true, path: appRoutes.ipVault },
+    { id: 'wtr', label: 'WTR', icon: Globe, externalUrl: WTR_EXTERNAL_URL },
   ],
 };
 

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '@/components/home/Sidebar';
 import { MobileSidebarDrawer } from '@/components/home/MobileSidebarDrawer';
 import { SidebarProvider } from '@/contexts/SidebarContext';
+import { WTR_EXTERNAL_URL } from '@/lib/routes';
 
 vi.mock('@/providers/AuthProvider', () => ({
   useAuth: () => ({
@@ -118,7 +119,6 @@ describe('home navigation structure', () => {
     // Studio owns the active 'all' view, so its subtabs are expanded by default.
     expect(getNavLabels(STUDIO_CHILD_LABELS)).toEqual(STUDIO_CHILD_LABELS);
     expect(screen.queryByRole('button', { name: 'Asset Store' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'WTR' })).toBeNull();
   });
 
   it('navigates from group children', () => {
@@ -138,11 +138,16 @@ describe('home navigation structure', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Postz' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/postz');
 
-    // IP Management holds IP Vault only.
+    // IP Management holds IP Vault plus the external WTR link.
     expect(screen.queryByRole('button', { name: 'IP Vault' })).toBeNull();
     fireEvent.click(toggle('IP Management'));
     fireEvent.click(screen.getByRole('button', { name: 'IP Vault' }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');
+
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(screen.getByRole('button', { name: 'WTR' }));
+    expect(openSpy).toHaveBeenCalledWith(WTR_EXTERNAL_URL, '_blank', 'noopener,noreferrer');
+    openSpy.mockRestore();
 
     fireEvent.click(toggle('Settings'));
     fireEvent.click(screen.getByRole('button', { name: 'Billing' }));
