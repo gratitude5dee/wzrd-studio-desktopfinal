@@ -215,7 +215,9 @@ export function ImageEditorPage() {
         formatLabel={aspectLabel}
         onFormatClick={() => {
           setGroup('reframe');
-          setSheetOpen(true);
+          // The sheet is the mobile surface; on desktop the rail is already
+          // showing, so selecting the group is the whole interaction.
+          if (window.matchMedia('(max-width: 767px)').matches) setSheetOpen(true);
         }}
         dimensions={snapshot ? `${snapshot.width}×${snapshot.height}` : null}
       />

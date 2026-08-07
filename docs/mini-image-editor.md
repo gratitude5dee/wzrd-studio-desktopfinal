@@ -148,6 +148,11 @@ The canvas is the only non-chrome area above the fold (§3.1): pinch to zoom to
 `DitherGradient` wash with three example prompts (§8). Import accepts a file
 pick, a drop, a camera capture and a paste.
 
+While the crop overlay is up, one finger belongs to the crop rect: pan and
+double-tap-to-fit stand down so a precisely placed zoom is not thrown away, but
+pinch still works, because zooming in to refine a crop is the reason to zoom.
+A second finger cancels an in-flight crop drag.
+
 Offline (§8), local controls stay live and the surface says so; the generative
 controls are already disabled in this phase.
 

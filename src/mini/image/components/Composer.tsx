@@ -33,7 +33,7 @@ export function Composer({ hasImage, onSubmit, onAttach }: ComposerProps) {
       <input
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
-        placeholder={onSubmit ? placeholder : `${placeholder} (coming soon)`}
+        placeholder={placeholder}
         disabled={!onSubmit}
         className="h-9 flex-1 rounded-full border border-wzrd-hairline bg-wzrd-ink px-4 text-[13px] text-wzrd-mist placeholder:text-wzrd-muted-text focus:border-wzrd-blue focus:outline-none disabled:cursor-not-allowed"
       />

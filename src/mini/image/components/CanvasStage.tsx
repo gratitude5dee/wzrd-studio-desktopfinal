@@ -41,8 +41,9 @@ export function CanvasStage({
 }: CanvasStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<CropHandleId | null>(null);
-  const zoom = usePinchZoom(Boolean(snapshot));
+  const zoom = usePinchZoom(Boolean(snapshot), Boolean(cropRect));
   const dragOrigin = useRef<{ x: number; y: number; rect: CropRect } | null>(null);
+  const activePointers = useRef(new Set<number>());
 
   // Mirrors the zoom `straighten()` applies, so preview and result agree.
   const straightenZoom = useMemo(() => {
@@ -75,9 +76,11 @@ export function CanvasStage({
   }, []);
 
   const startDrag = (handle: CropHandleId) => (event: React.PointerEvent) => {
-    if (!cropRect) return;
+    // A handle claims the gesture by defaulting it, so the rect underneath
+    // stands down. Propagation is left alone: the second finger of a pinch has
+    // to reach the zoom handlers even while the overlay is up.
+    if (!cropRect || event.defaultPrevented || activePointers.current.size > 0) return;
     event.preventDefault();
-    event.stopPropagation();
     dragOrigin.current = { ...toNormalized(event), rect: cropRect };
     setDragging(handle);
   };
@@ -122,6 +125,23 @@ export function CanvasStage({
     <div
       className="relative flex flex-1 touch-none items-center justify-center overflow-hidden p-3"
       {...zoom.handlers}
+      onPointerDown={(event) => {
+        activePointers.current.add(event.pointerId);
+        // A second finger means a pinch, not a crop drag.
+        if (activePointers.current.size > 1) {
+          dragOrigin.current = null;
+          setDragging(null);
+        }
+        zoom.handlers.onPointerDown(event);
+      }}
+      onPointerUp={(event) => {
+        activePointers.current.delete(event.pointerId);
+        zoom.handlers.onPointerUp(event);
+      }}
+      onPointerCancel={(event) => {
+        activePointers.current.delete(event.pointerId);
+        zoom.handlers.onPointerCancel(event);
+      }}
     >
       <div
         ref={frameRef}

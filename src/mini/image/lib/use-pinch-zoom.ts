@@ -17,8 +17,13 @@ const DOUBLE_TAP_MS = 300;
  * The transform is applied to the frame element itself, so every rect the crop
  * overlay measures already carries it — normalized crop coordinates stay valid
  * at any zoom without a second coordinate space.
+ *
+ * While the crop overlay is up, one finger belongs to the crop rect and a
+ * double-tap would throw away the zoom the user just set to place it, so both
+ * are suppressed. Pinch still works: zooming in to refine a crop is the whole
+ * reason to zoom at all.
  */
-export function usePinchZoom(enabled: boolean) {
+export function usePinchZoom(enabled: boolean, cropping = false) {
   const [view, setView] = useState<ViewTransform>(FIT_VIEW);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
@@ -38,7 +43,7 @@ export function usePinchZoom(enabled: boolean) {
       if (!enabled) return;
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
-      if (pointers.current.size === 1) {
+      if (pointers.current.size === 1 && !cropping) {
         const now = Date.now();
         if (now - lastTap.current < DOUBLE_TAP_MS) {
           reset();
@@ -53,7 +58,7 @@ export function usePinchZoom(enabled: boolean) {
         pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), scale: view.scale };
       }
     },
-    [enabled, reset, view.scale]
+    [cropping, enabled, reset, view.scale]
   );
 
   const onPointerMove = useCallback(
@@ -73,13 +78,13 @@ export function usePinchZoom(enabled: boolean) {
       }
 
       // One finger pans, but only once there is something to pan.
-      if (previous && view.scale > 1) {
+      if (previous && view.scale > 1 && !cropping) {
         const dx = event.clientX - previous.x;
         const dy = event.clientY - previous.y;
         setView((current) => clamp({ ...current, x: current.x + dx, y: current.y + dy }));
       }
     },
-    [enabled, view.scale]
+    [cropping, enabled, view.scale]
   );
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
@@ -88,8 +93,8 @@ export function usePinchZoom(enabled: boolean) {
   }, []);
 
   const onDoubleClick = useCallback(() => {
-    if (enabled) reset();
-  }, [enabled, reset]);
+    if (enabled && !cropping) reset();
+  }, [cropping, enabled, reset]);
 
   return {
     view,
