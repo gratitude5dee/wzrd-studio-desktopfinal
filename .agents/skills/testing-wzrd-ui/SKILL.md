@@ -1,6 +1,6 @@
 ---
 name: testing-wzrd-ui
-description: How to run and browser-test the WZRD Studio Vite/React app locally — dev server flags, bypassing auth to reach protected dashboard/studio/observability/billing routes, route map, known pre-existing console errors, and how to exercise data-gated charts.
+description: How to run and browser-test the WZRD Studio Vite/React app and the Next.js web app locally — dev server flags, bypassing auth to reach protected dashboard/studio/observability/billing/QCut-editor routes, route map, known pre-existing console errors, the QCut web diagnostics globals, and how to exercise data-gated charts.
 ---
 
 # Browser-testing WZRD Studio locally
@@ -12,6 +12,64 @@ bun install                       # covered by the repo blueprint's maintenance 
 VITE_BYPASS_AUTH_FOR_TESTS=true VITE_USE_MOCK_ASSETS=true bun run dev
 # serves on http://localhost:8080 (NOT 5173)
 ```
+
+## The Next.js web app (QCut editor browser path)
+
+There is a second app surface served by Next.js (`bun run web:dev`), used for the browser
+render/export path of the QCut editor. It uses `NEXT_PUBLIC_*` flags, not `VITE_*`:
+
+```bash
+NEXT_PUBLIC_BYPASS_AUTH_FOR_TESTS=true NEXT_PUBLIC_USE_MOCK_ASSETS=true \
+  bun run web:dev --port 3400 --hostname 127.0.0.1
+# then http://127.0.0.1:3400/projects/diagnostic-project/editor
+```
+
+Gotchas:
+
+* The auth/local-project bypass on the Next path needs a **dev build AND a NON-UUID project id**
+  (e.g. `diagnostic-project`). With a UUID the editor queries Supabase, gets `PGRST116`, and no
+  project ever activates — the editor mounts but every agent command is rejected. (The Vite path is
+  the opposite: `ProjectAccessGate` wants a UUID-shaped id.)
+* The editor first paints a "Preparing studio" skeleton; the webpack dev build can take 30–60s to
+  compile the editor chunk on a cold start. Wait and re-view before concluding it is broken.
+* Drive the editor from the console via the agent API instead of fighting canvas selectors:
+  `window.wzrd.editor.commands.execute("addText", {content:"hi", startTime:0, duration:3})`
+  (also `importMediaByUrl`, `addClip`, `export`, `getExportStatus`, `undo`, `redo`, `seek`).
+  Wrap in an IIFE — a bare `const x = ...` statement evaluates to `undefined`.
+* Undo/redo work with `Ctrl+Z` / `Ctrl+Shift+Z` after clicking into the timeline area; clicking the
+  timeline ruler seeks the playhead.
+
+### QCut web diagnostics globals
+
+In dev builds (or with `?wzrdBaseline=1`) the editor collects a runtime baseline:
+
+* `window.__wzrdQcutWebBaseline` — `{platform, isElectron, crossOriginIsolated, capabilities,
+  browserCapabilities, webCodecsProbe, ffmpegWasmFallback, gracefulStubCalls}`.
+* `window.__wzrdQcutGracefulStubCalls` — namespaced list of platform calls that silently resolved
+  to `null` (e.g. `screenRecording.getStatus`, `projectJson.write`), also `console.warn`ed as
+  `[QCut/web] platform.<ns>.<method> resolved to a graceful null stub`.
+
+### Per-browser baseline harness
+
+```bash
+mkdir -p public/diagnostics && ffmpeg -y -f lavfi -i testsrc=size=640x360:rate=30:duration=3 \
+  -f lavfi -i "sine=frequency=440:duration=3" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest \
+  public/diagnostics/sample.mp4
+node scripts/diagnostics/qcut-web-baseline.mjs --base-url http://127.0.0.1:3400 \
+  --project-id diagnostic-project --media-url http://127.0.0.1:3400/diagnostics/sample.mp4 \
+  --browsers chromium --out /tmp/qcut-baseline
+rm -rf public/diagnostics    # sample media is intentionally not committed
+```
+
+* **Do not run `--browsers webkit`** on Linux VMs — the WebKit content process crashes with a
+  GStreamer host-library error. Chromium (and usually Firefox) are the usable targets.
+* Chromium currently *fails* export with
+  `This specific encoder configuration (mp4a.40.2, 128000 bps, 2 channels, 48000 Hz) is not
+  supported by this browser` and `exportBytes: 0`. As of the Phase-1 diagnostics work this is the
+  **documented baseline**, not a regression — a future phase may change the audio codec, so
+  re-check `docs/qcut-editor-web.md` before treating it either way.
+* Expected non-fatal noise in the harness JSON: aborted `/ffmpeg/ffmpeg-core.{js,wasm}` requests
+  and `ERR_REQUEST_RANGE_NOT_SATISFIABLE` on blob URLs.
 
 Dark theme is the app default, so no theme toggling is needed for dark-mode checks. The theme
 toggle button lives in the dashboard header (`aria-label="Toggle theme"`).
