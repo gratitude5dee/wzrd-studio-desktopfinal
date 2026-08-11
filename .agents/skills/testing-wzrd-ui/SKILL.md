@@ -158,6 +158,43 @@ against seeded data, not real data.
 * Landing anchor nav links (Features/Pricing/Testimonials) do not always scroll; scroll manually or
   press `End` then scroll up to reach lower sections such as the testimonials grid.
 
+## QCut browser export testing (Next `web:dev` surface)
+
+* Editor route: `http://127.0.0.1:3400/projects/diagnostic-project/editor` (NON-UUID project id, dev
+  build only). Cold start shows a "Preparing studio" skeleton for ~25s before the shell mounts.
+* Import media through the hidden `<input type="file" aria-label="Upload media files">` in the media
+  panel (`select_file` on it works even though it is `class="hidden"`). Real bytes are provable in
+  the UI: the media card renders a decoded JPEG thumbnail plus a duration badge (`0:04`). A
+  0-byte placeholder cannot produce either, and the console would log
+  "importing a placeholder with no bytes".
+* Add to timeline: hover the media card → a `+` button appears (it also selects the card and shows
+  an "Add to Timeline" bulk-action bar).
+* Export panel cards: File Name (click the card to reveal `input[placeholder="Enter filename"]`;
+  set it with the native value setter + `input` event so React picks it up), Quality
+  (1920×1080 / 1280×720 / 854×480), Export Engine, Format (WebM / MP4).
+* **Two very different engines.** The Export dialog's "Export Engine" card only offers
+  `Standard` (MediaRecorder) and `FFmpeg WASM`; the WebCodecs/mediabunny muxer engine is NOT
+  selectable there but IS what the agent API path (`window.wzrd.editor.commands.execute("export", …)`)
+  picks. Consequences observed on Chromium/Linux:
+  - Standard/MediaRecorder: real-time capture → duration equals wall-clock render time
+    (e.g. 102s for a 4s timeline) and no audio stream, even with "Include audio in export" on.
+  - Muxer: correct duration, keeps audio (MP4 with h264 + **Opus**, since Chromium/Linux has no
+    AAC encoder).
+  Always state which engine produced an artifact; test both.
+* Forcing a WebM fallback without touching source: in the page console override
+  `MediaRecorder.isTypeSupported` to return false for `/mp4|quicktime/i` (Standard engine), or for
+  the muxer engine set `localStorage.qcut_force_webcodecs_off = "true"` + the same MIME stub +
+  404 the `/ffmpeg/ffmpeg-core.*` fetches. Rejecting only H.264 in
+  `VideoEncoder.isConfigSupported` is NOT enough — mediabunny then muxes VP8 into an MP4
+  container. Also note the engine factory probes `avc1.42001f` at 854×480: rejecting that too
+  sends the run to the FFmpeg WASM fallback and yields 0 bytes.
+* Verify downloads with `ffprobe -v error -show_entries format=format_name,duration,size
+  -show_entries stream=index,codec_type,codec_name,width,height,sample_rate,channels -of json <f>`.
+  Browser-tool downloads land in `/tmp/chisel_browser_downloads/`.
+* Firefox (Playwright build present) works on this surface: project activation returns a real
+  project and export yields MP4 h264+Opus. WebKit still crashes (GStreamer) — skip.
+* Requires system `ffmpeg`/`ffprobe` to generate and validate test media.
+
 ## Devin Secrets Needed
 
 None — the `VITE_BYPASS_AUTH_FOR_TESTS` dev flag removes the need for login credentials. Real
