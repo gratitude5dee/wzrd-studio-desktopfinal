@@ -172,6 +172,67 @@ against seeded data, not real data.
 * Export panel cards: File Name (click the card to reveal `input[placeholder="Enter filename"]`;
   set it with the native value setter + `input` event so React picks it up), Quality
   (1920×1080 / 1280×720 / 854×480), Export Engine, Format (WebM / MP4).
+* **Several very different engines; always state which one produced an artifact.** The Export
+  dialog's "Export Engine" card offers `Standard` (MediaRecorder), `FFmpeg WASM`, and — in any
+  browser exposing `VideoEncoder`/`VideoFrame` — `WebCodecs (H.264) (recommended)` (internal value
+  `muxer`, mediabunny), which is the default selection in browsers. Electron defaults to `cli`; a
+  browser without WebCodecs falls back to `standard` and the option is hidden. Behaviour observed
+  on Chromium/Linux:
+  - Standard/MediaRecorder: real-time capture → duration equals wall-clock render time
+    (e.g. ~102s for a 4s timeline) and no audio stream, even with "Include audio in export" on.
+    Slow: budget ~1.2 fps, so cap Quality at 854×480 when regression-testing it.
+  - Muxer/WebCodecs: correct timeline duration and keeps audio.
+* **Container/audio negotiation.** The muxer only accepts a container that can carry *all* required
+  tracks (`{mp4: [aac], webm: [opus, vorbis]}`). Chromium/Linux has no AAC encoder, so a timeline
+  *with audio* falls back to **WebM/Opus even when Format=MP4 is requested**, and the saved file is
+  renamed to `.webm` from the blob MIME type. A no-audio timeline stays MP4/H.264. Probe the actual
+  encoder support from the page console before asserting:
+  ```js
+  window.__probe = null;
+  (async () => { const c = async (cfg, k) => (await (k==="audio"?AudioEncoder:VideoEncoder).isConfigSupported(cfg)).supported;
+    window.__probe = { aac: await c({codec:"mp4a.40.2",sampleRate:48000,numberOfChannels:2,bitrate:128000},"audio"),
+      opus: await c({codec:"opus",sampleRate:48000,numberOfChannels:2,bitrate:128000},"audio"),
+      h264: await c({codec:"avc1.42001f",width:854,height:480}), vp9: await c({codec:"vp09.00.10.08",width:854,height:480}) }; })();
+  ```
+  (read `window.__probe` in a *second* console call — the first returns before the promise settles).
+* **The agent API hardcodes `engineType: "auto"`** (`export-dialog.tsx` `__exportActions.export`), so
+  `window.wzrd.editor.commands.execute("export", …)` and the Playwright harness go through factory
+  auto-selection and do **not** exercise the dialog's engine picker. Anything about the picker or
+  its default must be tested by clicking the real UI.
+* Forcing a WebM fallback without touching source: in the page console override
+  `MediaRecorder.isTypeSupported` to return false for `/mp4|quicktime/i` (Standard engine), or for
+  the muxer engine set `localStorage.qcut_force_webcodecs_off = "true"` + the same MIME stub +
+  404 the `/ffmpeg/ffmpeg-core.*` fetches. Rejecting only H.264 in
+  `VideoEncoder.isConfigSupported` is NOT enough — mediabunny then muxes VP8 into an MP4
+  container. Also note the engine factory probes `avc1.42001f` at 854×480: rejecting that too
+  sends the run to the FFmpeg WASM fallback and yields 0 bytes.
+* Verify downloads with `ffprobe -v error -show_entries format=format_name,duration,size
+  -show_entries stream=index,codec_type,codec_name,width,height,sample_rate,channels -of json <f>`.
+  Browser-tool downloads land in `/tmp/chisel_browser_downloads/`.
+* Firefox (Playwright build present) mounts fine and project activation returns a real project, but
+  the harness/agent-API auto path there has been seen to pick the FFmpeg WASM fallback
+  (`crossOriginIsolated` is false, no SharedArrayBuffer) and fail with
+  `Cannot find module 'blob:…'` → `exportBytes: 0`. That is the auto path, not the UI muxer path; to
+  test Firefox's real export you have to drive the Firefox UI and pick the engine. WebKit still
+  crashes (GStreamer) — skip.
+* `crossOriginIsolated` has been observed both `true` and `false` on the same dev server across
+  runs; if FFmpeg WASM fallback is being chosen unexpectedly, check it.
+* Requires system `ffmpeg`/`ffprobe` to generate and validate test media.
+
+## QCut browser export testing (Next `web:dev` surface)
+
+* Editor route: `http://127.0.0.1:3400/projects/diagnostic-project/editor` (NON-UUID project id, dev
+  build only). Cold start shows a "Preparing studio" skeleton for ~25s before the shell mounts.
+* Import media through the hidden `<input type="file" aria-label="Upload media files">` in the media
+  panel (`select_file` on it works even though it is `class="hidden"`). Real bytes are provable in
+  the UI: the media card renders a decoded JPEG thumbnail plus a duration badge (`0:04`). A
+  0-byte placeholder cannot produce either, and the console would log
+  "importing a placeholder with no bytes".
+* Add to timeline: hover the media card → a `+` button appears (it also selects the card and shows
+  an "Add to Timeline" bulk-action bar).
+* Export panel cards: File Name (click the card to reveal `input[placeholder="Enter filename"]`;
+  set it with the native value setter + `input` event so React picks it up), Quality
+  (1920×1080 / 1280×720 / 854×480), Export Engine, Format (WebM / MP4).
 * **Two very different engines.** The Export dialog's "Export Engine" card only offers
   `Standard` (MediaRecorder) and `FFmpeg WASM`; the WebCodecs/mediabunny muxer engine is NOT
   selectable there but IS what the agent API path (`window.wzrd.editor.commands.execute("export", …)`)
