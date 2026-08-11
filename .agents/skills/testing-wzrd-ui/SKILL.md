@@ -256,6 +256,18 @@ against seeded data, not real data.
   project and export yields MP4 h264+Opus. WebKit still crashes (GStreamer) — skip.
 * Requires system `ffmpeg`/`ffprobe` to generate and validate test media.
 
+## QCut editor (`/projects/:projectId/editor`)
+
+* Under `VITE_BYPASS_AUTH_FOR_TESTS`, use a **non-UUID** project id for the editor route (e.g.
+  `/projects/diagnostic-project/editor`) — UUID-shaped ids result in "No active project" in the
+  editor even though other project routes accept them.
+* The lazy editor bundle takes ~25 s to load; wait and re-view before concluding it's broken.
+* The media panel's context menu offers "Add as Overlay" but no plain "add to a specific track";
+  drag-to-a-new-track is unreliable via automation, so use the overlay path when a second layer is
+  enough and disclose the caveat.
+* Clicking the main timeline ruler while a Properties panel is open can deselect the clip and close
+  the panel — re-select the clip before asserting on panel contents.
+
 ## Devin Secrets Needed
 
 None — the `VITE_BYPASS_AUTH_FOR_TESTS` dev flag removes the need for login credentials. Real
