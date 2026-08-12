@@ -17,6 +17,7 @@ import { useCharacterCreationStore } from '@/lib/stores/character-creation-store
 import { MentionDropdown } from '@/components/character-creation/MentionDropdown';
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { musicPolishAssets } from '@/lib/musicPolishAssets';
+import { kanvasStarterAssets } from '@/lib/kanvasStarterAssets';
 type CinemaTab = 'image' | 'video' | 'cast';
 type FilterItem = 'genre' | 'budget' | 'era' | 'archetype' | 'identity' | 'appearance' | 'details' | 'outfit';
 
@@ -60,6 +61,13 @@ const FILTER_PILLS: { id: FilterItem; label: string }[] = [
 ];
 
 const GENRE_CARDS = [
+  { title: 'Hip-Hop', color: '#f97316', image: kanvasStarterAssets.music.hipHop.src, alt: kanvasStarterAssets.music.hipHop.alt, style: 'Street anthem' },
+  { title: 'R&B', color: '#60a5fa', image: kanvasStarterAssets.music.rnb.src, alt: kanvasStarterAssets.music.rnb.alt, style: 'Velvet performance' },
+  { title: 'Country', color: '#fbbf24', image: kanvasStarterAssets.music.country.src, alt: kanvasStarterAssets.music.country.alt, style: 'Blue-hour live set' },
+  { title: 'Techno', color: '#a3e635', image: kanvasStarterAssets.music.techno.src, alt: kanvasStarterAssets.music.techno.alt, style: 'Warehouse pulse' },
+  { title: 'Afrobeats', color: '#fb923c', image: kanvasStarterAssets.music.afrobeats.src, alt: kanvasStarterAssets.music.afrobeats.alt, style: 'Golden rooftop' },
+  { title: 'Latin Pop', color: '#ef4444', image: kanvasStarterAssets.music.latinPop.src, alt: kanvasStarterAssets.music.latinPop.alt, style: 'Nocturnal glamour' },
+  { title: 'Indie', color: '#86efac', image: kanvasStarterAssets.music.indie.src, alt: kanvasStarterAssets.music.indie.alt, style: 'Glasshouse session' },
   { title: 'Gothic Storm', color: '#e5e7eb', image: musicPolishAssets.landing.heroGothicStorm.src, alt: musicPolishAssets.landing.heroGothicStorm.alt, style: 'Monochrome key art' },
   { title: 'Rooftop Motion', color: '#67e8f9', image: musicPolishAssets.landing.rooftopChoreography.src, alt: musicPolishAssets.landing.rooftopChoreography.alt, style: 'Aerial choreography' },
   { title: 'Rain Anime', color: '#fbbf24', image: musicPolishAssets.landing.animatedRainStreet.src, alt: musicPolishAssets.landing.animatedRainStreet.alt, style: 'Illustrated street' },
@@ -71,12 +79,12 @@ const GENRE_CARDS = [
 ];
 
 const CAMERA_PRESETS = [
-  { label: 'Static', desc: 'No movement' },
-  { label: 'Handheld', desc: 'Natural shake' },
-  { label: 'Zoom Out', desc: 'Reveal shot' },
-  { label: 'Zoom In', desc: 'Focus pull' },
-  { label: 'Camera Follows', desc: 'Tracking shot' },
-  { label: 'Pan Left', desc: 'Horizontal pan' },
+  { label: 'Static', desc: 'No movement', asset: kanvasStarterAssets.camera.Static },
+  { label: 'Handheld', desc: 'Natural shake', asset: kanvasStarterAssets.camera.Handheld },
+  { label: 'Zoom Out', desc: 'Reveal shot', asset: kanvasStarterAssets.camera['Zoom Out'] },
+  { label: 'Zoom In', desc: 'Focus pull', asset: kanvasStarterAssets.camera['Zoom In'] },
+  { label: 'Camera Follows', desc: 'Tracking shot', asset: kanvasStarterAssets.camera['Camera Follows'] },
+  { label: 'Pan Left', desc: 'Horizontal pan', asset: kanvasStarterAssets.camera['Pan Left'] },
 ];
 
 type BuilderKind = 'anchor' | 'location';
@@ -115,10 +123,10 @@ const BUILDER_CONFIG: Record<BuilderKind, {
 };
 
 const FALLBACK_AVATARS = [
-  musicPolishAssets.blueprints.vocalist.src,
-  musicPolishAssets.cinema.performanceCloseup.src,
-  musicPolishAssets.landing.animatedRainStreet.src,
-  musicPolishAssets.landing.heroGothicStorm.src,
+  kanvasStarterAssets.music.hipHop.src,
+  kanvasStarterAssets.music.rnb.src,
+  kanvasStarterAssets.music.country.src,
+  kanvasStarterAssets.music.techno.src,
 ];
 
 const TAB_LIST: { id: CinemaTab; label: string; Icon: LucideIcon }[] = [
@@ -450,7 +458,7 @@ export default function CinemaStudioSection({
     return (
       <div className="flex-1 flex flex-col items-center justify-center relative pb-40">
         <img
-          src={musicPolishAssets.cinema.soundstage.src}
+          src={kanvasStarterAssets.music.rnb.src}
           alt=""
           className="absolute inset-0 h-full w-full object-cover opacity-35"
           loading="lazy"
@@ -537,12 +545,14 @@ export default function CinemaStudioSection({
                 <button
                   key={preset.label}
                   onClick={() => setCameraPreset(preset.label)}
-                  className={`rounded-lg overflow-hidden border transition-all ${
+                  className={`group rounded-lg overflow-hidden border transition-all ${
                     isActive ? 'border-kanvas-accent/40 shadow-[0_0_20px_hsl(var(--kanvas-accent)/0.1)]' : 'border-white/[0.06] hover:border-white/10'
                   }`}
                 >
-                  <div className="aspect-video bg-gradient-to-br from-kanvas-surface-3 to-kanvas-surface-1 flex items-center justify-center">
-                    <Camera className={`h-6 w-6 ${isActive ? 'text-kanvas-accent' : 'text-kanvas-text-faint'}`} />
+                  <div className="relative aspect-video overflow-hidden bg-kanvas-surface-3">
+                    <img src={preset.asset.src} alt={preset.asset.alt} className="h-full w-full object-cover opacity-75 transition duration-500 group-hover:scale-105 group-hover:opacity-100" loading="lazy" decoding="async" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
+                    <span className="absolute left-2 top-2 rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-white/75 backdrop-blur-sm">Example</span>
                   </div>
                   <div className="bg-kanvas-surface-1 px-3 py-2">
                     <p className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-kanvas-text-secondary'}`}>{preset.label}</p>

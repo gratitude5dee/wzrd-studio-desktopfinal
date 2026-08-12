@@ -28,6 +28,7 @@ import { getKanvasModelProvider } from "@/features/kanvas/modelProvider";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import { musicPolishAssets } from "@/lib/musicPolishAssets";
+import { kanvasStarterAssets } from "@/lib/kanvasStarterAssets";
 import type { CharacterMention } from "@/types/character-creation";
 
 /* ------------------------------------------------------------------ */
@@ -69,22 +70,50 @@ const USE_CASE_CARDS = [
     label: musicPolishAssets.kanvas.stageProductVisual.title,
     subtitle: "Build high-end hero props and cover-art objects with practical stage light.",
     style: musicPolishAssets.kanvas.stageProductVisual.style,
-    image: musicPolishAssets.kanvas.stageProductVisual.src,
-    alt: musicPolishAssets.kanvas.stageProductVisual.alt,
+    image: kanvasStarterAssets.ecommerce.headphones.src,
+    alt: kanvasStarterAssets.ecommerce.headphones.alt,
   },
   {
     label: musicPolishAssets.kanvas.aiVisualWall.title,
     subtitle: "Move from treatment notes to photoreal scene walls and campaign frames.",
     style: musicPolishAssets.kanvas.aiVisualWall.style,
-    image: musicPolishAssets.kanvas.aiVisualWall.src,
-    alt: musicPolishAssets.kanvas.aiVisualWall.alt,
+    image: kanvasStarterAssets.music.hipHop.src,
+    alt: kanvasStarterAssets.music.hipHop.alt,
   },
   {
     label: musicPolishAssets.kanvas.backgroundReframe.title,
     subtitle: "Reframe a performer across stages, streets, and editorial plates.",
     style: musicPolishAssets.kanvas.backgroundReframe.style,
-    image: musicPolishAssets.kanvas.backgroundReframe.src,
-    alt: musicPolishAssets.kanvas.backgroundReframe.alt,
+    image: kanvasStarterAssets.music.techno.src,
+    alt: kanvasStarterAssets.music.techno.alt,
+  },
+  {
+    label: 'Product Placement',
+    subtitle: 'Stage merch, fragrance, vinyl, and limited drops inside a cinematic set.',
+    style: 'Backstage campaign',
+    image: kanvasStarterAssets.ecommerce.vinylMerch.src,
+    alt: kanvasStarterAssets.ecommerce.vinylMerch.alt,
+  },
+  {
+    label: 'Streetwear Campaign',
+    subtitle: 'Place footwear, apparel, and drops into high-energy editorial worlds.',
+    style: 'Brutalist product film',
+    image: kanvasStarterAssets.ecommerce.streetwear.src,
+    alt: kanvasStarterAssets.ecommerce.streetwear.alt,
+  },
+  {
+    label: 'Beauty Campaign',
+    subtitle: 'Build glossy beauty product imagery with cinematic color and texture.',
+    style: 'Luxury still life',
+    image: kanvasStarterAssets.ecommerce.beauty.src,
+    alt: kanvasStarterAssets.ecommerce.beauty.alt,
+  },
+  {
+    label: 'Automotive Placement',
+    subtitle: 'Stage cars and premium objects inside atmospheric commercial locations.',
+    style: 'Blue-hour editorial',
+    image: kanvasStarterAssets.ecommerce.automotive.src,
+    alt: kanvasStarterAssets.ecommerce.automotive.alt,
   },
 ];
 
@@ -225,7 +254,10 @@ export default function ImageStudioSection({
             disabled={carouselIndex === 0}
             icon={<ChevronLeft className="h-4 w-4" />}
           />
-          <div className="flex gap-6 overflow-hidden flex-1">
+          <div
+            className="flex gap-6 overflow-hidden flex-1 transition-transform duration-500"
+            style={{ transform: `translateX(-${carouselIndex * 324}px)` }}
+          >
             {USE_CASE_CARDS.map((card, i) => (
               <div
                 key={card.label}

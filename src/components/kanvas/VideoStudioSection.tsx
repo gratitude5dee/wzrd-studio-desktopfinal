@@ -32,6 +32,7 @@ import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import type { CharacterMention } from "@/types/character-creation";
 import { musicPolishAssets } from "@/lib/musicPolishAssets";
+import { kanvasStarterAssets } from "@/lib/kanvasStarterAssets";
 import { accentEdge, accentSoft, accentText } from "@/lib/kanvasTheme";
 import type { MusicPolishAsset } from "@/lib/musicPolishAssets";
 
@@ -645,10 +646,19 @@ export function VideoStudioSection({
           {previewUrl ? (
             <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" className="aspect-video w-full bg-black object-cover" />
           ) : (
-            <div className="flex aspect-video flex-col items-center justify-center gap-4">
-              <Eye className="h-12 w-12 text-kanvas-text-faint" />
-              <p className="font-kanvas-display text-4xl font-bold tracking-tighter text-kanvas-text-faint/50">PREVIEW MODE</p>
-              <p className="text-xs text-kanvas-text-faint">Upload a video source and describe your edit</p>
+            <div className="group relative aspect-video overflow-hidden">
+              <img src={kanvasStarterAssets.videoEdit.before.src} alt={kanvasStarterAssets.videoEdit.before.alt} className="absolute inset-0 h-full w-full object-cover opacity-70 transition duration-700 group-hover:scale-[1.02]" loading="lazy" decoding="async" />
+              <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden border-l border-white/15">
+                <img src={kanvasStarterAssets.videoEdit.after.src} alt={kanvasStarterAssets.videoEdit.after.alt} className="h-full w-[200%] max-w-none -translate-x-1/2 object-cover" loading="lazy" decoding="async" />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/15" />
+              <span className="absolute left-4 top-4 z-10 rounded-full bg-black/60 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/80 backdrop-blur-sm">Before</span>
+              <span className="absolute right-4 top-4 z-10 rounded-full bg-black/60 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/80 backdrop-blur-sm">After</span>
+              <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-6 text-center">
+                <Eye className="h-8 w-8 text-white/80" />
+                <p className="font-kanvas-display text-2xl font-bold tracking-tighter text-white md:text-3xl">PREVIEW MODE</p>
+                <p className="text-xs text-white/65">Upload a video source and describe your edit</p>
+              </div>
             </div>
           )}
         </div>
