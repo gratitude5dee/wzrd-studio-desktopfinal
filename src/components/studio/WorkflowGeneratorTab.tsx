@@ -289,18 +289,6 @@ export function WorkflowGeneratorTab({
               ) : null}
             </div>
 
-            {isPopup ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-[rgba(249,115,22,0.12)] bg-[#151515] px-3 py-1 text-[11px] text-zinc-300">
-                  New workflow
-                </span>
-                {selectedNodeLabel ? (
-                  <span className="rounded-full border border-[#f97316]/20 bg-[#1a1408] px-3 py-1 text-[11px] text-[#fdba74]">
-                    {selectedNodeLabel}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
