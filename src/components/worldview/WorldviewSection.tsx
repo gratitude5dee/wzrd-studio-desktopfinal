@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
 import { KanvasEmptyState } from '@/components/kanvas/primitives';
+import { kanvasStarterAssets } from '@/lib/kanvasStarterAssets';
 import { useWorldviewStore } from '@/lib/stores/worldview-store';
 import { useCanvasStore } from '@/lib/stores/canvas-store';
 import { worldLabsService } from '@/services/worldLabsService';
@@ -1753,20 +1754,23 @@ export function WorldviewSection() {
           {/* Feature cards */}
           <div className="mb-10 grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { icon: Globe2, title: 'Text to World', desc: 'Describe any environment' },
-              { icon: ImagePlus, title: 'Image to World', desc: 'Upload a reference image' },
-              { icon: Camera, title: 'Camera Takes', desc: 'Capture 3D viewpoints' },
-              { icon: Sparkles, title: 'Shot Composer', desc: 'AI-driven compositions' },
-            ].map(({ icon: Icon, title, desc }) => (
+              { icon: Globe2, title: 'Text to World', desc: 'Describe any environment', asset: kanvasStarterAssets.worldview.text },
+              { icon: ImagePlus, title: 'Image to World', desc: 'Upload a reference image', asset: kanvasStarterAssets.worldview.image },
+              { icon: Camera, title: 'Camera Takes', desc: 'Capture 3D viewpoints', asset: kanvasStarterAssets.worldview.camera },
+              { icon: Sparkles, title: 'Shot Composer', desc: 'AI-driven compositions', asset: kanvasStarterAssets.worldview.composer },
+            ].map(({ icon: Icon, title, desc, asset }) => (
               <div
                 key={title}
-                className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-6 text-center transition-all duration-300 hover:border-[#f97316]/20 hover:bg-white/[0.04] hover:shadow-[0_0_30px_rgba(249,115,22,0.05)]"
+                className="group relative flex min-h-[190px] flex-col justify-end overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-5 text-center transition-all duration-300 hover:border-[#f97316]/20 hover:bg-white/[0.04] hover:shadow-[0_0_30px_rgba(249,115,22,0.05)]"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f97316]/10 text-[#f97316] transition-colors group-hover:bg-[#f97316]/20">
+                <img src={asset.src} alt={asset.alt} className="absolute inset-0 h-full w-full object-cover opacity-55 transition duration-500 group-hover:scale-105 group-hover:opacity-70" loading="lazy" decoding="async" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/5" />
+                <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2 py-1 text-[8px] font-bold uppercase tracking-widest text-white/75 backdrop-blur-sm">Example</span>
+                <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#f97316]/10 text-[#f97316] transition-colors group-hover:bg-[#f97316]/20">
                   <Icon className="h-5 w-5" />
                 </div>
-                <p className="text-sm font-semibold text-white">{title}</p>
-                <p className="text-xs text-zinc-500">{desc}</p>
+                <p className="relative mt-3 text-sm font-semibold text-white">{title}</p>
+                <p className="relative text-xs text-zinc-300">{desc}</p>
               </div>
             ))}
           </div>

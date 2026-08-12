@@ -10,7 +10,7 @@ import cinemaPerformanceCloseup from '@/assets/generated/music-polish/cinema-per
 import cinemaSoundstage from '@/assets/generated/music-polish/cinema-soundstage.png';
 import heroGothicStorm from '@/assets/generated/music-polish/hero-gothic-storm.png';
 import lyricsAnimatedRain from '@/assets/generated/music-polish/lyrics-animated-rain.png';
-import lyricsGothicStorm from '@/assets/generated/music-polish/lyrics-gothic-storm.png';
+import starterGothicStorm from '@/assets/generated/kanvas/starter/lyrics/gothic-storm-v01.webp';
 import lyricsRnbGlass from '@/assets/generated/music-polish/lyrics-rnb-glass.png';
 import lyricsRooftopMotion from '@/assets/generated/music-polish/lyrics-rooftop-motion.png';
 import editWorkbench from '@/assets/generated/music-polish/edit-workbench.png';
@@ -120,8 +120,8 @@ export const musicPolishAssets = {
   },
   lyrics: {
     gothicStorm: {
-      src: staticAssetUrl(lyricsGothicStorm),
-      alt: 'Gothic storm lyric visual plate with chrome title space and rain atmosphere',
+      src: staticAssetUrl(starterGothicStorm),
+      alt: 'Rainy dark stone arcade with a quiet central area for animated lyric copy',
       title: 'Gothic Storm',
       style: 'Dark title plate',
     },
