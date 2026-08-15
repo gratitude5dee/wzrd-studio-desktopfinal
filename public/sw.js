@@ -5,18 +5,17 @@
  * Studio/editor routes, API responses, uploads, and user media bypass the
  * worker entirely so they cannot be persisted by this public cache.
  */
-const CACHE_NAME = "wzrd-public-shell-v1";
+const CACHE_NAME = "wzrd-public-shell-v2";
 const OFFLINE_DOCUMENT = "/offline.html";
-const PUBLIC_LANDING_DOCUMENTS = new Set([
-  "/",
-  "/creator-os/wzrd-creator-os-newdesign.html",
-]);
+const PUBLIC_LANDING_DOCUMENTS = new Set(["/"]);
 const PUBLIC_STATIC_PREFIXES = ["/_next/static/", "/brand/", "/creator-os/"];
 const PUBLIC_STATIC_FILES = new Set(["/favicon.ico", "/manifest.webmanifest"]);
 const PRECACHE_URLS = [
   OFFLINE_DOCUMENT,
   "/",
-  "/creator-os/wzrd-creator-os-newdesign.html",
+  "/creator-os/fx.js",
+  "/creator-os/gl-matrix-min.js",
+  "/creator-os/wzrd-wordmark-1600.png",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/brand/wzrd-icon-16.png",
