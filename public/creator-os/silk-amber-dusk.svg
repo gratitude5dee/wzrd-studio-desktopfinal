@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img">
+    <title>Silk avatar</title>
+    <defs>
+    <filter id="blur-1" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.1"></feGaussianBlur></filter>
+    <filter id="blur-3" x="-55%" y="-55%" width="210%" height="210%"><feGaussianBlur stdDeviation="3.2"></feGaussianBlur></filter>
+    <filter id="blur-5" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="5.1"></feGaussianBlur></filter>
+    <filter id="blur-6" x="-75%" y="-75%" width="250%" height="250%"><feGaussianBlur stdDeviation="5.7"></feGaussianBlur></filter>
+    <filter id="blur-8" x="-85%" y="-85%" width="270%" height="270%"><feGaussianBlur stdDeviation="8.4"></feGaussianBlur></filter>
+    <filter id="blur-10" x="-95%" y="-95%" width="290%" height="290%"><feGaussianBlur stdDeviation="10.4"></feGaussianBlur></filter>
+    <filter id="blur-14" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="13.8"></feGaussianBlur></filter><clipPath id="clip-oreo-1qof5c9"><rect width="64" height="64" rx="32" fill="#ffffff"></rect></clipPath><radialGradient id="edge-oreo-1qof5c9" gradientUnits="userSpaceOnUse" cx="32" cy="32" r="32"><stop offset="98.4375%" stop-color="#ffffff"></stop><stop offset="100%" stop-color="#ffffff" stop-opacity="0"></stop></radialGradient><mask id="edge-mask-oreo-1qof5c9" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="64" height="64" style="mask-type:alpha"><rect width="64" height="64" fill="url(#edge-oreo-1qof5c9)"></rect></mask>
+      <radialGradient id="silk-oreo-1qof5c9" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(-0.03 -15.355) rotate(89.9503) scale(36.7093 41.0794)">
+        <stop offset="0%" stop-color="#443200"></stop><stop offset="100%" stop-color="#500078"></stop>
+      </radialGradient><filter id="dark-frame-oreo-1qof5c9" x="0" y="0" width="64" height="64" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-1-dark-frame-oreo-1qof5c9"></feColorMatrix>
+      <feComposite in="SourceAlpha" in2="SourceAlpha" operator="in" result="spread-1-dark-frame-oreo-1qof5c9"></feComposite><feOffset in="spread-1-dark-frame-oreo-1qof5c9" result="offset-1-dark-frame-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-1-dark-frame-oreo-1qof5c9" stdDeviation="5.925926" result="blur-1-dark-frame-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-1-dark-frame-oreo-1qof5c9" in2="hard-alpha-1-dark-frame-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-1-dark-frame-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#370053" flood-opacity="1" result="flood-1-dark-frame-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-1-dark-frame-oreo-1qof5c9" in2="alpha-1-dark-frame-oreo-1qof5c9" operator="in" result="color-1-dark-frame-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-1-dark-frame-oreo-1qof5c9" in2="shape" result="shadow-1-dark-frame-oreo-1qof5c9"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-2-dark-frame-oreo-1qof5c9"></feColorMatrix>
+      <feMorphology in="SourceAlpha" operator="erode" radius="1.015873" result="spread-2-dark-frame-oreo-1qof5c9"></feMorphology><feOffset in="spread-2-dark-frame-oreo-1qof5c9" result="offset-2-dark-frame-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-2-dark-frame-oreo-1qof5c9" stdDeviation="1.481482" result="blur-2-dark-frame-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-2-dark-frame-oreo-1qof5c9" in2="hard-alpha-2-dark-frame-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-2-dark-frame-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#1b002c" flood-opacity="1" result="flood-2-dark-frame-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-2-dark-frame-oreo-1qof5c9" in2="alpha-2-dark-frame-oreo-1qof5c9" operator="in" result="color-2-dark-frame-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-2-dark-frame-oreo-1qof5c9" in2="shadow-1-dark-frame-oreo-1qof5c9" result="shadow-2-dark-frame-oreo-1qof5c9"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-3-dark-frame-oreo-1qof5c9"></feColorMatrix>
+      <feMorphology in="SourceAlpha" operator="erode" radius="1.015873" result="spread-3-dark-frame-oreo-1qof5c9"></feMorphology><feOffset in="spread-3-dark-frame-oreo-1qof5c9" result="offset-3-dark-frame-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-3-dark-frame-oreo-1qof5c9" stdDeviation="1.122807" result="blur-3-dark-frame-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-3-dark-frame-oreo-1qof5c9" in2="hard-alpha-3-dark-frame-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-3-dark-frame-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#ffce86" flood-opacity="0.45" result="flood-3-dark-frame-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-3-dark-frame-oreo-1qof5c9" in2="alpha-3-dark-frame-oreo-1qof5c9" operator="in" result="color-3-dark-frame-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-3-dark-frame-oreo-1qof5c9" in2="shadow-2-dark-frame-oreo-1qof5c9" result="shadow-3-dark-frame-oreo-1qof5c9"></feBlend></filter><filter id="dark-surface-oreo-1qof5c9" x="0" y="0" width="64" height="64" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-1-dark-surface-oreo-1qof5c9"></feColorMatrix>
+      <feMorphology in="SourceAlpha" operator="erode" radius="2.539683" result="spread-1-dark-surface-oreo-1qof5c9"></feMorphology><feOffset in="spread-1-dark-surface-oreo-1qof5c9" result="offset-1-dark-surface-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-1-dark-surface-oreo-1qof5c9" stdDeviation="12.698412" result="blur-1-dark-surface-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-1-dark-surface-oreo-1qof5c9" in2="hard-alpha-1-dark-surface-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-1-dark-surface-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#c36fff" flood-opacity="0.5" result="flood-1-dark-surface-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-1-dark-surface-oreo-1qof5c9" in2="alpha-1-dark-surface-oreo-1qof5c9" operator="in" result="color-1-dark-surface-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-1-dark-surface-oreo-1qof5c9" in2="shape" result="shadow-1-dark-surface-oreo-1qof5c9"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-2-dark-surface-oreo-1qof5c9"></feColorMatrix>
+      <feComposite in="SourceAlpha" in2="SourceAlpha" operator="in" result="spread-2-dark-surface-oreo-1qof5c9"></feComposite><feOffset in="spread-2-dark-surface-oreo-1qof5c9" result="offset-2-dark-surface-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-2-dark-surface-oreo-1qof5c9" stdDeviation="5.079365" result="blur-2-dark-surface-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-2-dark-surface-oreo-1qof5c9" in2="hard-alpha-2-dark-surface-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-2-dark-surface-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#c36fff" flood-opacity="1" result="flood-2-dark-surface-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-2-dark-surface-oreo-1qof5c9" in2="alpha-2-dark-surface-oreo-1qof5c9" operator="in" result="color-2-dark-surface-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-2-dark-surface-oreo-1qof5c9" in2="shadow-1-dark-surface-oreo-1qof5c9" result="shadow-2-dark-surface-oreo-1qof5c9"></feBlend>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard-alpha-3-dark-surface-oreo-1qof5c9"></feColorMatrix>
+      <feMorphology in="SourceAlpha" operator="erode" radius="1.015873" result="spread-3-dark-surface-oreo-1qof5c9"></feMorphology><feOffset in="spread-3-dark-surface-oreo-1qof5c9" result="offset-3-dark-surface-oreo-1qof5c9"></feOffset><feGaussianBlur in="offset-3-dark-surface-oreo-1qof5c9" stdDeviation="1.269841" result="blur-3-dark-surface-oreo-1qof5c9"></feGaussianBlur>
+      <feComposite in="blur-3-dark-surface-oreo-1qof5c9" in2="hard-alpha-3-dark-surface-oreo-1qof5c9" operator="arithmetic" k2="-1" k3="1" result="alpha-3-dark-surface-oreo-1qof5c9"></feComposite>
+      <feFlood flood-color="#fff6e8" flood-opacity="1" result="flood-3-dark-surface-oreo-1qof5c9"></feFlood>
+      <feComposite in="flood-3-dark-surface-oreo-1qof5c9" in2="alpha-3-dark-surface-oreo-1qof5c9" operator="in" result="color-3-dark-surface-oreo-1qof5c9"></feComposite>
+      <feBlend mode="normal" in="color-3-dark-surface-oreo-1qof5c9" in2="shadow-2-dark-surface-oreo-1qof5c9" result="shadow-3-dark-surface-oreo-1qof5c9"></feBlend></filter><filter id="dark-layer-1-oreo-1qof5c9" x="-120%" y="-120%" width="340%" height="340%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="10.370371"></feGaussianBlur></filter><filter id="dark-layer-2-oreo-1qof5c9" x="-120%" y="-120%" width="340%" height="340%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="7.626652"></feGaussianBlur></filter></defs>
+    
+    <g mask="url(#edge-mask-oreo-1qof5c9)"><g filter="url(#dark-frame-oreo-1qof5c9)"><g clip-path="url(#clip-oreo-1qof5c9)">
+    <g transform="translate(32.000 32.000) rotate(0.000)"><rect x="-32.000" y="-32.000" width="64.000" height="64.000" rx="16.250" fill="#c36fff" opacity="1.000" filter="url(#dark-surface-oreo-1qof5c9)"></rect></g>
+    
+    <g transform="translate(32.000 34.290) rotate(0.000)"><rect x="-35.050" y="-37.335" width="70.100" height="74.670" rx="16.250" fill="#e69500" opacity="1.000"></rect></g>
+    
+    <g transform="translate(31.872 6.264) rotate(-0.095)"><rect x="-46.775" y="-39.792" width="93.550" height="79.584" rx="50.747" fill="#b35400" opacity="1.000" filter="url(#dark-layer-1-oreo-1qof5c9)"></rect></g>
+    <g transform="translate(31.985 18.210) rotate(0.191)"><rect x="-23.953" y="-21.392" width="47.906" height="42.783" rx="50.927" fill="url(#silk-oreo-1qof5c9)" opacity="1.000" filter="url(#dark-layer-2-oreo-1qof5c9)"></rect></g></g></g></g>
+  </svg>

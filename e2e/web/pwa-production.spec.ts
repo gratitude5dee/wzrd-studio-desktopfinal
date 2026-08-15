@@ -49,7 +49,7 @@ test("reopens the public Creator OS shell offline after its first production loa
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.locator('iframe[title="WZRD Creator OS"]')).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "WZRD.tech" })).toBeAttached();
 
   const scope = await page.evaluate(async () => {
     const registration = await navigator.serviceWorker.ready;
@@ -64,8 +64,8 @@ test("reopens the public Creator OS shell offline after its first production loa
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
 
-  const frame = page.frameLocator('iframe[title="WZRD Creator OS"]');
-  await expect(frame.getByRole("heading", { level: 1, name: "WZRD.tech" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "WZRD.tech" })).toBeAttached();
+  await expect(page.locator("section#studio")).toBeAttached();
 
   await context.setOffline(false);
 });
