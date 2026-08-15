@@ -865,6 +865,10 @@ export default function CreatorOSLanding() {
           />
         </a>
         <div
+          // Focus reveals the motion switch too, so keyboard users never land on
+          // a control that is faded out.
+          onBlur={() => setNavHover(false)}
+          onFocus={() => setNavHover(true)}
           onPointerEnter={() => setNavHover(true)}
           onPointerLeave={() => setNavHover(false)}
           style={css(
