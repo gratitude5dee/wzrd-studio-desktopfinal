@@ -375,6 +375,7 @@ export default function CreatorOSLanding() {
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [fxReady, setFxReady] = useState(false);
+  const [fxEngineDown, setFxEngineDown] = useState(false);
   const [motionOn, setMotionOn] = useState(true);
   const [bubbleOpen, setBubbleOpen] = useState(false);
   const [navHover, setNavHover] = useState(false);
@@ -402,10 +403,13 @@ export default function CreatorOSLanding() {
       .then(() => loadScriptOnce(FX_SRC))
       .then(() => {
         reflectFxPropertyWrites();
-        if (!cancelled) setFxReady(true);
+        if (cancelled) return;
+        if (window.customElements.get("wz-infinite-menu")) setFxReady(true);
+        else setFxEngineDown(true);
       })
       .catch((error: unknown) => {
         console.warn("[creator-os] atmosphere engine unavailable", error);
+        if (!cancelled) setFxEngineDown(true);
       });
 
     return () => {
@@ -662,6 +666,23 @@ export default function CreatorOSLanding() {
     };
   }, []);
 
+  // The wheel hides itself when it cannot boot (no WebGL2), which would leave
+  // the Earth chapter empty, so surface the still artwork instead.
+  useEffect(() => {
+    if (!fxReady) return;
+    const wheel = rootRef.current?.querySelector<HTMLElement>("wz-infinite-menu");
+    if (!wheel) return;
+
+    // The element writes the inline display itself when it gives up, while the
+    // motion-off state is handled through a stylesheet rule.
+    const check = () => {
+      if (wheel.style.display === "none") setFxEngineDown(true);
+    };
+    const timer = window.setTimeout(check, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [fxReady]);
+
   // Earth wheel: keep vertical scroll available on touch and make the sphere
   // keyboard-operable by replaying an arcball drag from arrow keys.
   useEffect(() => {
@@ -804,7 +825,12 @@ export default function CreatorOSLanding() {
   );
 
   return (
-    <div className={styles.root} data-fx-mode={fxModeAttr} ref={rootRef}>
+    <div
+      className={styles.root}
+      data-fx-engine={fxEngineDown ? "unavailable" : "ok"}
+      data-fx-mode={fxModeAttr}
+      ref={rootRef}
+    >
       {/* ============ HEADER ============ */}
       <header
         style={css(

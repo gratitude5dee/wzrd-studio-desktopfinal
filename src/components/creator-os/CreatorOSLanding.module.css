@@ -230,7 +230,8 @@
   display: none !important;
 }
 
-.root[data-fx-mode="off"] .wheelFallback {
+.root[data-fx-mode="off"] .wheelFallback,
+.root[data-fx-engine="unavailable"] .wheelFallback {
   display: block;
 }
 
