@@ -675,6 +675,8 @@ export default function CreatorOSLanding() {
     let raf = 0;
     let detach: (() => void) | null = null;
     let tries = 0;
+    let attached: HTMLCanvasElement | null = null;
+    let observer: MutationObserver | null = null;
 
     const spin = (canvas: HTMLCanvasElement, dx: number, dy: number) => {
       if (typeof PointerEvent === "undefined") return;
@@ -704,7 +706,15 @@ export default function CreatorOSLanding() {
 
     const attach = () => {
       if (cancelled) return;
-      const canvas = wheel.shadowRoot?.querySelector("canvas");
+      const shadow = wheel.shadowRoot;
+      // The engine tears the canvas down when the chapter scrolls out of view,
+      // so re-apply the patch to whichever canvas it rebuilds.
+      if (shadow && !observer) {
+        observer = new MutationObserver(() => attach());
+        observer.observe(shadow, { childList: true, subtree: true });
+      }
+
+      const canvas = shadow?.querySelector("canvas");
       if (!canvas) {
         if (tries < 40) {
           tries += 1;
@@ -713,6 +723,10 @@ export default function CreatorOSLanding() {
 
         return;
       }
+
+      if (canvas === attached) return;
+      detach?.();
+      attached = canvas;
 
       // The wheel canvas ships touch-action:none so the arcball can claim any
       // drag; pan-y keeps vertical swipes scrolling the page.
@@ -741,6 +755,7 @@ export default function CreatorOSLanding() {
 
     return () => {
       cancelled = true;
+      observer?.disconnect();
       if (raf) cancelAnimationFrame(raf);
       if (detach) detach();
     };

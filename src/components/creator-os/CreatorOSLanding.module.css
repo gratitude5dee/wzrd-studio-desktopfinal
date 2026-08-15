@@ -177,7 +177,8 @@
   transform: scale(1.08);
 }
 
-.bubbleLink {
+/* `.root a` also sets a colour, so keep the pill label above it. */
+.root .bubbleLink {
   align-items: center;
   background: var(--bubble-bg);
   border-radius: 999px;
@@ -200,7 +201,7 @@
     background 200ms ease;
 }
 
-.bubbleLink:hover {
+.root .bubbleLink:hover {
   background: var(--bubble-hover-bg);
   transform: rotate(0deg) scale(1.07);
 }
