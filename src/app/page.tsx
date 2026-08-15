@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import CanonicalCreatorOSLanding from "@/components/creator-os/CanonicalCreatorOSLanding";
+import CreatorOSLanding from "@/components/creator-os/CreatorOSLanding";
 import FirstVisitIntroGate from "@/components/landing/FirstVisitIntroGate";
 
 export const metadata: Metadata = {
@@ -41,7 +41,7 @@ export default function Page() {
   return (
     <>
       <FirstVisitIntroGate />
-      <CanonicalCreatorOSLanding />
+      <CreatorOSLanding />
     </>
   );
 }
