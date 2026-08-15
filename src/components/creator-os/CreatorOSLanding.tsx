@@ -898,10 +898,13 @@ export default function CreatorOSLanding() {
         aria-hidden={!bubbleOpen}
         style={{
           ...css(
-            "position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:clamp(5.5rem,17vw,6rem) clamp(1.15rem,4.5vw,1.7rem) 2rem;background:rgba(5,7,10,0.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:opacity 320ms ease",
+            "position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:clamp(5.5rem,17vw,6rem) clamp(1.15rem,4.5vw,1.7rem) 2rem;background:rgba(5,7,10,0.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:opacity 320ms ease,visibility 320ms ease",
           ),
           opacity: bubbleOpen ? 1 : 0,
           pointerEvents: bubbleOpen ? "auto" : "none",
+          // Keeps the closed menu's links out of the tab order while the fade
+          // still plays out.
+          visibility: bubbleOpen ? "visible" : "hidden",
         }}
       >
         <ul

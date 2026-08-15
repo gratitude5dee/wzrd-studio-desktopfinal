@@ -377,6 +377,7 @@ gl_FragColor=col/9.0;}`;
     init() {
       const host = this.parentElement;
       if (host) {
+        this._host = host;
         this._onMove = e => {
           const r = this.getBoundingClientRect();
           if (!r.width) return;
@@ -387,7 +388,8 @@ gl_FragColor=col/9.0;}`;
       }
     }
     disconnectedCallback() {
-      if (this._onMove && this.parentElement) this.parentElement.removeEventListener('pointermove', this._onMove);
+      // parentElement is already null once detached, so use the cached host.
+      if (this._onMove && this._host) this._host.removeEventListener('pointermove', this._onMove);
       super.disconnectedCallback();
     }
     draw(t) {
@@ -532,6 +534,7 @@ gl_FragColor=vec4(col,1.0);}`;
     init() {
       const host = this.parentElement;
       if (host) {
+        this._host = host;
         this._onMove = e => {
           const r = this.getBoundingClientRect();
           if (!r.width) return;
@@ -542,7 +545,8 @@ gl_FragColor=vec4(col,1.0);}`;
       }
     }
     disconnectedCallback() {
-      if (this._onMove && this.parentElement) this.parentElement.removeEventListener('pointermove', this._onMove);
+      // parentElement is already null once detached, so use the cached host.
+      if (this._onMove && this._host) this._host.removeEventListener('pointermove', this._onMove);
       super.disconnectedCallback();
     }
     draw(t) {
@@ -1190,11 +1194,16 @@ outColor.a*=vAlpha;}`;
       super();
       this._sh = this.attachShadow({ mode: 'open' });
       this._booted = false; this._raf = 0; this._visible = true; this._dead = false;
+      // Boot can bail out before the loop closures exist (no webgl2 / no
+      // gl-matrix), so teardown always has something safe to call.
+      this._start = () => {};
+      this._stop = () => { if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; } };
     }
     get mode() { const m = this.getAttribute('mode'); return m === 'off' ? 'off' : m; }
     connectedCallback() {
       if (this._booted && !this._needsRebuild) { this._sync(); return; }
       this._booted = true; this._needsRebuild = false;
+      this._teardown();
       this._sh.innerHTML = '';
       const gm = window.glMatrix;
       if (!gm) { console.warn('[wz-infinite-menu] gl-matrix not loaded'); this._dead = true; return; }
@@ -1244,7 +1253,7 @@ canvas.drag{cursor:grabbing}
       this.gl = gl;
       canvas.addEventListener('webglcontextlost', e => {
         e.preventDefault();
-        cancelAnimationFrame(this._raf);
+        this._stop();
         this.gl = null; this._needsRebuild = true;
       });
       canvas.addEventListener('webglcontextrestored', () => {
@@ -1564,14 +1573,17 @@ canvas.drag{cursor:grabbing}
       if (this._dead) { this.style.display = 'none'; return; }
       if (this.mode === 'off') { this._stop(); } else { this._start(); }
     }
-    disconnectedCallback() {
+    // Rebuilding after a context loss re-creates the observers and listeners,
+    // so drop the previous generation first.
+    _teardown() {
       this._stop();
       clearTimeout(this._relTimer);
-      if (this._cleanup) this._cleanup();
-      if (this._ro) this._ro.disconnect();
-      if (this._io) this._io.disconnect();
-      if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
+      if (this._cleanup) { this._cleanup(); this._cleanup = null; }
+      if (this._ro) { this._ro.disconnect(); this._ro = null; }
+      if (this._io) { this._io.disconnect(); this._io = null; }
+      if (this._onVis) { document.removeEventListener('visibilitychange', this._onVis); this._onVis = null; }
     }
+    disconnectedCallback() { this._teardown(); }
   }
 
   /* ============================================================
@@ -1636,7 +1648,11 @@ void main(){
         img.src = src;
       }
 
-      const host = this.parentElement || this;
+      const host = this._host || (this._host = this.parentElement || this);
+      if (this._onMove) {
+        host.removeEventListener('pointermove', this._onMove);
+        host.removeEventListener('pointerleave', this._onLeave);
+      }
       this._onMove = e => {
         const r = host.getBoundingClientRect();
         this._mouse.x = (e.clientX - r.left) / Math.max(1, r.width);
@@ -1645,6 +1661,13 @@ void main(){
       this._onLeave = () => { this._mouse.x = -1; this._mouse.y = -1; };
       host.addEventListener('pointermove', this._onMove, { passive: true });
       host.addEventListener('pointerleave', this._onLeave, { passive: true });
+    }
+    disconnectedCallback() {
+      if (this._host && this._onMove) {
+        this._host.removeEventListener('pointermove', this._onMove);
+        this._host.removeEventListener('pointerleave', this._onLeave);
+      }
+      super.disconnectedCallback();
     }
     draw() {
       const gl = this.gl;
