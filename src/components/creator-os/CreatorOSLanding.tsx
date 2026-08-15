@@ -673,14 +673,16 @@ export default function CreatorOSLanding() {
     const wheel = rootRef.current?.querySelector<HTMLElement>("wz-infinite-menu");
     if (!wheel) return;
 
-    // The element writes the inline display itself when it gives up, while the
-    // motion-off state is handled through a stylesheet rule.
+    // The element flags itself when its boot fails (no gl-matrix, no WebGL2, or
+    // a shader error), which can happen before or after this effect runs.
     const check = () => {
-      if (wheel.style.display === "none") setFxEngineDown(true);
+      if (wheel.hasAttribute("data-fx-failed")) setFxEngineDown(true);
     };
-    const timer = window.setTimeout(check, 600);
+    const observer = new MutationObserver(check);
+    observer.observe(wheel, { attributeFilter: ["data-fx-failed"] });
+    check();
 
-    return () => window.clearTimeout(timer);
+    return () => observer.disconnect();
   }, [fxReady]);
 
   // Earth wheel: keep vertical scroll available on touch and make the sphere

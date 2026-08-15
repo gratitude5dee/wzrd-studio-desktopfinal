@@ -226,7 +226,8 @@
 }
 
 /* The wheel carries an inline display so the override needs to win. */
-.root[data-fx-mode="off"] .wheel {
+.root[data-fx-mode="off"] .wheel,
+.root[data-fx-engine="unavailable"] .wheel {
   display: none !important;
 }
 

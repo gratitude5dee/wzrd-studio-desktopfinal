@@ -1200,13 +1200,25 @@ outColor.a*=vAlpha;}`;
       this._stop = () => { if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; } };
     }
     get mode() { const m = this.getAttribute('mode'); return m === 'off' ? 'off' : m; }
+    // Boot failures (no gl-matrix, no webgl2, shader errors) are advertised on the
+    // host so the page can swap in its own still artwork instead of empty space.
+    _fail(message) {
+      console.warn('[wz-infinite-menu]', message);
+      this._dead = true;
+      this.style.display = 'none';
+      this.setAttribute('data-fx-failed', 'true');
+    }
     connectedCallback() {
       if (this._booted && !this._needsRebuild) { this._sync(); return; }
+      try { this._boot(); }
+      catch (e) { this._fail((e && e.message) || String(e)); }
+    }
+    _boot() {
       this._booted = true; this._needsRebuild = false;
       this._teardown();
       this._sh.innerHTML = '';
       const gm = window.glMatrix;
-      if (!gm) { console.warn('[wz-infinite-menu] gl-matrix not loaded'); this._dead = true; return; }
+      if (!gm) throw new Error('gl-matrix not loaded');
       const { mat4, quat, vec2, vec3 } = gm;
 
       const SILK_MAP = { AIR: 'silk-sky-melon', STUDIO: 'silk-amber-dusk', EARTH: 'jade-plum-gold', ZAP: 'nova-teal-void' };
@@ -1247,9 +1259,8 @@ canvas.drag{cursor:grabbing}
       this._readoutH = readout.querySelector('h4');
       this._readoutS = readout.querySelector('span');
 
-      let gl;
-      try { gl = canvas.getContext('webgl2', { antialias: true, alpha: true }); if (!gl) throw new Error('no webgl2'); }
-      catch (e) { console.warn('[wz-infinite-menu]', e.message); this._dead = true; return; }
+      const gl = canvas.getContext('webgl2', { antialias: true, alpha: true });
+      if (!gl) throw new Error('no webgl2');
       this.gl = gl;
       canvas.addEventListener('webglcontextlost', e => {
         e.preventDefault();
