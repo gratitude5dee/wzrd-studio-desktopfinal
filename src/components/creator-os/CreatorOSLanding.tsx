@@ -872,7 +872,11 @@ export default function CreatorOSLanding() {
           onPointerEnter={() => setNavHover(true)}
           onPointerLeave={() => setNavHover(false)}
           style={css(
-            "position:relative;pointer-events:auto;width:clamp(2.8rem,9vw,3.15rem);height:clamp(2.8rem,9vw,3.15rem)",
+            // The hover region reaches left far enough to cover the revealed
+            // motion switch, which is pushed outside the hamburger's own box —
+            // otherwise the cursor leaves the wrapper on its way there and the
+            // switch hides again before it can be clicked.
+            "position:relative;box-sizing:content-box;pointer-events:auto;width:clamp(2.8rem,9vw,3.15rem);height:clamp(2.8rem,9vw,3.15rem);padding-left:4.6rem;margin-left:-4.6rem",
           )}
         >
           <button
